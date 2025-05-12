@@ -27,7 +27,7 @@ from pytest_mock import MockerFixture
 from database import DatabaseMng
 from environment import EnvironmentMng
 from service import ServiceMng
-from shpdctl import ShepherdMng, cli
+from shepctl import ShepherdMng, cli
 
 values = """
   # Oracle (ora) Configuration

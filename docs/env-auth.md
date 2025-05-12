@@ -39,7 +39,7 @@ empty environment. This approach allows you to define the database type
 To do this, simply execute the following command:
 
 ```bash
-$ shpdctl --checkout env init ora my-new-env
+$ shepctl --checkout env init ora my-new-env
 my-new-env [ora].
 my-new-env active.
 ```
@@ -52,7 +52,7 @@ configured with the specified database type.
 Once the environment is active, you'll likely want to start the database service:
 
 ```bash
-$ shpdctl db up
+$ shepctl db up
 Oracle database must be created for environment: my-new-env, this can take long...
 [+] Running 1/1
  ✔ Container db-my-new-env  Started 0.3s
@@ -67,7 +67,7 @@ To monitor the progress of this initialization, you can follow the
 standard output of the database service in real-time from another shell:
 
 ```bash
-$ shpdctl -f db stdout
+$ shepctl -f db stdout
 [2024:09:03 15:25:15]: Acquiring lock .ORCLCDB.create_lck with heartbeat 30 secs
 [2024:09:03 15:25:15]: Lock acquired
 [2024:09:03 15:25:15]: Starting heartbeat
@@ -103,7 +103,7 @@ To view the available pre-built environment images in the repository,
 you can run the following command:
 
 ```bash
-$ shpdctl reg list
+$ shepctl reg list
 Environment      Size
 -----------      ----
 fresh-ora-19300  632.98  (M)
@@ -118,7 +118,7 @@ setup.
 To pull the image and import the environment run:
 
 ```bash
-$ shpdctl --checkout env pull fresh-ora-19300
+$ shepctl --checkout env pull fresh-ora-19300
 ...
 fresh-ora-19300 imported.
 fresh-ora-19300 active.
@@ -127,7 +127,7 @@ fresh-ora-19300 active.
 Now, you'll likely want to start the database service:
 
 ```bash
-$ shpdctl db up
+$ shepctl db up
 [+] Running 1/1
  ✔ Container db-fresh-ora-19300  Started 0.3s
 Oracle Database is ready.
@@ -149,7 +149,7 @@ you can first check if it exists in the repository.
 To do so, use the following command:
 
 ```bash
-$ shpdctl reg list
+$ shepctl reg list
 Environment      Size
 -----------      ----
 ...
@@ -162,7 +162,7 @@ Once you've identified the environment you wish to clone,
 you can pull and import it into your local setup by running:
 
 ```bash
-$ shpdctl --checkout env pull head-MyAbiGVL
+$ shepctl --checkout env pull head-MyAbiGVL
 ...
 head-MyAbiGVL imported.
 head-MyAbiGVL active.
@@ -175,7 +175,7 @@ it to a new environment. This process creates a copy of the original,
 which you can modify as needed:
 
 ```bash
-$ shpdctl --checkout env clone head-MyAbiGVL branch-MyAbiGVL-202501
+$ shepctl --checkout env clone head-MyAbiGVL branch-MyAbiGVL-202501
 ...
 head-MyAbiGVL cloned to branch-MyAbiGVL-202501.
 branch-MyAbiGVL-202501 active.
@@ -205,13 +205,13 @@ Once the dump file is prepared, you can use the following import command:
 > **Note:** For Oracle databases, you must specify the schema name.
 
 ```bash
-shpdctl db import dump src-db.dmp my-schema
+shepctl db import dump src-db.dmp my-schema
 ```
 
 If the environment uses PostgreSQL, only the dump file name is required:
 
 ```bash
-shpdctl db import dump d_db.gz
+shepctl db import dump d_db.gz
 ```
 
 ### Publishing an Environment to the Registry
@@ -232,14 +232,14 @@ other developers:
 - Perform a clean with:
 
 ```shell
-$ shpdctl env clean
+$ shepctl env clean
 my-env cleaned.
 ```
 
 - Make a snapshot of the environment:
 
 ```shell
-$ shpdctl --keep env archive
+$ shepctl --keep env archive
 my-env is archiving, this can take long...
 my-env archived.
 ```
@@ -247,5 +247,5 @@ my-env archived.
 - Push the snapshot to the registry:
 
 ```shell
-shpdctl env push my-env
+shepctl env push my-env
 ```

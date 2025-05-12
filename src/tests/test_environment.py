@@ -24,7 +24,7 @@ import pytest
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 
-from shpdctl import ShepherdMng, cli
+from shepctl import ShepherdMng, cli
 
 values = """
   # Oracle (ora) Configuration

@@ -34,5 +34,5 @@ oradata
 test.sh
 convert.sh
 wiki
-shpdctl.spec
+shepctl.spec
 build

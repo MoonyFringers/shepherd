@@ -1,4 +1,4 @@
-name: Build shpdctl
+name: Build shepctl
 
 on:
   pull_request:
@@ -37,11 +37,11 @@ jobs:
       - name: Create tar.gz archive
         env:
           VERSION: "0.0.0"
-        run: tar -czvf shpdctl-$VERSION.tar.gz -C dist .
+        run: tar -czvf shepctl-$VERSION.tar.gz -C dist .
 
       - name: Upload Archive Artifact
         uses: actions/upload-artifact@v4
         with:
           name: shpdctl_0.0.0
-          path: shpdctl-0.0.0.tar.gz
+          path: shepctl-0.0.0.tar.gz
           retention-days: 1

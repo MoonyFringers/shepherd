@@ -20,8 +20,8 @@ import os
 import shutil
 import subprocess
 
-APP_NAME = "shpdctl"
-ENTRY_FILE = "shpdctl.py"
+APP_NAME = "shepctl"
+ENTRY_FILE = "shepctl.py"
 ICON_PATH = "resources/icon.ico"
 EXCLUDE_LIBS: list[str] = []
 EXTRA_FILES = ["resources/shpd.conf"]

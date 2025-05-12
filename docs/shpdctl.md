@@ -1,15 +1,15 @@
-# shpdctl
+# shepctl
 
 ## Database Service
 
 ```sh
-shpdctl db build
+shepctl db build
 ```
 
 Build the database management system (DBMS) image.
 
 ```sh
-shpdctl db bootstrap
+shepctl db bootstrap
 ```
 
 Bootstrap the database management system (DBMS) service.
@@ -17,7 +17,7 @@ Bootstrap the database management system (DBMS) service.
 ---
 
 ```sh
-shpdctl db up
+shepctl db up
 ```
 
 Start the DBMS service.
@@ -25,7 +25,7 @@ Start the DBMS service.
 ---
 
 ```sh
-shpdctl db halt
+shepctl db halt
 ```
 
 Stop the DBMS service.
@@ -33,7 +33,7 @@ Stop the DBMS service.
 ---
 
 ```sh
-shpdctl db reload
+shepctl db reload
 ```
 
 Reload the DBMS service.
@@ -41,7 +41,7 @@ Reload the DBMS service.
 ---
 
 ```sh
-shpdctl db stdout
+shepctl db stdout
 ```
 
 Show DBMS service stdout.
@@ -49,7 +49,7 @@ Show DBMS service stdout.
 ---
 
 ```sh
-shpdctl db shell
+shepctl db shell
 ```
 
 Open a shell session within the DBMS service container.
@@ -57,7 +57,7 @@ Open a shell session within the DBMS service container.
 ---
 
 ```sh
-shpdctl db sql-shell
+shepctl db sql-shell
 ```
 
 Open a `sql-shell` session for the DBMS service.
@@ -65,7 +65,7 @@ Open a `sql-shell` session for the DBMS service.
 ---
 
 ```sh
-shpdctl db create user [user] [psw]
+shepctl db create user [user] [psw]
 ```
 
 Create a new user in the database with the specified username and password.
@@ -73,7 +73,7 @@ Create a new user in the database with the specified username and password.
 ---
 
 ```sh
-shpdctl db create dir [user] [directory-name]
+shepctl db create dir [user] [directory-name]
 ```
 
 Create a new directory object in the database for the specified user.
@@ -81,7 +81,7 @@ Create a new directory object in the database for the specified user.
 ---
 
 ```sh
-shpdctl db drop user [user]
+shepctl db drop user [user]
 ```
 
 Delete an existing user from the database.
@@ -91,7 +91,7 @@ Delete an existing user from the database.
 > **NOTE** This parameter setting is valid only for Oracle.
 
 ```sh
-shpdctl db import dump [user] [dump-file] [schema]
+shepctl db import dump [user] [dump-file] [schema]
                     [dump-file] [schema]
                     [import-config-file]
 ```
@@ -104,7 +104,7 @@ configuration file.
 > **NOTE** This parameter setting is valid only for PostgreSQL.
 
 ```sh
-shpdctl db import dump [dump-file]
+shepctl db import dump [dump-file]
 ```
 
 Import a dump in the database.
@@ -112,7 +112,7 @@ Import a dump in the database.
 ---
 
 ```sh
-shpdctl db exec script [sql-file]
+shepctl db exec script [sql-file]
                     [sql-file] [user] [pwd]
 ```
 
@@ -121,7 +121,7 @@ Execute a `sql` script as a sys user or a specified user with password.
 ---
 
 ```sh
-shpdctl db list users
+shepctl db list users
 ```
 
 List all users in the DBMS.
@@ -129,7 +129,7 @@ List all users in the DBMS.
 ---
 
 ```sh
-shpdctl db upstream [remote]
+shepctl db upstream [remote]
 ```
 
 Use an upstream DBMS.
@@ -137,7 +137,7 @@ Use an upstream DBMS.
 ---
 
 ```sh
-shpdctl db downstream
+shepctl db downstream
 ```
 
 Set DBMS to the local (downstream) service
@@ -145,7 +145,7 @@ Set DBMS to the local (downstream) service
 ---
 
 ```sh
-shpdctl db sync [upstream]
+shepctl db sync [upstream]
 ```
 
 Sync the DBMS local service's status with an upstream DBMS.
@@ -153,7 +153,7 @@ Sync the DBMS local service's status with an upstream DBMS.
 ## Environment Management
 
 ```sh
-shpdctl env init [db-type] [env-tag]
+shepctl env init [db-type] [env-tag]
 ```
 
 Initialize a new environment with a specified DBMS type and environment tag name.
@@ -161,7 +161,7 @@ Initialize a new environment with a specified DBMS type and environment tag name
 ---
 
 ```sh
-shpdctl env clone [src-env-tag] [dst-env-tag]
+shepctl env clone [src-env-tag] [dst-env-tag]
 ```
 
 Clone an existing environment (requires root privileges).
@@ -169,7 +169,7 @@ Clone an existing environment (requires root privileges).
 ---
 
 ```sh
-shpdctl env checkout [env-tag]
+shepctl env checkout [env-tag]
 ```
 
 Checkout an environment.
@@ -177,7 +177,7 @@ Checkout an environment.
 ---
 
 ```sh
-shpdctl env noactive
+shepctl env noactive
 ```
 
 Set all environments as non-active.
@@ -185,7 +185,7 @@ Set all environments as non-active.
 ---
 
 ```sh
-shpdctl env list
+shepctl env list
 ```
 
 List all available environments.
@@ -193,7 +193,7 @@ List all available environments.
 ---
 
 ```sh
-shpdctl env up
+shepctl env up
 ```
 
 Start the environment.
@@ -201,7 +201,7 @@ Start the environment.
 ---
 
 ```sh
-shpdctl env halt
+shepctl env halt
 ```
 
 Stop the environment.
@@ -209,7 +209,7 @@ Stop the environment.
 ---
 
 ```sh
-shpdctl env reload
+shepctl env reload
 ```
 
 Reload the environment.
@@ -217,7 +217,7 @@ Reload the environment.
 ---
 
 ```sh
-shpdctl env status
+shepctl env status
 ```
 
 Display the status of the specified environment.
@@ -225,7 +225,7 @@ Display the status of the specified environment.
 ---
 
 ```sh
-shpdctl env clean
+shepctl env clean
 ```
 
 Clean up the specified environment.
@@ -233,7 +233,7 @@ Clean up the specified environment.
 ---
 
 ```sh
-shpdctl env archive [env-tag]
+shepctl env archive [env-tag]
 ```
 
 Archive the specified environment (requires root privileges).
@@ -241,7 +241,7 @@ Archive the specified environment (requires root privileges).
 ---
 
 ```sh
-shpdctl env restore [env-tag]
+shepctl env restore [env-tag]
 ```
 
 Restore an archived environment (requires root privileges).
@@ -249,7 +249,7 @@ Restore an archived environment (requires root privileges).
 ---
 
 ```sh
-shpdctl env push [env-tag]
+shepctl env push [env-tag]
 ```
 
 Push an environment image to the environment registry.
@@ -257,7 +257,7 @@ Push an environment image to the environment registry.
 ---
 
 ```sh
-shpdctl env fetch [env-tag]
+shepctl env fetch [env-tag]
 ```
 
 Fetch an environment image from the environment registry.
@@ -265,7 +265,7 @@ Fetch an environment image from the environment registry.
 ---
 
 ```sh
-shpdctl env pull [env-tag]
+shepctl env pull [env-tag]
 ```
 
 Fetch an environment image from the environment registry and import it.
@@ -273,7 +273,7 @@ Fetch an environment image from the environment registry and import it.
 ## Environment Registry
 
 ```sh
-shpdctl reg list
+shepctl reg list
 ```
 
 List all the environment images on the environment registry.
@@ -281,7 +281,7 @@ List all the environment images on the environment registry.
 ## System
 
 ```sh
-shpdctl [--all] sys prune
+shepctl [--all] sys prune
 ```
 
 Delete all the archived environments and their archived images.
@@ -290,7 +290,7 @@ Delete all the archived environments and their archived images.
 
 ### SHPD_CFG_PATH
 
-Specify shpdctl's config file (default: ~/.shpdctl.json).
+Specify shepctl's config file (default: ~/.shepctl.json).
 
 ### SHPD_DB_CONTAINER_NAME
 

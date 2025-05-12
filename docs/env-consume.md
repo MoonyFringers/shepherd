@@ -1,6 +1,6 @@
 # Consuming Environments
 
-After installing `shpdctl` on your system, a directory named
+After installing `shepctl` on your system, a directory named
 `.hdenvs` will be created in your home directory.
 This is where the tool manages and stores all your environments.
 Each environment is isolated within its own private directory,
@@ -68,7 +68,7 @@ To view a list of all the environments currently available on your
 local machine, use the following command:
 
 ```bash
-$ shpdctl env list
+$ shepctl env list
 Environment  Flags
 -----------  -----
 
@@ -78,7 +78,7 @@ Archived Size  0  (G)
 Total Size     0  (G)
 ```
 
-This output is expected when **`shpdctl`** has been freshly installed.
+This output is expected when **`shepctl`** has been freshly installed.
 As you create, import, or clone environments, this list will populate
 with details about the environments you're managing.
 
@@ -104,7 +104,7 @@ you can check if it exists in the repository.
 To do so, use the following command:
 
 ```bash
-$ shpdctl reg list
+$ shepctl reg list
 Environment      Size
 -----------      ----
 ...
@@ -119,7 +119,7 @@ Once you've identified the environment you wish to use,
 you can pull and import it into your local setup by running:
 
 ```bash
-$ shpdctl --checkout env pull head-MyAbiGVL
+$ shepctl --checkout env pull head-MyAbiGVL
 ...
 head-MyAbiGVL imported.
 head-MyAbiGVL active.
@@ -132,7 +132,7 @@ head-MyAbiGVL active.
 To select an environment to work with:
 
 ```shell
-$ shpdctl env checkout head-MyAbiGVL
+$ shepctl env checkout head-MyAbiGVL
 Switched to head-MyAbiGVL.
 ```
 
@@ -141,7 +141,7 @@ Switched to head-MyAbiGVL.
 To start the selected environment:
 
 ```shell
-shpdctl env up
+shepctl env up
 ```
 
 ### Stopping an Environment
@@ -149,7 +149,7 @@ shpdctl env up
 To stop the selected environment:
 
 ```shell
-shpdctl env halt
+shepctl env halt
 ```
 
 ### Restarting an Environment
@@ -157,5 +157,5 @@ shpdctl env halt
 To restart the environment (stop and start):
 
 ```shell
-shpdctl env reload
+shepctl env reload
 ```

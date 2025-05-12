@@ -80,7 +80,7 @@ to [Authoring Environment Images].
 ## Full Commands and Options Documentation
 
 Refer to the specific documentation for the currently supported commands
-and options of [shpdctl].
+and options of [shepctl].
 
 ## Database Service's Documentation
 
@@ -96,6 +96,6 @@ See our [development][development] documentation.
 [issues]: https://github.com/LunaticFringers/shepherd/issues
 [Consuming Environment Images]: docs/env-consume.md
 [Authoring Environment Images]: docs/env-auth.md
-[shpdctl]: docs/shpdctl.md
+[shepctl]: docs/shepctl.md
 [Oracle]: docs/ORACLE.md
 [development]: docs/development.md

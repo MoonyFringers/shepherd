@@ -1,4 +1,4 @@
-name: Release shpdctl
+name: Release shepctl
 
 on:
   push:
@@ -52,13 +52,13 @@ jobs:
 
       - name: Create tar.gz archive
         run: |
-          tar -czvf shpdctl-${{ env.VERSION }}.tar.gz -C dist .
+          tar -czvf shepctl-${{ env.VERSION }}.tar.gz -C dist .
 
       - name: Upload Artifact (Versioned)
         uses: actions/upload-artifact@v4
         with:
-          name: shpdctl-${{ env.VERSION }}
-          path: shpdctl-${{ env.VERSION }}.tar.gz
+          name: shepctl-${{ env.VERSION }}
+          path: shepctl-${{ env.VERSION }}.tar.gz
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -70,6 +70,6 @@ jobs:
           draft: true
           prerelease: true
           files: |
-            shpdctl-${{ env.VERSION }}.tar.gz
+            shepctl-${{ env.VERSION }}.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

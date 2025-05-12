@@ -55,7 +55,7 @@ class Constants:
 
     # Application metadata
 
-    APP_NAME: str = "shpdctl"
+    APP_NAME: str = "shepctl"
     APP_VERSION: str = "0.0.0"
     APP_AUTHOR: str = "Lunatic Fringers"
     APP_LICENSE: str = "MIT"
