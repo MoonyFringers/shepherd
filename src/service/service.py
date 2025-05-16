@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 from abc import ABC, abstractmethod
+from typing import Dict
 
 from config import ConfigMng, ServiceCfg
 
@@ -95,7 +96,8 @@ class Service(ABC):
 
 class ServiceMng:
 
-    def __init__(self, configMng: ConfigMng):
+    def __init__(self, cli_flags: Dict[str, bool], configMng: ConfigMng):
+        self.cli_flags = cli_flags
         self.configMng = configMng
         pass
 

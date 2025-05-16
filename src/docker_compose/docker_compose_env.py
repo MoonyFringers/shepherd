@@ -20,23 +20,26 @@ from __future__ import annotations
 
 from typing import override
 
-from config import ConfigMng
+from config import ConfigMng, EnvironmentCfg
 from environment import Environment
-from util import Constants
 
 
 class DockerComposeEnv(Environment):
 
-    def __init__(self, config: ConfigMng, db_type: str, env_tag: str):
+    def __init__(self, config: ConfigMng, envCfg: EnvironmentCfg):
         """Initialize a Docker Compose environment."""
-        super().__init__(
-            config, Constants.ENV_TYPE_DOCKER_COMPOSE, db_type, env_tag
-        )
+        super().__init__(config, envCfg)
 
     @override
     def clone(self, dst_env_tag: str) -> DockerComposeEnv:
         """Clone an environment."""
-        return DockerComposeEnv(self.config, self.db_type, dst_env_tag)
+        clonedCfg = EnvironmentCfg.from_other(self.to_config())
+        clonedCfg.tag = dst_env_tag
+        clonedEnv = DockerComposeEnv(
+            self.configMng,
+            clonedCfg,
+        )
+        return clonedEnv
 
     @override
     def start(self):

@@ -18,6 +18,7 @@
 
 import json
 import os
+import shutil
 import sys
 from typing import Any, Dict
 
@@ -30,6 +31,19 @@ class Util:
     console = Console()
 
     @staticmethod
+    def confirm(prompt: str) -> bool:
+        while True:
+            response = input(f"{prompt} [y/n]: ").strip().lower()
+            if response in {"y", "yes"}:
+                return True
+            elif response in {"n", "no"}:
+                return False
+            else:
+                Util.console.print(
+                    "Please answer yes or no. [y/n]", style="yellow"
+                )
+
+    @staticmethod
     def create_dir(dir_path: str, desc: str):
         try:
             os.makedirs(dir_path, exist_ok=True)
@@ -39,11 +53,49 @@ class Util:
             )
 
     @staticmethod
+    def copy_dir(src_path: str, dest_path: str):
+        try:
+            os.makedirs(dest_path, exist_ok=True)
+            for item in os.listdir(src_path):
+                src_item = os.path.join(src_path, item)
+                dest_item = os.path.join(dest_path, item)
+                if os.path.isdir(src_item):
+                    Util.copy_dir(src_item, dest_item)
+                else:
+                    os.link(src_item, dest_item)
+        except OSError as e:
+            Util.print_error_and_die(
+                f"""Failed to copy directory:
+                {src_path} to {dest_path}\nError: {e}"""
+            )
+
+    @staticmethod
+    def move_dir(src_path: str, dest_path: str):
+        try:
+            os.rename(src_path, dest_path)
+        except OSError as e:
+            Util.print_error_and_die(
+                f"""Failed to move directory:
+                {src_path} to {dest_path}\nError: {e}"""
+            )
+
+    @staticmethod
+    def remove_dir(dir_path: str):
+        try:
+            shutil.rmtree(dir_path)
+        except OSError as e:
+            Util.print_error_and_die(
+                f"Failed to remove directory: {dir_path}\nError: {e}"
+            )
+
+    @staticmethod
     def print_error_and_die(message: str):
-        Util.console.print(
-            f"[bold red]ERROR:[/bold red] {message}", style="bold red"
-        )
+        Util.console.print(f"[bold red]ERROR[/bold red]: {message}")
         sys.exit(1)
+
+    @staticmethod
+    def print(message: str):
+        Util.console.print(f"{message}", highlight=False)
 
     @staticmethod
     def ensure_dirs(constants: Constants):

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import List
+from typing import Dict, List
 
 from config import ConfigMng, EnvironmentCfg
 from service import Service
@@ -30,21 +30,17 @@ from util import Util
 class Environment(ABC):
 
     type: str
-    db_type: str
     tag: str
     archived: bool
     active: bool
     services: List[Service]
 
-    def __init__(
-        self, config: ConfigMng, type: str, db_type: str, env_tag: str
-    ):
-        self.config = config
-        self.type = type
-        self.db_type = db_type
-        self.tag = env_tag
-        self.archived = False
-        self.active = False
+    def __init__(self, configMng: ConfigMng, envCfg: EnvironmentCfg):
+        self.configMng = configMng
+        self.type = envCfg.type
+        self.tag = envCfg.tag
+        self.archived = envCfg.archived
+        self.active = envCfg.active
         self.services = []
 
     @abstractmethod
@@ -82,13 +78,42 @@ class Environment(ABC):
             active=self.active,
         )
 
+    def get_dir(self) -> str:
+        """Return the directory of the environment."""
+        return os.path.join(self.configMng.constants.SHPD_ENVS_DIR, self.tag)
+
+    def get_dir_for_tag(self, env_tag: str) -> str:
+        """Return the directory for the environment with a given tag."""
+        return os.path.join(self.configMng.constants.SHPD_ENVS_DIR, env_tag)
+
     def realize(self):
         """Realize the environment."""
         Util.create_dir(
-            os.path.join(self.config.constants.SHPD_ENVS_DIR, self.tag),
+            self.get_dir(),
             self.tag,
         )
-        pass
+        self.sync_config()
+
+    def realize_from(self, src_env: Environment):
+        """Realize the environment."""
+        Util.copy_dir(src_env.get_dir(), self.get_dir())
+        self.sync_config()
+
+    def move_to(self, dst_env_tag: str):
+        """Move the environment to a new tag."""
+        Util.move_dir(self.get_dir(), self.get_dir_for_tag(dst_env_tag))
+        self.configMng.remove_environment(self.tag)
+        self.tag = dst_env_tag
+        self.sync_config()
+
+    def delete(self):
+        """Delete the environment."""
+        Util.remove_dir(self.get_dir())
+        self.configMng.remove_environment(self.tag)
+
+    def sync_config(self):
+        """Sync the environment configuration."""
+        self.configMng.add_or_set_environment(self.tag, self.to_config())
 
     def get_tag(self) -> str:
         """Return the tag of the environment."""
@@ -125,50 +150,123 @@ class Environment(ABC):
 
 class EnvironmentFactory(ABC):
     """
-    Factory class for creating environments.
+    Factory class for environments.
     """
 
     def __init__(self, config: ConfigMng):
         self.config = config
 
     @abstractmethod
-    def create_environment(
-        self, env_type: str, db_type: str, env_tag: str
-    ) -> Environment:
+    def new_environment(self, env_type: str, env_tag: str) -> Environment:
         """
-        Create an environment.
+        Create a new environment.
+        """
+        pass
+
+    @abstractmethod
+    def get_environment(self, envCfg: EnvironmentCfg) -> Environment:
+        """
+        Get an environment.
         """
         pass
 
 
 class EnvironmentMng:
 
-    def __init__(self, configMng: ConfigMng, envFactory: EnvironmentFactory):
+    def __init__(
+        self,
+        cli_flags: Dict[str, bool],
+        configMng: ConfigMng,
+        envFactory: EnvironmentFactory,
+    ):
+        self.cli_flags = cli_flags
         self.configMng = configMng
         self.envFactory = envFactory
 
-    def init_env(self, env_type: str, db_type: str, env_tag: str):
+    def init_env(self, env_type: str, env_tag: str):
         """Initialize an environment."""
-        env = self.envFactory.create_environment(env_type, db_type, env_tag)
-        self.configMng.add_environment(env.to_config())
+        if self.configMng.get_environment(env_tag):
+            Util.print_error_and_die(
+                f"Environment with tag '{env_tag}' already exists."
+            )
+        env = self.envFactory.new_environment(env_type, env_tag)
         env.realize()
-        pass
+        Util.print(f"{env_tag}")
 
     def clone_env(self, src_env_tag: str, dst_env_tag: str):
         """Clone an environment."""
-        pass
+        envCfg = self.configMng.get_environment(src_env_tag)
+        if not envCfg:
+            Util.print_error_and_die(
+                f"Environment with tag '{src_env_tag}' does not exist."
+            )
+        else:
+            env = self.envFactory.get_environment(envCfg)
+            clonedEnv = env.clone(dst_env_tag)
+            clonedEnv.realize_from(env)
+            Util.print(f"Cloned to: {dst_env_tag}")
+
+    def rename_env(self, src_env_tag: str, dst_env_tag: str):
+        """Rename an environment."""
+        envCfg = self.configMng.get_environment(src_env_tag)
+        if not envCfg:
+            Util.print_error_and_die(
+                f"Environment with tag '{src_env_tag}' does not exist."
+            )
+        else:
+            env = self.envFactory.get_environment(envCfg)
+            env.move_to(dst_env_tag)
+            Util.print(f"Renamed to: {dst_env_tag}")
 
     def checkout_env(self, env_tag: str):
         """Checkout an environment."""
-        pass
+        envCfg = self.configMng.get_environment(env_tag)
+        if not envCfg:
+            Util.print_error_and_die(
+                f"Environment with tag '{env_tag}' does not exist."
+            )
+        else:
+            envCfg.active = True
+            self.configMng.set_active_environment(env_tag)
+            Util.print(f"Switched to: {env_tag}")
+
+    def delete_env(self, env_tag: str):
+        """Delete an environment."""
+        envCfg = self.configMng.get_environment(env_tag)
+        if not envCfg:
+            Util.print_error_and_die(
+                f"Environment with tag '{env_tag}' does not exist."
+            )
+        else:
+            if not self.cli_flags["yes"]:
+                if not Util.confirm(
+                    f"""Are you sure you want to
+                      delete the environment '{env_tag}'?"""
+                ):
+                    Util.console.print("Aborted.", style="yellow")
+                    return
+
+            env = self.envFactory.get_environment(envCfg)
+            env.delete()
+            Util.print(f"Deleted: {env.tag}")
 
     def set_all_envs_non_active(self):
         """Set all environments as non-active."""
-        pass
+        envs = self.configMng.get_environments()
+        for env in envs:
+            env.active = False
+        self.configMng.store()
+        Util.print("All environments set to non-active.")
 
     def list_envs(self):
         """List all available environments."""
-        pass
+        envs = self.configMng.get_environments()
+        if not envs:
+            Util.print("No environments available.")
+            return
+        Util.print("Available environments:")
+        for env in envs:
+            Util.print(f" - {env.tag} ({env.type})")
 
     def start_env(self):
         """Start an environment."""
