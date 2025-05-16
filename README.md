@@ -60,6 +60,8 @@ Use the `VER` env variable to specify the desired tool's version.
 sudo VER=0.0.0 sh -c "$(curl -sfL https://raw.githubusercontent.com/LunaticFringers/shepherd/main/scripts/install.sh)"
 ```
 
+For development, you can also install the tool directly from [sources](docs/development.md#install-from-source).
+
 ### Windows
 
 Not supported yet.

@@ -69,6 +69,34 @@ sudo apt install python3 python3-pip python3-venv -y
    python3 src/shepctl.py <command> [options]
    ```
 
+## Install from Source
+
+To install `shepctl` from source for development purposes, use the
+`--install-method source` option (or `-m source`). This will:
+
+1. Copy the source files into the install directory
+2. Set up a Python virtual environment
+3. Install dependencies from `requirements.txt`
+4. Create a `shepctl` launcher in your `$PATH`
+
+```bash
+cd shepherd/scripts
+
+sudo ./install.sh -m source install
+```
+
+> 📌 You can also skip dependency installation if you've already satisfied all requirements:
+
+```bash
+sudo INSTALL_SHEPCTL_DIR=/opt/shepctl ./install.sh -m source --skip-deps install
+```
+
+After installing, you can run the tool with:
+
+```bash
+shepctl
+```
+
 ## Lints & Checks
 
 1. **pre-commit**
