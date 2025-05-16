@@ -18,6 +18,7 @@
 
 import json
 import os
+from copy import deepcopy
 from dataclasses import asdict, dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -81,6 +82,32 @@ class EnvironmentCfg:
     services: Optional[List[ServiceCfg]]
     archived: bool
     active: bool
+
+    @classmethod
+    def from_tag(cls, env_type: str, env_tag: str):
+        """
+        Creates an EnvironmentCfg object from a tag.
+        """
+        return EnvironmentCfg(
+            type=env_type,
+            tag=env_tag,
+            services=[],
+            archived=False,
+            active=False,
+        )
+
+    @classmethod
+    def from_other(cls, other: "EnvironmentCfg"):
+        """
+        Creates a copy of an existing EnvironmentCfg object.
+        """
+        return cls(
+            type=other.type,
+            tag=other.tag,
+            services=deepcopy(other.services),
+            archived=other.archived,
+            active=other.active,
+        )
 
 
 @dataclass
@@ -440,6 +467,32 @@ class ConfigMng:
         with open(self.constants.SHPD_CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(processed_config, f, indent=2)
 
+    def store(self):
+        """
+        Stores the current configuration by calling `store_config`.
+        """
+        self.store_config(self.config)
+
+    def get_environment(self, envTag: str) -> Optional[EnvironmentCfg]:
+        """
+        Retrieves an environment configuration by its tag.
+
+        :param envTag: The tag of the environment to retrieve.
+        :return: The environment configuration if found, else None.
+        """
+        for env in self.config.envs:
+            if env.tag == envTag:
+                return env
+        return None
+
+    def get_environments(self) -> List[EnvironmentCfg]:
+        """
+        Retrieves all environments.
+
+        :return: A list of all environments.
+        """
+        return self.config.envs
+
     def add_environment(self, newEnv: EnvironmentCfg):
         """
         Adds a new environment to the configuration.
@@ -447,7 +500,39 @@ class ConfigMng:
         :param newEnv: The new environment to be added.
         """
         self.config.envs.append(newEnv)
-        self.store_config(self.config)
+        self.store()
+
+    def set_environment(
+        self, envTag: str, newEnv: EnvironmentCfg
+    ) -> Optional[EnvironmentCfg]:
+        """
+        Sets a new environment configuration.
+
+        :param envTag: The tag of the environment to be replaced.
+        :param newEnv: The new environment configuration.
+        :return: The replaced environment configuration if found, else None.
+        """
+        for i, env in enumerate(self.config.envs):
+            if env.tag == envTag:
+                self.config.envs[i] = newEnv
+                self.store()
+                return env
+        return None
+
+    def add_or_set_environment(self, envTag: str, newEnv: EnvironmentCfg):
+        """
+        Adds or replaces an environment configuration.
+
+        :param envTag: The tag of the environment to be added/replaced.
+        :param newEnv: The new environment configuration.
+        """
+        for i, env in enumerate(self.config.envs):
+            if env.tag == envTag:
+                self.config.envs[i] = newEnv
+                self.store()
+                return
+        self.config.envs.append(newEnv)
+        self.store()
 
     def remove_environment(self, envTag: str):
         """
@@ -458,4 +543,37 @@ class ConfigMng:
         self.config.envs = [
             env for env in self.config.envs if env.tag != envTag
         ]
-        self.store_config(self.config)
+        self.store()
+
+    def exists_environment(self, envTag: str) -> bool:
+        """
+        Checks if an environment exists in the configuration.
+
+        :param envTag: The tag of the environment to check.
+        :return: True if the environment exists, else False.
+        """
+        return any(env.tag == envTag for env in self.config.envs)
+
+    def get_active_environment(self) -> Optional[EnvironmentCfg]:
+        """
+        Retrieves the active environment configuration.
+
+        :return: The active environment configuration if found, else None.
+        """
+        for env in self.config.envs:
+            if env.active:
+                return env
+        return None
+
+    def set_active_environment(self, envTag: str):
+        """
+        Sets an environment as active.
+
+        :param envTag: The tag of the environment to be set as active.
+        """
+        for env in self.config.envs:
+            if env.tag == envTag:
+                env.active = True
+            else:
+                env.active = False
+        self.store()

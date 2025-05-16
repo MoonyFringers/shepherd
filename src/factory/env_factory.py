@@ -18,7 +18,7 @@
 
 from typing import override
 
-from config import ConfigMng
+from config import ConfigMng, EnvironmentCfg
 from docker_compose import DockerComposeEnv
 from environment import Environment, EnvironmentFactory
 from util import Constants
@@ -26,18 +26,29 @@ from util import Constants
 
 class ShpdEnvironmentFactory(EnvironmentFactory):
 
-    def __init__(self, config: ConfigMng):
-        self.config = config
+    def __init__(self, configMng: ConfigMng):
+        self.configMng = configMng
 
     @override
-    def create_environment(
-        self, env_type: str, db_type: str, env_tag: str
-    ) -> Environment:
+    def new_environment(self, env_type: str, env_tag: str) -> Environment:
         """
         Create an environment.
         """
         match env_type:
             case Constants.ENV_TYPE_DOCKER_COMPOSE:
-                return DockerComposeEnv(self.config, db_type, env_tag)
+                return DockerComposeEnv(
+                    self.configMng, EnvironmentCfg.from_tag(env_type, env_tag)
+                )
             case _:
                 raise ValueError(f"Unknown environment type: {env_type}")
+
+    @override
+    def get_environment(self, envCfg: EnvironmentCfg) -> Environment:
+        """
+        Get an environment.
+        """
+        match envCfg.type:
+            case Constants.ENV_TYPE_DOCKER_COMPOSE:
+                return DockerComposeEnv(self.configMng, envCfg)
+            case _:
+                raise ValueError(f"Unknown environment type: {envCfg.type}")

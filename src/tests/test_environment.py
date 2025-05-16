@@ -91,16 +91,6 @@ def temp_home(tmp_path: Path, mocker: MockerFixture) -> Path:
     config_file = temp_home / ".shpd.conf"
     config_file.write_text(values)
 
-    mocker.patch(
-        "os.path.expanduser",
-        side_effect=[
-            temp_home / ".shpd.conf",
-            temp_home / "shpd",
-            temp_home / ".shpd.conf",
-            temp_home / "shpd",
-        ],
-    )
-
     return temp_home
 
 
@@ -111,20 +101,301 @@ def runner() -> CliRunner:
 
 def test_env_init(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
 
-    env_tag = "test-ora-1"
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
 
     result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "ora", env_tag]
+        cli, ["env", "init", "docker-compose", "test-init-1"]
     )
     assert result.exit_code == 0
 
     sm = ShepherdMng()
+    assert sm.configMng.exists_environment("test-init-1")
 
     expected_dirs = [
-        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, env_tag)
+        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-init-1")
     ]
 
     for directory in expected_dirs:
         assert os.path.isdir(
             directory
         ), f"Directory {directory} was not created."
+
+
+def test_env_clone(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(
+        cli, ["env", "init", "docker-compose", "test-clone-1"]
+    )
+    assert result.exit_code == 0
+
+    result = runner.invoke(
+        cli, ["env", "clone", "test-clone-1", "test-clone-2"]
+    )
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    assert sm.configMng.exists_environment("test-clone-1")
+    assert sm.configMng.exists_environment("test-clone-2")
+
+    expected_dirs = [
+        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-clone-1"),
+        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-clone-2"),
+    ]
+
+    for directory in expected_dirs:
+        assert os.path.isdir(
+            directory
+        ), f"Directory {directory} was not created."
+
+
+def test_env_rename(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(
+        cli, ["env", "init", "docker-compose", "test-rename-1"]
+    )
+    assert result.exit_code == 0
+
+    result = runner.invoke(
+        cli, ["env", "rename", "test-rename-1", "test-rename-2"]
+    )
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    assert not sm.configMng.exists_environment("test-rename-1")
+    assert sm.configMng.exists_environment("test-rename-2")
+
+    renamed_dir = os.path.join(
+        sm.configMng.constants.SHPD_ENVS_DIR, "test-rename-2"
+    )
+    old_dir = os.path.join(
+        sm.configMng.constants.SHPD_ENVS_DIR, "test-rename-1"
+    )
+
+    assert os.path.isdir(
+        renamed_dir
+    ), f"Directory {renamed_dir} was not created."
+    assert not os.path.exists(
+        old_dir
+    ), f"Old directory {old_dir} still exists after rename."
+
+
+def test_env_checkout(
+    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+):
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-2"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is None
+
+    result = runner.invoke(cli, ["env", "checkout", "test-1"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is not None
+    assert env.tag == "test-1"
+
+    result = runner.invoke(cli, ["env", "checkout", "test-2"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is not None
+    assert env.tag == "test-2"
+
+
+def test_env_setnoactive(
+    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+):
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-2"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is None
+
+    result = runner.invoke(cli, ["env", "checkout", "test-1"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is not None
+    assert env.tag == "test-1"
+
+    result = runner.invoke(cli, ["env", "noactive"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is None
+
+
+def test_env_list(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "list"])
+    assert result.exit_code == 0
+
+
+def test_env_delete_yes(
+    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+):
+
+    mocker.patch("builtins.input", return_value="y")
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env is None
+
+    env_dir = os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-1")
+
+    assert not os.path.exists(
+        env_dir
+    ), f"directory {env_dir} still exists after delete."
+
+
+def test_env_delete_no(
+    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+):
+
+    mocker.patch("builtins.input", return_value="n")
+
+    mocker.patch(
+        "os.path.expanduser",
+        side_effect=[
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+            temp_home / ".shpd.conf",
+            temp_home / "shpd",
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env is not None
+
+    env_dir = os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-1")
+
+    assert os.path.exists(
+        env_dir
+    ), f"directory {env_dir} does not exist after delete-no."

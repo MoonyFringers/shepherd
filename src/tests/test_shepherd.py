@@ -506,11 +506,9 @@ def test_cli_env_init(
     temp_home: Path, runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(EnvironmentMng, "init_env")
-    result = runner.invoke(
-        cli, ["env", "init", "env_type", "db_type", "env_tag"]
-    )
+    result = runner.invoke(cli, ["env", "init", "env_type", "env_tag"])
     assert result.exit_code == 0
-    mock_init.assert_called_once_with("env_type", "db_type", "env_tag")
+    mock_init.assert_called_once_with("env_type", "env_tag")
 
 
 def test_cli_env_clone(

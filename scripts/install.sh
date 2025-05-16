@@ -67,6 +67,11 @@ function ensure_deps_debian_like() {
     lsb-release
   )
 
+  REQUIRED_PYTHON_PKGS=(
+    python3-venv
+    python3-pip
+  )
+
   MISSING_PKGS=()
   for pkg in "${REQUIRED_PKGS[@]}"; do
     if ! dpkg -s "$pkg" &>/dev/null; then
@@ -82,12 +87,31 @@ function ensure_deps_debian_like() {
     echo "All base dependencies are already installed."
   fi
 
-  # Ensure Python >= 3.12 and pip
+  # Ensure Python >= 3.12 is installed
   if ! python3 --version | grep -qE "3\.(1[2-9]|[2-9][0-9])"; then
     echo "Installing Python 3.12+..."
-    apt-get install -y python3 python3-venv python3-pip
+    apt-get install -y python3
   else
     echo "Python is already installed: $(python3 --version)"
+  fi
+
+  # Ensure related packages are installed
+  MISSING_PY_PKGS=()
+  for py_pkg in "${REQUIRED_PYTHON_PKGS[@]}"; do
+    if ! dpkg -s "$py_pkg" >/dev/null 2>&1; then
+      echo "Missing package: $py_pkg, going to install it"
+      MISSING_PY_PKGS+=("$py_pkg")
+    else
+      echo "Package $py_pkg is already installed."
+    fi
+  done
+
+  if [[ ${#MISSING_PY_PKGS[@]} -gt 0 ]]; then
+    echo "Installing missing python dependencies: ${MISSING_PY_PKGS[*]}"
+    apt-get update
+    apt-get install -y --no-install-recommends "${MISSING_PY_PKGS[@]}"
+  else
+    echo "All python dependencies are already installed."
   fi
 
   # Docker GPG key and repository

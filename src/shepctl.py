@@ -36,10 +36,12 @@ class ShepherdMng:
         Util.ensure_config_file(self.configMng.constants)
         self.configMng.load()
         self.environmentMng = EnvironmentMng(
-            self.configMng, ShpdEnvironmentFactory(self.configMng)
+            self.cli_flags,
+            self.configMng,
+            ShpdEnvironmentFactory(self.configMng),
         )
-        self.serviceMng = ServiceMng(self.configMng)
-        self.databaseMng = DatabaseMng(self.configMng)
+        self.serviceMng = ServiceMng(self.cli_flags, self.configMng)
+        self.databaseMng = DatabaseMng(self.cli_flags, self.configMng)
 
 
 @click.group()
@@ -78,7 +80,7 @@ def cli(
     checkout: bool,
 ):
     """Shepherd CLI:
-    A tool to manage your environment, services, and database.
+    A tool to manage your environments, services, and databases.
     """
     cli_flags = {
         "verbose": verbose,
@@ -95,7 +97,7 @@ def cli(
         ctx.obj = ShepherdMng(cli_flags)
 
 
-@cli.command(name="test")
+@cli.command(name="test", hidden=True)
 def empty():
     """Empty testing purpose stub"""
     pass
@@ -165,13 +167,12 @@ def env():
 
 @env.command(name="init")
 @click.argument("env_type", required=True)
-@click.argument("db_type", required=True)
 @click.argument("env_tag", required=True)
 @click.pass_obj
-def env_init(shepherd: ShepherdMng, env_type: str, db_type: str, env_tag: str):
+def env_init(shepherd: ShepherdMng, env_type: str, env_tag: str):
     """Init an environment with an environment type,
     a database type and an environment's tag name."""
-    shepherd.environmentMng.init_env(env_type, db_type, env_tag)
+    shepherd.environmentMng.init_env(env_type, env_tag)
 
 
 @env.command(name="clone")
@@ -183,12 +184,29 @@ def env_clone(shepherd: ShepherdMng, src_env_tag: str, dst_env_tag: str):
     shepherd.environmentMng.clone_env(src_env_tag, dst_env_tag)
 
 
+@env.command(name="rename")
+@click.argument("src_env_tag", required=True)
+@click.argument("dst_env_tag", required=True)
+@click.pass_obj
+def env_rename(shepherd: ShepherdMng, src_env_tag: str, dst_env_tag: str):
+    """Rename an environment."""
+    shepherd.environmentMng.rename_env(src_env_tag, dst_env_tag)
+
+
 @env.command(name="checkout")
 @click.argument("env_tag", required=True)
 @click.pass_obj
 def env_checkout(shepherd: ShepherdMng, env_tag: str):
     """Checkout an environment."""
     shepherd.environmentMng.checkout_env(env_tag)
+
+
+@env.command(name="delete")
+@click.argument("env_tag", required=True)
+@click.pass_obj
+def env_delete(shepherd: ShepherdMng, env_tag: str):
+    """Delete an environment."""
+    shepherd.environmentMng.delete_env(env_tag)
 
 
 @env.command(name="noactive")
