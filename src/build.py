@@ -35,10 +35,8 @@ def read_version() -> str:
     if os.path.exists(VERSION_FILE):
         with open(VERSION_FILE, "r") as f:
             version = f.read().strip()
-            print(f"[📄] Version read from file: {version}")
             return version
     else:
-        print(f"[❗] Version file not found: {VERSION_FILE}")
         return "0.0.0"
 
 
@@ -51,17 +49,13 @@ def clean():
                 shutil.rmtree(folder)
             else:
                 os.remove(folder)
-            print(f"[✅] Removed: {folder}")
 
 
 def git_tag(version: str):
     """Create and push Git tag."""
     tag = f"v{version}"
-    print(f"[🔖] Creating Git tag: {tag}")
-
     subprocess.run(["git", "tag", tag], check=True)
     subprocess.run(["git", "push", "origin", "--tags"], check=True)
-    print("[🚀] Git tag pushed")
 
 
 def copy_resources():
@@ -76,13 +70,11 @@ def copy_resources():
         if os.path.exists(file):
             destination = os.path.join(dist_dir, os.path.basename(file))
             shutil.copy(file, destination)
-            print(f"[📄] Copied: {file} -> {destination}")
 
 
 def build(debug: bool = False):
     """Build the app."""
     version = read_version()
-    print(f"\n[🚀] Building {APP_NAME} v{version}...")
 
     cmd = [
         "pyinstaller",
@@ -96,19 +88,15 @@ def build(debug: bool = False):
 
     if os.path.exists(ICON_PATH):
         cmd += ["--icon", ICON_PATH]
-        print(f"[🔑] Icon: {ICON_PATH}")
 
     for lib in EXCLUDE_LIBS:
         cmd += ["--exclude", lib]
-        print(f"[🚫] Excluding: {lib}")
 
     if debug:
         cmd += ["--log-level", "DEBUG"]
-        print("[🐞] Debug mode enabled")
 
     cmd.append(ENTRY_FILE)
     subprocess.run(cmd, check=True)
-    print(f"[✅] Build completed: dist/{APP_NAME}")
 
     copy_resources()
 
@@ -138,7 +126,6 @@ def main():
 
     if args.version:
         version = read_version()
-        print(f"{APP_NAME} v{version}")
         return
 
     if args.clean:
@@ -147,7 +134,6 @@ def main():
     global git_tagging
     if args.git:
         git_tagging = True
-        print("[🔖] Git tagging enabled")
 
     build(debug=args.debug)
 
