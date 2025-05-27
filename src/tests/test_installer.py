@@ -17,7 +17,6 @@
 
 import os
 import shutil
-import sys
 import tempfile
 from pathlib import Path
 from unittest import mock
@@ -370,7 +369,7 @@ class TestInstallScript:
         # Verify that the package installation function was called
         mock_check_package_installed.assert_called_with("docker-compose-plugin")
 
-    @patch("installer.install.run_command")
+    @patch("installer.install_utils.run_command")
     @patch("installer.install.print_color")
     def test_install_binary(
         self, mock_print: MagicMock, mock_run_command: MagicMock
@@ -435,7 +434,7 @@ class TestInstallScript:
                     Path(f"{os.environ['SYMLINK_DIR']}/shepctl"),
                 )
 
-    @patch("installer.install.run_command")
+    @patch("installer.install_utils.run_command")
     @patch("installer.install.print_color")
     def test_install_source(
         self, mock_print: MagicMock, mock_run_command: MagicMock
@@ -444,50 +443,64 @@ class TestInstallScript:
         # Mock successful command execution
         mock_run_command.return_value = MagicMock(returncode=0)
 
-        # Set up source repository URL
-        repo_url = "https://github.com/LunaticFringers/shepherd.git"
-
-        with (
-            patch("installer.install.py_src_dir", Path(self.temp_dir) / "src"),
-            patch("os.symlink") as mock_symlink,
-            patch("shutil.which", return_value="/usr/bin/python3"),
-        ):
-
-            # Create mock src directory
-            src_dir = Path(self.temp_dir) / "src"
-            src_dir.mkdir(exist_ok=True)
-
-            install.install_source()
-
-            # Verify the sequence of commands
-            expected_calls = [
-                # First, the git clone command
-                mock.call(
-                    ["git", "clone", repo_url, str(self.install_dir)],
-                    check=True,
-                ),
-                # Then, the pip install command
-                mock.call(
-                    [
-                        sys.executable,
-                        "-m",
-                        "pip",
-                        "install",
-                        "-e",
-                        f"{self.install_dir}",
-                    ],
-                    check=True,
-                ),
-            ]
-            mock_run_command.assert_has_calls(
-                expected_calls, any_order=False
-            )  # Enforce the order of calls
-
-            # Check symlink was created
-            mock_symlink.assert_called_with(
-                f"{self.install_dir}/bin/shepctl",
-                Path(f"{os.environ['SYMLINK_DIR']}/shepctl"),
+        # Set the VER environment variable for the test
+        with patch.dict(os.environ, {"VER": "1.0.0"}):
+            # Create expected source URL
+            source_url = (
+                "https://github.com/LunaticFringers/shepherd/archive/refs/tags/"
+                "v1.0.0.tar.gz"
             )
+
+            with (
+                patch("os.symlink") as mock_symlink,
+                # Symlink doesn't exist initially
+                patch("pathlib.Path.exists", return_value=False),
+                patch(
+                    "installer.install.manage_python_dependencies"
+                ) as mock_manage_deps,
+            ):
+                # Set skip_ensure_deps to False to test dependency management
+                install.skip_ensure_deps = False
+
+                install.install_source()
+
+                # Verify the sequence of commands (download and extract)
+                expected_calls = [
+                    # First, the download command (curl)
+                    mock.call(
+                        [
+                            "curl",
+                            "-fsSL",
+                            source_url,
+                            "-o",
+                            f"{self.install_dir}/shepctl-1.0.0.tar.gz",
+                        ],
+                        check=True,
+                    ),
+                    # Then, the extract command (tar)
+                    mock.call(
+                        [
+                            "tar",
+                            "-xzf",
+                            f"{self.install_dir}/shepctl-1.0.0.tar.gz",
+                            "-C",
+                            str(self.install_dir),
+                        ],
+                        check=True,
+                    ),
+                ]
+                mock_run_command.assert_has_calls(
+                    expected_calls, any_order=False
+                )  # Enforce the order of calls
+
+                # Verify Python dependencies were managed
+                mock_manage_deps.assert_called_once()
+
+                # Check symlink was created
+                mock_symlink.assert_called_with(
+                    str(self.install_dir / "bin" / "shepctl"),
+                    Path(f"{os.environ['SYMLINK_DIR']}/shepctl"),
+                )
 
 
 if __name__ == "__main__":

@@ -100,6 +100,12 @@ def install_binary() -> None:
         os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
     ).resolve()
 
+    version = os.environ.get("VER", "latest")
+    url = (
+        f"https://github.com/LunaticFringers/shepherd/releases/download/"
+        f"v{version}/shepctl-{version}.tar.gz"
+    )
+
     # Download the binary
     print_color("Downloading shepctl binary...", BLUE)
     download_package(url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz")
@@ -173,6 +179,14 @@ def install_source() -> None:
     symlink_dir: Path = Path(
         os.environ.get("SYMLINK_DIR", "/usr/local/bin")
     ).resolve()
+
+    version = os.environ.get("VER", "latest")
+
+    # Link do download the sources code package
+    source_url = (
+        f"https://github.com/LunaticFringers/shepherd/archive/refs/tags/"
+        f"v{version}.tar.gz"
+    )
 
     print_color("Installing shepctl from source...", BLUE)
 
