@@ -354,3 +354,15 @@ def check_package_installed(pkg: str) -> bool:
         return result.returncode == 0
     except Exception:
         return False
+
+
+def download_package(url: str, dest: str) -> None:
+    """Download a package from a URL to a destination path."""
+    run_command(["curl", "-fsSL", url, "-o", dest], check=True)
+    print_color(f"Package downloaded to {dest}", GREEN)
+
+
+def extract_package(package_path: str, extract_to: str) -> None:
+    """Extract a tar.gz package to a specified directory."""
+    run_command(["tar", "-xzf", package_path, "-C", extract_to], check=True)
+    print_color(f"Package extracted to {extract_to}", GREEN)

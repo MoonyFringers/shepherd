@@ -26,6 +26,8 @@ from installer.install_utils import (
     BLUE,
     GREEN,
     RED,
+    download_package,
+    extract_package,
     get_os_info,
     install_packages,
     is_root,
@@ -47,6 +49,12 @@ version = os.environ.get("VER", "latest")
 url = (
     f"https://github.com/LunaticFringers/shepherd/releases/download/"
     f"v{version}/shepctl-{version}.tar.gz"
+)
+
+# Link do download the sources code package
+source_url = (
+    f"https://github.com/LunaticFringers/shepherd/archive/refs/tags/"
+    f"v{version}.tar.gz"
 )
 
 
@@ -91,36 +99,16 @@ def install_binary() -> None:
     install_shepctl_dir: Path = Path(
         os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
     ).resolve()
-    version: str = os.environ.get("VER", "latest")
-    url: str = (
-        f"https://github.com/LunaticFringers/shepherd/releases/download/"
-        f"v{version}/shepctl-{version}.tar.gz"
-    )
 
     # Download the binary
     print_color("Downloading shepctl binary...", BLUE)
-    run_command(
-        [
-            "curl",
-            "-fsSL",
-            url,
-            "-o",
-            f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
-        ],
-        check=True,
-    )
+    download_package(url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz")
 
     # Extract the tar.gz file
     print_color("Extracting...", BLUE)
-    run_command(
-        [
-            "tar",
-            "-xzf",
-            f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
-            "-C",
-            str(install_shepctl_dir),
-        ],
-        check=True,
+    extract_package(
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
+        str(install_shepctl_dir),
     )
 
     # Make the binary executable
@@ -137,29 +125,20 @@ def install_binary() -> None:
         os.symlink(f"{install_shepctl_dir}/shepctl", symlink_path)
 
 
-def install_source() -> None:
-    """Install shepctl from source."""
-    install_shepctl_dir: Path = Path(
-        os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
-    ).resolve()
-    symlink_dir: Path = Path(
-        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
-    ).resolve()
+def manage_dependencies() -> None:
+    print_color("Ensuring dependencies...", BLUE)
 
-    print_color("Installing shepctl from source...", BLUE)
+    os_info: Any = get_os_info()
 
-    # Clone the repo
-    print_color("Cloning repository...", BLUE)
-    run_command(
-        [
-            "git",
-            "clone",
-            "https://github.com/LunaticFringers/shepherd.git",
-            str(install_shepctl_dir),
-        ],
-        check=True,
+    # Manage dependencies based on OS
+    install_packages(
+        os_info.distro,
+        os_info.codename,
+        install_method == "source",
     )
 
+
+def manage_python_dependencies() -> None:
     # Install Python dependencies
     print_color("Installing Python dependencies...", BLUE)
 
@@ -185,6 +164,32 @@ def install_source() -> None:
         # Restore original directory
         os.chdir(original_dir)
 
+
+def install_source() -> None:
+    """Install shepctl from source."""
+    install_shepctl_dir: Path = Path(
+        os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
+    ).resolve()
+    symlink_dir: Path = Path(
+        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
+    ).resolve()
+
+    print_color("Installing shepctl from source...", BLUE)
+
+    # Clone the repo
+    print_color("Downloading and extracting source package", BLUE)
+    download_package(
+        source_url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
+    )
+
+    extract_package(
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
+        str(install_shepctl_dir),
+    )
+
+    if not skip_ensure_deps:
+        manage_python_dependencies()
+
     # Create symlink if it doesn't exist
     bin_path = install_shepctl_dir / "bin" / "shepctl"
     symlink_path = symlink_dir / "shepctl"
@@ -203,16 +208,7 @@ def install() -> None:
     print_color("Installing shepctl...", BLUE)
 
     if not skip_ensure_deps:
-        print_color("Ensuring dependencies...", BLUE)
-
-        os_info: Any = get_os_info()
-
-        # Manage dependencies based on OS
-        install_packages(
-            os_info.distro,
-            os_info.codename,
-            install_method == "source",
-        )
+        manage_dependencies()
 
     # Clean existing installation if it exists
     if Path(install_shepctl_dir).exists():
