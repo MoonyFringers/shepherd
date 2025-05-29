@@ -27,13 +27,13 @@ from installer.install_utils import (
     BLUE,
     GREEN,
     RED,
+    download_package,
+    extract_package,
     get_os_info,
     install_packages,
     is_root,
     print_color,
     run_command,
-    download_package,
-    extract_package,
 )
 
 # Global variables to store command line options
@@ -122,8 +122,9 @@ def uninstall(ctx: click.Context) -> None:
 
 def install_binary() -> None:
     """Install shepctl from binary release."""
-    install_shepctl_dir: str = os.environ.get("INSTALL_SHEPCTL_DIR",
-                                              "/opt/shepctl")
+    install_shepctl_dir: str = os.environ.get(
+        "INSTALL_SHEPCTL_DIR", "/opt/shepctl"
+    )
 
     version = os.environ.get("VER", "latest")
     url = (
@@ -133,10 +134,7 @@ def install_binary() -> None:
 
     # Download the binary
     print_color("Downloading shepctl binary...", BLUE)
-    download_package(
-        url,
-        f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
-    )
+    download_package(url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz")
 
     # Extract the tar.gz file
     print_color("Extracting...", BLUE)
@@ -201,8 +199,9 @@ def manage_python_dependencies() -> None:
 
 def install_source() -> None:
     """Install shepctl from source."""
-    install_shepctl_dir: str = os.environ.get("INSTALL_SHEPCTL_DIR",
-                                              "/opt/shepctl")
+    install_shepctl_dir: str = os.environ.get(
+        "INSTALL_SHEPCTL_DIR", "/opt/shepctl"
+    )
     symlink_dir: Path = Path(
         os.environ.get("SYMLINK_DIR", "/usr/local/bin")
     ).resolve()
@@ -220,8 +219,7 @@ def install_source() -> None:
     # Clone the repo
     print_color("Downloading and extracting source package", BLUE)
     download_package(
-        source_url,
-        f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
+        source_url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
     )
 
     extract_package(

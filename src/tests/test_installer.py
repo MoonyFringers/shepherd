@@ -72,7 +72,7 @@ class TestInstallScript:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(install.cli, ['--help'])
+        result = runner.invoke(install.cli, ["--help"])
         assert result.exit_code == 0
         assert "Shepherd Control Tool Installer" in result.output
 
@@ -81,7 +81,7 @@ class TestInstallScript:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(install.cli, ['install', '--help'])
+        result = runner.invoke(install.cli, ["install", "--help"])
         assert result.exit_code == 0
         assert "Install shepctl" in result.output
 
@@ -90,7 +90,7 @@ class TestInstallScript:
         from click.testing import CliRunner
 
         runner = CliRunner()
-        result = runner.invoke(install.cli, ['uninstall', '--help'])
+        result = runner.invoke(install.cli, ["uninstall", "--help"])
         assert result.exit_code == 0
         assert "Uninstall shepctl" in result.output
 
@@ -102,7 +102,7 @@ class TestInstallScript:
         mock_is_root.return_value = False  # Simulate not running as root
 
         runner = CliRunner()
-        result = runner.invoke(install.cli, ['install'])
+        result = runner.invoke(install.cli, ["install"])
 
         # Should exit with code 1
         assert result.exit_code == 1
@@ -121,7 +121,7 @@ class TestInstallScript:
 
         runner = CliRunner()
         result = runner.invoke(
-            install.cli, ['-m', 'source', '-v', '--skip-deps', 'install']
+            install.cli, ["-m", "source", "-v", "--skip-deps", "install"]
         )
 
         # Should succeed
@@ -143,7 +143,7 @@ class TestInstallScript:
         mock_is_root.return_value = True
 
         runner = CliRunner()
-        result = runner.invoke(install.cli, ['uninstall'])
+        result = runner.invoke(install.cli, ["uninstall"])
 
         # Should succeed
         assert result.exit_code == 0
