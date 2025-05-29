@@ -67,131 +67,89 @@ class TestInstallScript:
         # Remove temporary directory
         shutil.rmtree(self.temp_dir)
 
-    def test_parse_arguments_install(self) -> None:
-        """Test argument parsing with install command."""
-        with patch("sys.argv", ["installer.install.py", "install"]):
-            args = install.parse_arguments()
-            assert args.command == "install"
-            assert args.install_method == "binary"
-            assert not args.verbose
-            assert not args.skip_deps
+    def test_cli_help(self) -> None:
+        """Test click CLI help functionality."""
+        from click.testing import CliRunner
 
-    def test_parse_arguments_uninstall(self) -> None:
-        """Test argument parsing with uninstall command."""
-        with patch("sys.argv", ["installer.install.py", "uninstall"]):
-            args = install.parse_arguments()
-            assert args.command == "uninstall"
-            assert args.install_method == "binary"
-            assert not args.verbose
-            assert not args.skip_deps
+        runner = CliRunner()
+        result = runner.invoke(install.cli, ['--help'])
+        assert result.exit_code == 0
+        assert "Shepherd Control Tool Installer" in result.output
 
-    def test_parse_arguments_with_options(self) -> None:
-        """Test argument parsing with additional options."""
-        with patch(
-            "sys.argv",
-            [
-                "installer.install.py",
-                "-m",
-                "source",
-                "-v",
-                "--skip-deps",
-                "install",
-            ],
-        ):
-            args = install.parse_arguments()
-            assert args.command == "install"
-            assert args.install_method == "source"
-            assert args.verbose
-            assert args.skip_deps
+    def test_cli_install_command(self) -> None:
+        """Test click CLI install command help."""
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(install.cli, ['install', '--help'])
+        assert result.exit_code == 0
+        assert "Install shepctl" in result.output
+
+    def test_cli_uninstall_command(self) -> None:
+        """Test click CLI uninstall command help."""
+        from click.testing import CliRunner
+
+        runner = CliRunner()
+        result = runner.invoke(install.cli, ['uninstall', '--help'])
+        assert result.exit_code == 0
+        assert "Uninstall shepctl" in result.output
 
     @patch("installer.install.is_root")
-    def test_main_not_root(self, mock_is_root: MagicMock) -> None:
-        """Test main function when not running as root."""
+    def test_cli_install_not_root(self, mock_is_root: MagicMock) -> None:
+        """Test install command when not running as root."""
+        from click.testing import CliRunner
+
         mock_is_root.return_value = False  # Simulate not running as root
 
-        # Catch the SystemExit exception
-        with pytest.raises(SystemExit) as excinfo:
-            install.main()  # Call the original main function
+        runner = CliRunner()
+        result = runner.invoke(install.cli, ['install'])
 
-        # Verify the exit code
-        assert excinfo.value.code == 1
+        # Should exit with code 1
+        assert result.exit_code == 1
 
     @patch("installer.install.is_root")
-    @patch("installer.install.parse_arguments")
-    @patch("installer.install.install")
-    def test_main_install(
+    @patch("installer.install.install_shepctl")
+    def test_cli_install_as_root(
         self,
-        mock_installer: MagicMock,
-        mock_parse_args: MagicMock,
+        mock_install_shepctl: MagicMock,
         mock_is_root: MagicMock,
     ) -> None:
-        """Test main function with install command."""
+        """Test install command when running as root."""
+        from click.testing import CliRunner
+
         mock_is_root.return_value = True
 
-        # Mock the argument parser
-        args = MagicMock()
-        args.command = "install"
-        args.verbose = True
-        args.skip_deps = False
-        args.install_method = "binary"
-        mock_parse_args.return_value = args
+        runner = CliRunner()
+        result = runner.invoke(
+            install.cli, ['-m', 'source', '-v', '--skip-deps', 'install']
+        )
 
-        install.main()
+        # Should succeed
+        assert result.exit_code == 0
 
-        # Check global variables were set correctly
-        assert install.verbose is True
-        assert install.skip_ensure_deps is False
-        assert install.install_method == "binary"
-
-        # Check install was called
-        mock_installer.assert_called_once()
+        # Check install_shepctl was called
+        mock_install_shepctl.assert_called_once()
 
     @patch("installer.install.is_root")
-    @patch("installer.install.parse_arguments")
-    @patch("installer.install.uninstall")
-    def test_main_uninstall(
+    @patch("installer.install.uninstall_shepctl")
+    def test_cli_uninstall_as_root(
         self,
-        mock_uninstaller: MagicMock,
-        mock_parse_args: MagicMock,
+        mock_uninstall_shepctl: MagicMock,
         mock_is_root: MagicMock,
     ) -> None:
-        """Test main function with uninstall command."""
+        """Test uninstall command when running as root."""
+        from click.testing import CliRunner
+
         mock_is_root.return_value = True
 
-        # Mock the argument parser
-        args = MagicMock()
-        args.command = "uninstall"
-        args.verbose = False
-        args.skip_deps = True
-        args.install_method = "source"
-        mock_parse_args.return_value = args
+        runner = CliRunner()
+        result = runner.invoke(install.cli, ['uninstall'])
 
-        install.main()
+        # Should succeed
+        assert result.exit_code == 0
 
-        # Check global variables were set correctly
-        assert install.verbose is False
-        assert install.skip_ensure_deps is True
-        assert install.install_method == "source"
-
-        # Check uninstall was called
-        mock_uninstaller.assert_called_once()
-
-    @patch("installer.install.is_root")
-    @patch("installer.install.parse_arguments")
-    def test_main_unknown_command(
-        self, mock_parse_args: MagicMock, mock_is_root: MagicMock
-    ) -> None:
-        """Test main function with unknown command."""
-        mock_is_root.return_value = True
-
-        # Mock the argument parser
-        args = MagicMock()
-        args.command = "unknown"
-        mock_parse_args.return_value = args
-
-        with patch("sys.exit") as mock_exit:
-            install.main()
-            mock_exit.assert_called_once_with(1)
+        # Check uninstall_shepctl was called
+        mock_uninstall_shepctl.assert_called_once()
 
     @patch("installer.install_utils.print_color")
     @patch("installer.install.get_os_info")
@@ -223,7 +181,7 @@ class TestInstallScript:
 
         # Mock install_shepctl_dir exists
         with patch("pathlib.Path.exists", return_value=True):
-            install.install()
+            install.install_shepctl()
 
         # Check dependencies were installed
         mock_get_os_info.assert_called_once()
@@ -262,7 +220,7 @@ class TestInstallScript:
 
         # Mock install_shepctl_dir exists
         with patch("pathlib.Path.exists", return_value=True):
-            install.install()
+            install.install_shepctl()
 
         # Check dependencies were not installed
         mock_get_os_info.assert_not_called()
@@ -294,7 +252,7 @@ class TestInstallScript:
         # Mock install_shepctl_dir exists
         with patch("pathlib.Path.exists", return_value=True):
             with pytest.raises(SystemExit):
-                install.install()
+                install.install_shepctl()
 
     @patch("installer.install.print_color")
     @patch("shutil.rmtree")
@@ -307,7 +265,7 @@ class TestInstallScript:
             patch("pathlib.Path.exists", return_value=True),
             patch("pathlib.Path.unlink") as mock_unlink,
         ):
-            install.uninstall()
+            install.uninstall_shepctl()
 
             # Check installation directory was removed
             mock_rmtree.assert_called_once_with(install.install_shepctl_dir)
@@ -376,19 +334,17 @@ class TestInstallScript:
 
         # Set the VER environment variable for the test
         with patch.dict(os.environ, {"VER": "1.0.0"}):
-            # Create a temporary URL for testing
-            url = (
-                "https://github.com/LunaticFringers/shepherd/releases/download/"
-                "v1.0.0/shepctl-1.0.0.tar.gz"
-            )
-
             with (
-                patch("installer.install.url", url),
                 patch("os.chmod") as mock_chmod,
                 patch("os.symlink") as mock_symlink,
             ):
-
                 install.install_binary()
+
+                # Create expected URL for verification
+                expected_url = (
+                    "https://github.com/LunaticFringers/shepherd/"
+                    "releases/download/v1.0.0/shepctl-1.0.0.tar.gz"
+                )
 
                 # Verify the sequence of commands
                 expected_calls = [
@@ -397,7 +353,7 @@ class TestInstallScript:
                         [
                             "curl",
                             "-fsSL",
-                            url,
+                            expected_url,
                             "-o",
                             f"{self.install_dir}/shepctl-1.0.0.tar.gz",
                         ],
@@ -410,7 +366,7 @@ class TestInstallScript:
                             "-xzf",
                             f"{self.install_dir}/shepctl-1.0.0.tar.gz",
                             "-C",
-                            Path(self.install_dir),
+                            str(self.install_dir),
                         ],
                         check=True,
                     ),

@@ -15,11 +15,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-import argparse
 import os
 import sys
 from pathlib import Path
 from typing import Any
+
+import click
 
 # Import utility functions
 from installer.install_utils import (
@@ -35,6 +36,11 @@ from installer.install_utils import (
     extract_package,
 )
 
+# Global variables to store command line options
+verbose = False
+skip_ensure_deps = False
+install_method = "binary"
+
 # Configuration variables
 script_dir = Path(__file__).parent.resolve()
 py_src_dir = (script_dir.parent / "src").resolve()
@@ -46,40 +52,72 @@ symlink_dir = os.environ.get("SYMLINK_DIR", "/usr/local/bin")
 symlink_dir = Path(symlink_dir)
 
 
-def parse_arguments() -> argparse.Namespace:
-    """Parse command line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Shepherd Control Tool Installer",
-        formatter_class=argparse.RawTextHelpFormatter,
-    )
+@click.group()
+@click.option(
+    "-m",
+    "--install-method",
+    type=click.Choice(["binary", "source"]),
+    default="binary",
+    help="Specify the installation method (binary or source).",
+)
+@click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
+@click.option(
+    "-s",
+    "--skip-deps",
+    is_flag=True,
+    help="Skip ensuring dependencies.",
+)
+@click.pass_context
+def cli(
+    ctx: click.Context,
+    install_method: str,
+    verbose: bool,
+    skip_deps: bool,
+) -> None:
+    """Shepherd Control Tool Installer"""
+    if ctx.obj is None:
+        ctx.obj = {}
 
-    parser.add_argument(
-        "-m",
-        "--install-method",
-        choices=["binary", "source"],
-        default="binary",
-        help=(
-            "Specify the installation method (binary or source). "
-            "Default is binary."
-        ),
-    )
+    # Store options in context for subcommands
+    ctx.obj["install_method"] = install_method
+    ctx.obj["verbose"] = verbose
+    ctx.obj["skip_deps"] = skip_deps
 
-    parser.add_argument(
-        "-v", "--verbose", action="store_true", help="Enable verbose mode."
-    )
 
-    parser.add_argument(
-        "-s",
-        "--skip-deps",
-        action="store_true",
-        help="Skip ensuring dependencies.",
-    )
+@cli.command()
+@click.pass_context
+def install(ctx: click.Context) -> None:
+    """Install shepctl."""
+    # Check if running as root
+    if not is_root():
+        print_color("This script must be run as root.", RED)
+        sys.exit(1)
 
-    parser.add_argument(
-        "command", choices=["install", "uninstall"], help="Command to execute."
-    )
+    # Get options from context
+    global verbose, skip_ensure_deps, install_method
+    verbose = ctx.obj["verbose"]
+    skip_ensure_deps = ctx.obj["skip_deps"]
+    install_method = ctx.obj["install_method"]
 
-    return parser.parse_args()
+    install_shepctl()
+
+
+@cli.command()
+@click.pass_context
+def uninstall(ctx: click.Context) -> None:
+    """Uninstall shepctl."""
+    # Check if running as root
+    if not is_root():
+        print_color("This script must be run as root.", RED)
+        sys.exit(1)
+
+    # Get options from context
+    global verbose, skip_ensure_deps, install_method
+    verbose = ctx.obj["verbose"]
+    skip_ensure_deps = ctx.obj["skip_deps"]
+    install_method = ctx.obj["install_method"]
+
+    uninstall_shepctl()
 
 
 def install_binary() -> None:
@@ -207,7 +245,7 @@ def install_source() -> None:
     print_color("Source installation complete!", GREEN)
 
 
-def install() -> None:
+def install_shepctl() -> None:
     """Install shepctl."""
     print_color("Installing shepctl...", BLUE)
 
@@ -231,7 +269,7 @@ def install() -> None:
         sys.exit(1)
 
 
-def uninstall() -> None:
+def uninstall_shepctl() -> None:
     """Uninstall shepctl."""
     print_color("Uninstalling shepctl...", BLUE)
 
@@ -254,34 +292,11 @@ def uninstall() -> None:
 execution_count = 0  # Global counter to track main function executions
 
 
-def main() -> None:
-    # Check if running as root
-    if not is_root():
-        print_color("This script must be run as root.", RED)
-        sys.exit(1)
-
-    args: argparse.Namespace = parse_arguments()
-
-    # Store arguments for use in other functions
-    global verbose, skip_ensure_deps, install_method
-    verbose = args.verbose
-    skip_ensure_deps = args.skip_deps
-    install_method = args.install_method
-
-    # Execute the requested command
-    if args.command == "install":
-        install()
-    elif args.command == "uninstall":
-        uninstall()
-    else:
-        sys.exit(1)
-
-
 if __name__ == "__main__":
     # Global variables to store command line options
     verbose = False
     skip_ensure_deps = False
     install_method = "binary"
 
-    # Run the main function
-    main()
+    # Run the CLI
+    cli()
