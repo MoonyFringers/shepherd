@@ -22,6 +22,8 @@ from typing import Any
 
 import click
 
+from installer import constants
+
 # Import utility functions
 from installer.install_utils import (
     BLUE,
@@ -40,6 +42,7 @@ from installer.install_utils import (
 verbose = False
 skip_ensure_deps = False
 install_method = "binary"
+force_source_download = False
 
 # Configuration variables
 script_dir = Path(__file__).parent.resolve()
@@ -67,12 +70,19 @@ symlink_dir = Path(symlink_dir)
     is_flag=True,
     help="Skip ensuring dependencies.",
 )
+@click.option(
+    "-f",
+    "--force-source-download",
+    is_flag=True,
+    help="Force source download during source installation.",
+)
 @click.pass_context
 def cli(
     ctx: click.Context,
     install_method: str,
     verbose: bool,
     skip_deps: bool,
+    force_source_download: bool,
 ) -> None:
     """Shepherd Control Tool Installer"""
     if ctx.obj is None:
@@ -82,6 +92,7 @@ def cli(
     ctx.obj["install_method"] = install_method
     ctx.obj["verbose"] = verbose
     ctx.obj["skip_deps"] = skip_deps
+    ctx.obj["force_source_download"] = force_source_download
 
 
 @cli.command()
@@ -197,6 +208,48 @@ def manage_python_dependencies() -> None:
         os.chdir(original_dir)
 
 
+def should_download_sources(install_shepctl_dir: str) -> bool:
+    """Check if sources should be downloaded."""
+    if force_source_download:  # Source download is forced by user
+        print_color(
+            "Forcing source download as per user request.",
+            BLUE,
+        )
+        return True
+    elif (
+        not Path(install_shepctl_dir).exists()
+        or not any(Path(install_shepctl_dir).iterdir())
+        # The directory does not exist or is empty
+    ):
+        print_color(
+            f"Directory {install_shepctl_dir} does not exist or is empty. "
+            "Downloading sources...",
+            BLUE,
+        )
+        return True
+    else:
+        # The directory exists and is not empty, should not download again
+        print_color(
+            f"Directory {install_shepctl_dir} already exists and is not empty. "
+            "Assuming existing installation.",
+            RED,
+        )
+        return False
+
+
+def download_sources(install_shepctl_dir: str, version: str) -> None:
+    print_color("Downloading and extracting source package", BLUE)
+    download_package(
+        constants.SHEPCTL_SOURCE_URL.format(version=version),
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
+    )
+
+    extract_package(
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
+        install_shepctl_dir,
+    )
+
+
 def install_source() -> None:
     """Install shepctl from source."""
     install_shepctl_dir: str = os.environ.get(
@@ -208,24 +261,14 @@ def install_source() -> None:
 
     version = os.environ.get("VER", "latest")
 
+    # First of all..check if the directory already exists and it's not empty,
+    # in this case we assume that the user wants to install the existing version
+    # without downloading the sources again, so we will install shepctl
+    if should_download_sources(install_shepctl_dir):
+        download_sources(install_shepctl_dir, version)
+
     # Link do download the sources code package
-    source_url = (
-        f"https://github.com/LunaticFringers/shepherd/archive/refs/tags/"
-        f"v{version}.tar.gz"
-    )
-
     print_color("Installing shepctl from source...", BLUE)
-
-    # Clone the repo
-    print_color("Downloading and extracting source package", BLUE)
-    download_package(
-        source_url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
-    )
-
-    extract_package(
-        f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
-        install_shepctl_dir,
-    )
 
     if not skip_ensure_deps:
         manage_python_dependencies()

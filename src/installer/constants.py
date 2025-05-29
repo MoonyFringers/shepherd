@@ -104,3 +104,8 @@ ARCH_MAPPING = {
     ("arm", ""): "arm64",
     ("aarch64", ""): "arm64",
 }
+
+SHEPCTL_SOURCE_URL = (
+    "https://github.com/LunaticFringers/shepherd/archive/refs/tags/v"
+    "{version}.tar.gz"
+)
