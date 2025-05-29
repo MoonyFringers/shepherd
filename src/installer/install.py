@@ -250,14 +250,25 @@ def download_sources(install_shepctl_dir: str, version: str) -> None:
     )
 
 
+def manage_source_symlinks() -> None:
+    bin_path: Path = Path(install_shepctl_dir) / "bin" / "shepctl"
+    symlink_dir: Path = Path(
+        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
+    ).resolve()
+    symlink_path = symlink_dir / "shepctl"
+
+    if symlink_path.exists():
+        symlink_path.unlink()
+
+    print_color(f"Creating symlink in {symlink_dir}...", BLUE)
+    os.symlink(str(bin_path), symlink_path)
+
+
 def install_source() -> None:
     """Install shepctl from source."""
     install_shepctl_dir: str = os.environ.get(
         "INSTALL_SHEPCTL_DIR", "/opt/shepctl"
     )
-    symlink_dir: Path = Path(
-        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
-    ).resolve()
 
     version = os.environ.get("VER", "latest")
 
@@ -274,15 +285,7 @@ def install_source() -> None:
         manage_python_dependencies()
 
     # Create symlink if it doesn't exist
-    bin_path: Path = Path(install_shepctl_dir) / "bin" / "shepctl"
-    symlink_path = symlink_dir / "shepctl"
-
-    if symlink_path.exists():
-        symlink_path.unlink()
-
-    print_color(f"Creating symlink in {symlink_dir}...", BLUE)
-    os.symlink(str(bin_path), symlink_path)
-
+    manage_source_symlinks()
     print_color("Source installation complete!", GREEN)
 
 
