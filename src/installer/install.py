@@ -26,13 +26,13 @@ from installer.install_utils import (
     BLUE,
     GREEN,
     RED,
-    download_package,
-    extract_package,
     get_os_info,
     install_packages,
     is_root,
     print_color,
     run_command,
+    download_package,
+    extract_package,
 )
 
 # Configuration variables
@@ -44,18 +44,6 @@ install_shepctl_dir = os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
 install_shepctl_dir = Path(install_shepctl_dir).resolve()
 symlink_dir = os.environ.get("SYMLINK_DIR", "/usr/local/bin")
 symlink_dir = Path(symlink_dir)
-
-version = os.environ.get("VER", "latest")
-url = (
-    f"https://github.com/LunaticFringers/shepherd/releases/download/"
-    f"v{version}/shepctl-{version}.tar.gz"
-)
-
-# Link do download the sources code package
-source_url = (
-    f"https://github.com/LunaticFringers/shepherd/archive/refs/tags/"
-    f"v{version}.tar.gz"
-)
 
 
 def parse_arguments() -> argparse.Namespace:
@@ -96,9 +84,8 @@ def parse_arguments() -> argparse.Namespace:
 
 def install_binary() -> None:
     """Install shepctl from binary release."""
-    install_shepctl_dir: Path = Path(
-        os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
-    ).resolve()
+    install_shepctl_dir: str = os.environ.get("INSTALL_SHEPCTL_DIR",
+                                              "/opt/shepctl")
 
     version = os.environ.get("VER", "latest")
     url = (
@@ -108,7 +95,10 @@ def install_binary() -> None:
 
     # Download the binary
     print_color("Downloading shepctl binary...", BLUE)
-    download_package(url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz")
+    download_package(
+        url,
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
+    )
 
     # Extract the tar.gz file
     print_color("Extracting...", BLUE)
@@ -173,9 +163,8 @@ def manage_python_dependencies() -> None:
 
 def install_source() -> None:
     """Install shepctl from source."""
-    install_shepctl_dir: Path = Path(
-        os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
-    ).resolve()
+    install_shepctl_dir: str = os.environ.get("INSTALL_SHEPCTL_DIR",
+                                              "/opt/shepctl")
     symlink_dir: Path = Path(
         os.environ.get("SYMLINK_DIR", "/usr/local/bin")
     ).resolve()
@@ -193,19 +182,20 @@ def install_source() -> None:
     # Clone the repo
     print_color("Downloading and extracting source package", BLUE)
     download_package(
-        source_url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
+        source_url,
+        f"{install_shepctl_dir}/shepctl-{version}.tar.gz"
     )
 
     extract_package(
         f"{install_shepctl_dir}/shepctl-{version}.tar.gz",
-        str(install_shepctl_dir),
+        install_shepctl_dir,
     )
 
     if not skip_ensure_deps:
         manage_python_dependencies()
 
     # Create symlink if it doesn't exist
-    bin_path = install_shepctl_dir / "bin" / "shepctl"
+    bin_path: Path = Path(install_shepctl_dir) / "bin" / "shepctl"
     symlink_path = symlink_dir / "shepctl"
 
     if symlink_path.exists():

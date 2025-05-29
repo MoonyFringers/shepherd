@@ -60,10 +60,6 @@ class TestInstallScript:
             os.environ["INSTALL_SHEPCTL_DIR"]
         ).resolve()
         install.symlink_dir = Path(os.environ["SYMLINK_DIR"])
-        install.url = (
-            f"https://github.com/LunaticFringers/shepherd/releases/download/"
-            f"v{os.environ['VER']}/shepctl-{os.environ['VER']}.tar.gz"
-        )
 
     def teardown_method(self) -> None:
         """Clean up after each test."""
@@ -414,7 +410,7 @@ class TestInstallScript:
                             "-xzf",
                             f"{self.install_dir}/shepctl-1.0.0.tar.gz",
                             "-C",
-                            str(self.install_dir),
+                            Path(self.install_dir),
                         ],
                         check=True,
                     ),
