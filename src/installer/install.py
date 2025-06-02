@@ -55,6 +55,8 @@ symlink_dir = os.environ.get("SYMLINK_DIR", "/usr/local/bin")
 symlink_dir = Path(symlink_dir)
 
 
+####################################################
+# Parse command line options and define the context
 @click.group()
 @click.option(
     "-m",
@@ -95,6 +97,10 @@ def cli(
     ctx.obj["force_source_download"] = force_source_download
 
 
+####################################################
+
+
+# Main install entrypoint
 @cli.command()
 @click.pass_context
 def install(ctx: click.Context) -> None:
@@ -113,6 +119,7 @@ def install(ctx: click.Context) -> None:
     install_shepctl()
 
 
+# Main uninstall entrypoint
 @cli.command()
 @click.pass_context
 def uninstall(ctx: click.Context) -> None:
@@ -131,6 +138,7 @@ def uninstall(ctx: click.Context) -> None:
     uninstall_shepctl()
 
 
+# Binaries installer
 def install_binary() -> None:
     """Install shepctl from binary release."""
     install_shepctl_dir: str = os.environ.get(
@@ -143,7 +151,7 @@ def install_binary() -> None:
         f"v{version}/shepctl-{version}.tar.gz"
     )
 
-    # Download the binary
+    # Download the binary package
     print_color("Downloading shepctl binary...", BLUE)
     download_package(url, f"{install_shepctl_dir}/shepctl-{version}.tar.gz")
 
@@ -168,6 +176,7 @@ def install_binary() -> None:
         os.symlink(f"{install_shepctl_dir}/shepctl", symlink_path)
 
 
+# OS packages dependency manager
 def manage_dependencies() -> None:
     print_color("Ensuring dependencies...", BLUE)
 
@@ -181,6 +190,7 @@ def manage_dependencies() -> None:
     )
 
 
+# Python specific dependency manager
 def manage_python_dependencies() -> None:
     # Install Python dependencies
     print_color("Installing Python dependencies...", BLUE)
@@ -208,6 +218,7 @@ def manage_python_dependencies() -> None:
         os.chdir(original_dir)
 
 
+# Determine if source files should be downloaded
 def should_download_sources(install_shepctl_dir: str) -> bool:
     """Check if sources should be downloaded."""
     if force_source_download:  # Source download is forced by user
@@ -237,6 +248,7 @@ def should_download_sources(install_shepctl_dir: str) -> bool:
         return False
 
 
+# Source files download function
 def download_sources(install_shepctl_dir: str, version: str) -> None:
     print_color("Downloading and extracting source package", BLUE)
     download_package(
@@ -250,6 +262,8 @@ def download_sources(install_shepctl_dir: str, version: str) -> None:
     )
 
 
+# Symbolic links management for source files
+# (set to /usr/local/bin by default)
 def manage_source_symlinks() -> None:
     bin_path: Path = Path(install_shepctl_dir) / "bin" / "shepctl"
     symlink_dir: Path = Path(
@@ -264,6 +278,7 @@ def manage_source_symlinks() -> None:
     os.symlink(str(bin_path), symlink_path)
 
 
+# Shepherd source files installer (for development purposes)
 def install_source() -> None:
     """Install shepctl from source."""
     install_shepctl_dir: str = os.environ.get(
@@ -272,9 +287,11 @@ def install_source() -> None:
 
     version = os.environ.get("VER", "latest")
 
-    # First of all..check if the directory already exists and it's not empty,
-    # in this case we assume that the user wants to install the existing version
-    # without downloading the sources again, so we will install shepctl
+    # Determine if sources should be downloaded.
+    # This is done if explicitly asked from user
+    # through a flag to forcefully download the
+    # sources or if the sources directory does not
+    # exist or is empty.
     if should_download_sources(install_shepctl_dir):
         download_sources(install_shepctl_dir, version)
 
@@ -289,6 +306,7 @@ def install_source() -> None:
     print_color("Source installation complete!", GREEN)
 
 
+# Shepherd install implementation
 def install_shepctl() -> None:
     """Install shepctl."""
     print_color("Installing shepctl...", BLUE)
@@ -303,7 +321,8 @@ def install_shepctl() -> None:
         shutil.rmtree(Path(install_shepctl_dir))
     os.makedirs(Path(install_shepctl_dir), exist_ok=True)
 
-    # Call appropriate installation function based on method
+    # Call appropriate installation function based
+    # on install method passed as argument
     if install_method == "binary":
         install_binary()
     elif install_method == "source":
@@ -313,6 +332,7 @@ def install_shepctl() -> None:
         sys.exit(1)
 
 
+# shepherd uninstall implementation
 def uninstall_shepctl() -> None:
     """Uninstall shepctl."""
     print_color("Uninstalling shepctl...", BLUE)
@@ -341,6 +361,7 @@ if __name__ == "__main__":
     verbose = False
     skip_ensure_deps = False
     install_method = "binary"
+    force_source_download = False
 
     # Run the CLI
     cli()
