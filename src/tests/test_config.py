@@ -65,7 +65,8 @@ config_json = """{
   },
   "service_templates": [
     {
-      "template": "oracle",
+      "tag": "oracle",
+      "factory": "docker",
       "image": "${ora_image}",
       "hostname": null,
       "container_name": null,
@@ -92,7 +93,8 @@ config_json = """{
       "subject_alternative_name": null
     },
     {
-      "template": "postgres",
+      "tag": "postgres",
+      "factory": "docker",
       "image": "${pg_image}",
       "hostname": null,
       "container_name": null,
@@ -123,6 +125,7 @@ config_json = """{
       "services": [
         {
           "template": "postgres",
+          "factory": "docker",
           "tag": "pg-1",
           "service_class": null,
           "image": "ghcr.io/lunaticfringers/shepherd/postgres:17-3.5",
@@ -177,6 +180,7 @@ config_json = """{
         },
         {
           "template": "traefik",
+          "factory": "docker",
           "tag": "traefik-1",
           "service_class": null,
           "image": "",
@@ -197,6 +201,7 @@ config_json = """{
         },
         {
           "template": "custom-1",
+          "factory": "docker",
           "tag": "primary",
           "service_class": null,
           "image": "",
@@ -220,6 +225,7 @@ config_json = """{
         },
         {
           "template": "nodejs",
+          "factory": "docker",
           "tag": "poke",
           "service_class": null,
           "image": "",
@@ -334,7 +340,8 @@ def test_load_config(mocker: MockerFixture):
     assert config.logging.format == "%(asctime)s - %(levelname)s - %(message)s"
 
     service_templates = config.service_templates
-    assert service_templates and service_templates[0].template == "oracle"
+    assert service_templates and service_templates[0].tag == "oracle"
+    assert service_templates[0].factory == "docker"
     assert service_templates[0].image == (
         "ghcr.io/lunaticfringers/shepherd/oracle:19.3.0.0_TZ40"
     )
@@ -356,7 +363,8 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].properties["user"] == "docker"
     assert service_templates[0].properties["psw"] == "docker"
     assert service_templates[0].subject_alternative_name is None
-    assert service_templates[1].template == "postgres"
+    assert service_templates[1].tag == "postgres"
+    assert service_templates[1].factory == "docker"
     assert service_templates[1].image == (
         "ghcr.io/lunaticfringers/shepherd/postgres:17-3.5"
     )
@@ -381,6 +389,7 @@ def test_load_config(mocker: MockerFixture):
     assert config.envs[0].tag == "sample-1"
     services = config.envs[0].services
     assert services and services[0].template == "postgres"
+    assert services[0].factory == "docker"
     assert services[0].tag == "pg-1"
     assert services[0].image == (
         "ghcr.io/lunaticfringers/shepherd/postgres:17-3.5"
@@ -412,6 +421,7 @@ def test_load_config(mocker: MockerFixture):
     assert properties["dump_dir"] == "/dumps/2"
     assert upstreams[1].enabled is False
     assert services[1].template == "traefik"
+    assert services[1].factory == "docker"
     assert services[1].ingress is True
     assert services[2].template == "custom-1"
     assert services[2].tag == "primary"

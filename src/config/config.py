@@ -56,7 +56,8 @@ class ServiceTemplateCfg:
     Represents a service template configuration.
     """
 
-    template: str
+    tag: str
+    factory: str
     image: str
     hostname: Optional[str] = None
     container_name: Optional[str] = None
@@ -78,7 +79,8 @@ class ServiceTemplateCfg:
         Creates a ServiceTemplateCfg object from a type-tag.
         """
         return ServiceTemplateCfg(
-            template=service_template,
+            tag=service_template,
+            factory="",
             image="",
             hostname=None,
             container_name=None,
@@ -101,7 +103,8 @@ class ServiceTemplateCfg:
         Creates a copy of an existing ServiceTemplateCfg object.
         """
         return cls(
-            template=other.template,
+            tag=other.tag,
+            factory=other.factory,
             image=other.image,
             hostname=other.hostname,
             container_name=other.container_name,
@@ -126,6 +129,7 @@ class ServiceCfg:
     """
 
     template: str
+    factory: str
     tag: str
     service_class: Optional[str] = None
     image: str = ""
@@ -156,6 +160,7 @@ class ServiceCfg:
         """
         return ServiceCfg(
             template=service_template,
+            factory="",
             tag=service_tag,
             service_class=service_class,
             image="",
@@ -182,6 +187,7 @@ class ServiceCfg:
         """
         return cls(
             template=other.template,
+            factory=other.factory,
             tag=other.tag,
             service_class=other.service_class,
             image=other.image,
@@ -212,7 +218,8 @@ class ServiceCfg:
         Creates a ServiceCfg object from a ServiceTemplateCfg object.
         """
         return cls(
-            template=service_template.template,
+            template=service_template.tag,
+            factory=service_template.factory,
             tag=service_tag,
             service_class=service_class,
             image=service_template.image,
@@ -384,7 +391,8 @@ def parse_config(json_str: str) -> Config:
 
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
-            template=item["template"],
+            tag=item["tag"],
+            factory=item["factory"],
             image=item["image"],
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
@@ -404,6 +412,7 @@ def parse_config(json_str: str) -> Config:
     def parse_service(item: Any) -> ServiceCfg:
         return ServiceCfg(
             template=item["template"],
+            factory=item["factory"],
             tag=item["tag"],
             service_class=item.get("service_class"),
             image=item["image"],
@@ -719,7 +728,7 @@ class ConfigMng:
         """
         if self.config.service_templates:
             for svc_template in self.config.service_templates:
-                if svc_template.template == serviceTemplate:
+                if svc_template.tag == serviceTemplate:
                     return svc_template
         return None
 
@@ -739,7 +748,7 @@ class ConfigMng:
                 if self.config.service_templates:
                     return sorted(
                         [
-                            svc_template.template
+                            svc_template.tag
                             for svc_template in self.config.service_templates
                         ]
                     )

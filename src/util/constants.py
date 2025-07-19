@@ -72,9 +72,13 @@ class Constants:
             self.ENV_TYPE_DOCKER_COMPOSE,
         ]
 
-    # Service types
+    # Service templates:
 
-    SVC_TYPE_GENERIC_IMAGE: str = "image"
+    SVC_TEMPLATE_DEFAULT: str = "default"
+
+    # Service factories:
+
+    SVC_FACTORY_DEFAULT: str = "docker"
 
     # Resource types
 
@@ -99,7 +103,8 @@ class Constants:
             },
             "service_templates": [
                 {
-                    "template": "image",
+                    "tag": self.SVC_TEMPLATE_DEFAULT,
+                    "factory": self.SVC_FACTORY_DEFAULT,
                     "image": "",
                     "ingress": False,
                     "envvars": {},

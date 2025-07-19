@@ -130,7 +130,8 @@ shpd_config_svc_default = """
   },
   "service_templates": [
     {
-      "template": "image",
+      "tag": "default",
+      "factory": "docker",
       "image": "test-image:latest",
       "labels": [
         "com.example.label1=value1",
@@ -165,7 +166,8 @@ shpd_config_svc_default = """
       "tag": "test-1",
       "services": [
         {
-          "template": "image",
+          "template": "default",
+          "factory": "docker",
           "tag": "test",
           "image": "test-image:latest",
           "labels": [

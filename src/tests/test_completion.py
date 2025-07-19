@@ -118,7 +118,8 @@ shpd_config = """
   },
   "service_templates": [
     {
-      "template": "t1",
+      "tag": "t1",
+      "factory": "docker",
       "image": "test-image:latest",
       "labels": [
         "com.example.label1=value1",
@@ -147,7 +148,8 @@ shpd_config = """
       "subject_alternative_name": null
     },
     {
-      "template": "t2",
+      "tag": "t2",
+      "factory": "docker",
       "image": "test-image:latest",
       "labels": [
         "com.example.label1=value1",
@@ -183,6 +185,7 @@ shpd_config = """
       "services": [
         {
           "template": "t1",
+          "factory": "docker",
           "tag": "red",
           "service_class": "foo-class",
           "image": "test-image:latest",
@@ -214,6 +217,7 @@ shpd_config = """
         },
         {
           "template": "t1",
+          "factory": "docker",
           "tag": "white",
           "image": "test-image:latest",
           "labels": [
@@ -252,6 +256,7 @@ shpd_config = """
       "services": [
         {
           "template": "t2",
+          "factory": "docker",
           "tag": "blue",
           "image": "test-image:latest",
           "labels": [

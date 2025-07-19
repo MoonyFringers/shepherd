@@ -30,14 +30,18 @@ class ShpdServiceFactory(ServiceFactory):
         self.configMng = configMng
 
     @override
+    def get_name() -> str:
+        return "shpd-svc-factory"
+
+    @override
     def new_service_from_cfg(
         self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
     ) -> Service:
         """
         Get a service.
         """
-        match svcCfg.template:
-            case Constants.SVC_TYPE_GENERIC_IMAGE:
+        match svcCfg.factory:
+            case Constants.SVC_FACTORY_DEFAULT:
                 return DockerSvc(self.configMng, envCfg, svcCfg)
             case _:
                 raise ValueError(

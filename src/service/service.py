@@ -102,6 +102,10 @@ class ServiceFactory(ABC):
         self.config = config
 
     @abstractmethod
+    def get_name() -> str:
+        pass
+
+    @abstractmethod
     def new_service_from_cfg(
         self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
     ) -> Service:

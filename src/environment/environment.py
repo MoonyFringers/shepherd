@@ -326,9 +326,7 @@ class EnvironmentMng:
                     exists in environment '{envCfg.tag}'."""
                 )
             svc_type_cfg = self.configMng.get_service_template(
-                svc_template
-                if svc_template
-                else Constants.SVC_TYPE_GENERIC_IMAGE
+                svc_template if svc_template else Constants.SVC_TEMPLATE_DEFAULT
             )
 
             if svc_type_cfg:
@@ -340,7 +338,7 @@ class EnvironmentMng:
                     (
                         svc_template
                         if svc_template
-                        else Constants.SVC_TYPE_GENERIC_IMAGE
+                        else Constants.SVC_TEMPLATE_DEFAULT
                     ),
                     svc_tag,
                     svc_class,
