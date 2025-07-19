@@ -116,6 +116,12 @@ shpd_config_svc_default = """
     "email": "${cert_email}",
     "subject_alternative_names": []
   },
+  "env_templates": [
+    {
+      "tag": "default",
+      "factory": "docker-compose"
+    }
+  ],
   "service_templates": [
     {
       "tag": "default",
@@ -150,7 +156,8 @@ shpd_config_svc_default = """
   ],
   "envs": [
     {
-      "type": "docker-compose",
+      "template": "default",
+      "factory": "docker-compose",
       "tag": "test-1",
       "services": [
         {
@@ -230,6 +237,12 @@ shpd_config_pg_template = """
     "email": "${cert_email}",
     "subject_alternative_names": []
   },
+  "env_templates": [
+    {
+      "tag": "default",
+      "factory": "docker-compose"
+    }
+  ],
   "service_templates": [
     {
       "tag": "default",
@@ -311,9 +324,7 @@ def test_svc_add_one_default(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-svc-add"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
@@ -363,9 +374,7 @@ def test_svc_add_two_default(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-svc-add"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
@@ -439,9 +448,7 @@ def test_svc_add_two_same_tag_default(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-svc-add"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
@@ -498,9 +505,7 @@ def test_svc_add_one_with_template(
     shpd_json = shpd_dir / ".shpd.json"
     shpd_json.write_text(shpd_config_pg_template)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-svc-add"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])

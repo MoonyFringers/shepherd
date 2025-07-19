@@ -133,9 +133,7 @@ def test_env_init(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-init-1"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-init-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -164,9 +162,7 @@ def test_env_clone(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-clone-1"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-clone-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
@@ -202,9 +198,7 @@ def test_env_rename(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-rename-1"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-rename-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
@@ -244,10 +238,10 @@ def test_env_checkout(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-2"])
+    result = runner.invoke(cli, ["env", "init", "default", "test-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -284,7 +278,7 @@ def test_env_list(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "list"])
@@ -305,7 +299,7 @@ def test_env_delete_yes(
     mocker.patch("os.path.expanduser", side_effect=side_effect)
     mocker.patch("builtins.input", return_value="y")
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "delete", "test-1"])
@@ -336,7 +330,7 @@ def test_env_delete_no(
     mocker.patch("os.path.expanduser", side_effect=side_effect)
     mocker.patch("builtins.input", return_value="n")
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "test-1"])
+    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "delete", "test-1"])
@@ -366,9 +360,7 @@ def test_env_add_nonexisting_resource(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(
-        cli, ["env", "init", "docker-compose", "test-svc-add"]
-    )
+    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])

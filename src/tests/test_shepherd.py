@@ -128,6 +128,12 @@ shpd_config_svc_default = """
     "email": "${cert_email}",
     "subject_alternative_names": []
   },
+  "env_templates": [
+    {
+      "tag": "default",
+      "factory": "docker-compose"
+    }
+  ],
   "service_templates": [
     {
       "tag": "default",
@@ -162,7 +168,8 @@ shpd_config_svc_default = """
   ],
   "envs": [
     {
-      "type": "docker-compose",
+      "template": "default",
+      "factory": "docker-compose",
       "tag": "test-1",
       "services": [
         {
@@ -787,9 +794,9 @@ def test_cli_env_init(
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
 
-    result = runner.invoke(cli, ["env", "init", "env_type", "env_tag"])
+    result = runner.invoke(cli, ["env", "init", "docker-compose", "env_tag"])
     assert result.exit_code == 0
-    mock_init.assert_called_once_with("env_type", "env_tag")
+    mock_init.assert_called_once_with("docker-compose", "env_tag")
 
 
 @pytest.mark.shpd

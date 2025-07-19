@@ -116,6 +116,12 @@ shpd_config = """
     "email": "${cert_email}",
     "subject_alternative_names": []
   },
+  "env_templates":[
+    {
+      "tag": "default",
+      "factory": "docker-compose"
+    }
+  ],
   "service_templates": [
     {
       "tag": "t1",
@@ -180,7 +186,8 @@ shpd_config = """
   ],
   "envs": [
     {
-      "type": "docker-compose",
+      "template": "default",
+      "factory": "docker-compose",
       "tag": "test-1",
       "services": [
         {
@@ -251,7 +258,8 @@ shpd_config = """
       "active": true
     },
     {
-      "type": "docker-compose",
+      "template": "default",
+      "factory": "docker-compose",
       "tag": "test-2",
       "services": [
         {
@@ -386,7 +394,7 @@ def test_completion_env_init(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "init"])
     assert (
-        completions == sm.configMng.constants.ENV_TYPES
+        completions == sm.configMng.get_environment_template_tags()
     ), "Expected init completion"
 
 

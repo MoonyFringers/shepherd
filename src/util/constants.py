@@ -62,14 +62,18 @@ class Constants:
     APP_LICENSE: str = "MIT"
     APP_URL: str = "https://github.com/LunaticFringers/shepherd"
 
+    # Environment templates:
+
+    ENV_TEMPLATE_DEFAULT: str = "default"
+
     # Environment types
 
-    ENV_TYPE_DOCKER_COMPOSE: str = "docker-compose"
+    ENV_FACTORY_DEFAULT: str = "docker-compose"
 
     @property
-    def ENV_TYPES(self) -> list[str]:
+    def ENV_FACTORIES(self) -> list[str]:
         return [
-            self.ENV_TYPE_DOCKER_COMPOSE,
+            self.ENV_FACTORY_DEFAULT,
         ]
 
     # Service templates:
@@ -101,6 +105,12 @@ class Constants:
                 "stdout": "${log_stdout}",
                 "format": "${log_format}",
             },
+            "env_templates": [
+                {
+                    "tag": self.ENV_TEMPLATE_DEFAULT,
+                    "factory": self.ENV_FACTORY_DEFAULT,
+                }
+            ],
             "service_templates": [
                 {
                     "tag": self.SVC_TEMPLATE_DEFAULT,

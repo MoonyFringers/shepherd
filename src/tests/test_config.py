@@ -63,6 +63,12 @@ config_json = """{
     "email": "${cert_email}",
     "subject_alternative_names": []
   },
+  "env_templates": [
+    {
+      "tag": "default",
+      "factory": "docker-compose"
+    }
+  ],
   "service_templates": [
     {
       "tag": "oracle",
@@ -120,7 +126,8 @@ config_json = """{
   ],
   "envs": [
     {
-      "type": "docker-compose",
+      "template": "default",
+      "factory": "docker-compose",
       "tag": "sample-1",
       "services": [
         {
@@ -385,7 +392,8 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].subject_alternative_name is None
 
     assert config.shpd_registry.ftp_server == "ftp.example.com"
-    assert config.envs[0].type == Constants.ENV_TYPE_DOCKER_COMPOSE
+    assert config.envs[0].template == Constants.ENV_TEMPLATE_DEFAULT
+    assert config.envs[0].factory == Constants.ENV_FACTORY_DEFAULT
     assert config.envs[0].tag == "sample-1"
     services = config.envs[0].services
     assert services and services[0].template == "postgres"

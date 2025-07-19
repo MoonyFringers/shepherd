@@ -84,11 +84,11 @@ class CompletionEnvMng(AbstractCompletionMng):
             case _:
                 return []
 
-    def is_env_type_chosen(self, args: list[str]) -> bool:
+    def is_env_template_chosen(self, args: list[str]) -> bool:
         if not args or len(args) < 1:
             return False
-        env_type = args[0]
-        return env_type in self.configMng.constants.ENV_TYPES
+        env_template = args[0]
+        return env_template in self.configMng.get_environment_template_tags()
 
     def is_src_env_tag_chosen(self, args: list[str]) -> bool:
         if not args or len(args) < 1:
@@ -99,8 +99,8 @@ class CompletionEnvMng(AbstractCompletionMng):
         )
 
     def get_init_completions(self, args: list[str]) -> list[str]:
-        if not self.is_env_type_chosen(args):
-            return self.configMng.constants.ENV_TYPES
+        if not self.is_env_template_chosen(args):
+            return self.configMng.get_environment_template_tags()
         return []
 
     def get_clone_completions(self, args: list[str]) -> list[str]:

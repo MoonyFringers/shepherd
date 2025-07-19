@@ -179,12 +179,12 @@ def env():
 
 
 @env.command(name="init")
-@click.argument("env_type", required=True)
+@click.argument("env_template", required=True)
 @click.argument("env_tag", required=True)
 @click.pass_obj
-def env_init(shepherd: ShepherdMng, env_type: str, env_tag: str):
-    """Init an environment of type ENV_TYPE with tag ENV_TAG."""
-    shepherd.environmentMng.init_env(env_type, env_tag)
+def env_init(shepherd: ShepherdMng, env_template: str, env_tag: str):
+    """Init an environment with ENV_TEMPLATE and tag ENV_TAG."""
+    shepherd.environmentMng.init_env(env_template, env_tag)
 
 
 @env.command(name="clone")

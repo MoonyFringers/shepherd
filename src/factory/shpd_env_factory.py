@@ -32,27 +32,31 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
         self.svcFactory = svcFactory
 
     @override
-    def new_environment(self, env_type: str, env_tag: str) -> Environment:
+    def new_environment(
+        self, env_template: str, env_factory: str, env_tag: str
+    ) -> Environment:
         """
         Create an environment.
         """
-        match env_type:
-            case Constants.ENV_TYPE_DOCKER_COMPOSE:
+        match env_factory:
+            case Constants.ENV_FACTORY_DEFAULT:
                 return DockerComposeEnv(
                     self.configMng,
                     self.svcFactory,
-                    EnvironmentCfg.from_tag(env_type, env_tag),
+                    EnvironmentCfg.from_tag(env_template, env_factory, env_tag),
                 )
             case _:
-                raise ValueError(f"Unknown environment type: {env_type}")
+                raise ValueError(f"Unknown environment factory: {env_factory}")
 
     @override
     def new_environment_cfg(self, envCfg: EnvironmentCfg) -> Environment:
         """
         Get an environment.
         """
-        match envCfg.type:
-            case Constants.ENV_TYPE_DOCKER_COMPOSE:
+        match envCfg.factory:
+            case Constants.ENV_FACTORY_DEFAULT:
                 return DockerComposeEnv(self.configMng, self.svcFactory, envCfg)
             case _:
-                raise ValueError(f"Unknown environment type: {envCfg.type}")
+                raise ValueError(
+                    f"Unknown environment factory: {envCfg.factory}"
+                )

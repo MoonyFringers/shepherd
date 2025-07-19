@@ -169,7 +169,9 @@ class EnvironmentFactory(ABC):
         self.config = config
 
     @abstractmethod
-    def new_environment(self, env_type: str, env_tag: str) -> Environment:
+    def new_environment(
+        self, env_template: str, env_factory: str, env_tag: str
+    ) -> Environment:
         """
         Create an environment.
         """
@@ -215,15 +217,25 @@ class EnvironmentMng:
         else:
             return None
 
-    def init_env(self, env_type: str, env_tag: str):
+    def init_env(self, env_template: str, env_tag: str):
         """Initialize an environment."""
         if self.configMng.get_environment(env_tag):
             Util.print_error_and_die(
                 f"Environment with tag '{env_tag}' already exists."
             )
-        env = self.envFactory.new_environment(env_type, env_tag)
-        env.realize()
-        Util.print(f"{env_tag}")
+        if envCfg := self.configMng.get_environment_template(env_template):
+            env = self.envFactory.new_environment(
+                self.configMng.constants.ENV_TEMPLATE_DEFAULT,
+                envCfg.factory,
+                env_tag,
+            )
+            env.realize()
+            Util.print(f"{env_tag}")
+        else:
+            Util.print_error_and_die(
+                f"Environment Template with tag '{env_template}' "
+                f"does not exist."
+            )
 
     def clone_env(self, src_env_tag: str, dst_env_tag: str):
         """Clone an environment."""
@@ -290,7 +302,7 @@ class EnvironmentMng:
             return
         Util.print("Available environments:")
         for env in envs:
-            Util.print(f" - {env.tag} ({env.type})")
+            Util.print(f" - {env.tag} ({env.template})")
 
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""

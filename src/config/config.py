@@ -241,24 +241,36 @@ class ServiceCfg:
 
 
 @dataclass
+class EnvironmentTemplateCfg:
+    """
+    Represents an environment template configuration.
+    """
+
+    tag: str
+    factory: str
+
+
+@dataclass
 class EnvironmentCfg:
     """
     Represents an environment configuration.
     """
 
-    type: str
+    template: str
+    factory: str
     tag: str
     services: Optional[list[ServiceCfg]]
     archived: bool
     active: bool
 
     @classmethod
-    def from_tag(cls, env_type: str, env_tag: str):
+    def from_tag(cls, env_template: str, env_factory: str, env_tag: str):
         """
         Creates an EnvironmentCfg object from a tag.
         """
         return EnvironmentCfg(
-            type=env_type,
+            template=env_template,
+            factory=env_factory,
             tag=env_tag,
             services=[],
             archived=False,
@@ -271,7 +283,8 @@ class EnvironmentCfg:
         Creates a copy of an existing EnvironmentCfg object.
         """
         return cls(
-            type=other.type,
+            template=other.template,
+            factory=other.factory,
             tag=other.tag,
             services=deepcopy(other.services),
             archived=other.archived,
@@ -351,6 +364,9 @@ class Config:
     dns_type: str
     ca: CACfg
     cert: CertCfg
+    env_templates: Optional[list[EnvironmentTemplateCfg]] = field(
+        default_factory=list
+    )
     service_templates: Optional[list[ServiceTemplateCfg]] = field(
         default_factory=list
     )
@@ -435,9 +451,16 @@ def parse_config(json_str: str) -> Config:
             ],
         )
 
+    def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
+        return EnvironmentTemplateCfg(
+            tag=item["tag"],
+            factory=item["factory"],
+        )
+
     def parse_environment(item: Any) -> EnvironmentCfg:
         return EnvironmentCfg(
-            type=item["type"],
+            template=item["template"],
+            factory=item["factory"],
             tag=item["tag"],
             services=[
                 parse_service(service) for service in item.get("services", [])
@@ -480,6 +503,10 @@ def parse_config(json_str: str) -> Config:
         )
 
     return Config(
+        env_templates=[
+            parse_environment_template(environment_template)
+            for environment_template in data.get("env_templates", [])
+        ],
         service_templates=[
             parse_service_template(service_template)
             for service_template in data.get("service_templates", [])
@@ -717,11 +744,43 @@ class ConfigMng:
         """
         self.store_config(self.config)
 
+    def get_environment_template(
+        self, envTemplate: str
+    ) -> Optional[EnvironmentTemplateCfg]:
+        """
+        Retrieves an environment template configuration by its tag.
+
+        :param envTemplate: The template of the environment to retrieve.
+        :return: The environment template configuration if found, else None.
+        """
+        if self.config.env_templates:
+            for env_template in self.config.env_templates:
+                if env_template.tag == envTemplate:
+                    return env_template
+        return None
+
+    def get_environment_templates(
+        self,
+    ) -> Optional[list[EnvironmentTemplateCfg]]:
+        """
+        Retrieves all environment templates.
+
+        :return: A list of all environment templates.
+        """
+        if self.config.env_templates:
+            return self.config.env_templates
+        return None
+
+    def get_environment_template_tags(self) -> list[str]:
+        if env_templates := self.get_environment_templates():
+            return sorted([env_template.tag for env_template in env_templates])
+        return []
+
     def get_service_template(
         self, serviceTemplate: str
     ) -> Optional[ServiceTemplateCfg]:
         """
-        Retrieves a service template configuration by its template.
+        Retrieves a service template configuration by its tag.
 
         :param serviceTemplate: The template of the service to retrieve.
         :return: The service template configuration if found, else None.
