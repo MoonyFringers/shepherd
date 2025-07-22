@@ -34,8 +34,8 @@ install_method = "binary"
 force_source_download = False
 
 # Configuration
-script_dir = Path(__file__).parent.resolve()
-py_src_dir = (script_dir.parent).resolve()
+exec_dir = Path(__file__).parent.resolve()
+py_src_dir = (exec_dir.parent).resolve()
 
 # Environment variables with defaults
 install_shepctl_dir = Path(
@@ -310,6 +310,48 @@ def install_shepctl() -> None:
             f"Error: Unknown install method '{install_method}'", style="red"
         )
         sys.exit(1)
+    install_completion()
+
+
+def get_script_completion_src() -> tuple[Path, str]:
+    """
+    Get the path to the shell completion script for shepctl.
+    This is used to install the script in /etc/bash_completion.d.
+    """
+    scripts_dir = py_src_dir.parent.resolve() / "scripts"
+    script_completion_name = "shepctl_completion.sh"
+    return scripts_dir / script_completion_name, script_completion_name
+
+
+def install_completion() -> None:
+    """
+    Install the shell completion script for shepctl if /etc/bash_completion.d
+    exists.
+    """
+    completion_dir = Path("/etc/bash_completion.d")
+
+    src, script_completion_filename = get_script_completion_src()
+    dest = completion_dir / script_completion_filename
+
+    if completion_dir.is_dir():
+        Util.console.print(
+            "Installing shell completion script...", style="blue"
+        )
+        try:
+            shutil.copy2(src, dest)
+            os.chmod(dest, 0o755)
+            Util.console.print(
+                "Shell completion script installed.", style="green"
+            )
+        except Exception as e:
+            Util.console.print(
+                f"Failed to install completion script: {e}", style="red"
+            )
+    else:
+        Util.console.print(
+            "Bash completion directory not found. Please install manually.",
+            style="yellow",
+        )
 
 
 def uninstall_shepctl() -> None:
@@ -318,8 +360,6 @@ def uninstall_shepctl() -> None:
 
     # Remove installation directory
     if Path(install_shepctl_dir).exists():
-        import shutil
-
         shutil.rmtree(install_shepctl_dir)
         Util.print(f"Removed {install_shepctl_dir}")
 
@@ -328,6 +368,13 @@ def uninstall_shepctl() -> None:
     if symlink_path.exists():
         symlink_path.unlink()
         Util.print(f"Removed symlink {symlink_path}")
+
+    # Remove autocompletion script
+    completion_dir = Path("/etc/bash_completion.d")
+    completion_script = completion_dir / "shepctl_completion.sh"
+    if completion_script.exists():
+        completion_script.unlink()
+        Util.print(f"Removed completion script {completion_script}")
 
     Util.print("shepctl uninstalled successfully")
 

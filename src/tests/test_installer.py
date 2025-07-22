@@ -26,11 +26,89 @@ import pytest
 
 # Import the module under test
 from installer import install
+from installer.install import get_script_completion_src
 from installer.repository_manager import RepositoryManager
 from util import Util
 
 
 class TestInstallScript:
+    def test_get_script_completion_src(self) -> None:
+        """
+        Test get_script_completion_src returns correct path and file exists.
+        """
+        path: Path
+        filename: str
+        path, filename = get_script_completion_src()
+        assert filename == "shepctl_completion.sh"
+        assert path.parent.name == "scripts"
+        assert path.exists(), f"Completion script not found: {path}"
+
+    @patch("os.chmod")
+    @patch("shutil.copy2")
+    @patch("pathlib.Path.is_dir")
+    def test_install_completion_success(
+        self,
+        mock_is_dir: MagicMock,
+        mock_copy2: MagicMock,
+        mock_chmod: MagicMock,
+    ) -> None:
+        """
+        Test install_completion: should copy and chmod the script if dir exists.
+        """
+        mock_is_dir.return_value = True
+
+        with patch("installer.install.Util.console.print") as mock_print:
+            install.install_completion()
+
+            dest = Path("/etc/bash_completion.d/shepctl_completion.sh")
+            src, _ = get_script_completion_src()
+            assert isinstance(src, Path)
+            assert isinstance(src, Path)
+            # Validate that the source file exists
+            assert src.exists(), f"Source completion script not found: {src}"
+            mock_copy2.assert_called_once_with(src, dest)
+            mock_chmod.assert_called_once_with(dest, 0o755)
+            mock_print.assert_any_call(
+                "Shell completion script installed.", style="green"
+            )
+
+    @patch("shutil.rmtree")
+    def test_uninstall(self, mock_rmtree: MagicMock) -> None:
+        """
+        Test uninstall: removes install dir, symlink, and completion script.
+        """
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.unlink") as mock_unlink,
+        ):
+            install.uninstall_shepctl()
+
+            # Check installation directory was removed
+            mock_rmtree.assert_called_once_with(install.install_shepctl_dir)
+
+            # Check that both symlink and autocompletion script were removed
+            assert mock_unlink.call_count == 2
+            # NOTE: it is not possible to directly check the paths passed to
+            # unlink. Patching "pathlib.Path.unlink" at the class level means
+            # the mock does not receive the Path instance as an argument. For
+            # more precise checks, you would need to patch the individual Path
+            # objects with patch.object.
+
+            # ...existing code...
+
+    @patch("pathlib.Path.is_dir")
+    def test_install_completion_no_dir(self, mock_is_dir: MagicMock) -> None:
+        # Simulate /etc/bash_completion.d does not exist
+        mock_is_dir.return_value = False
+
+        with patch("installer.install.Util.console.print") as mock_print:
+            install.install_completion()
+            mock_print.assert_any_call(
+                "Bash completion directory not found. Please install "
+                "manually.",
+                style="yellow",
+            )
+
     """Test suite for the main installation script."""
 
     def setup_method(self) -> None:
@@ -254,20 +332,7 @@ class TestInstallScript:
             with pytest.raises(SystemExit):
                 install.install_shepctl()
 
-    @patch("shutil.rmtree")
-    def test_uninstall(self, mock_rmtree: MagicMock) -> None:
-        """Test uninstall function."""
-        with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch("pathlib.Path.unlink") as mock_unlink,
-        ):
-            install.uninstall_shepctl()
-
-            # Check installation directory was removed
-            mock_rmtree.assert_called_once_with(install.install_shepctl_dir)
-
-            # Check symlink was removed
-            mock_unlink.assert_called_once()
+    # ...existing code...
 
     @patch("util.Util.check_file_exists", return_value=False)
     @patch("util.Util.run_command")
