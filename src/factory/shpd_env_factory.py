@@ -18,7 +18,7 @@
 
 from typing import override
 
-from config import ConfigMng, EnvironmentCfg
+from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from docker import DockerComposeEnv
 from environment import Environment, EnvironmentFactory
 from service import ServiceFactory
@@ -33,20 +33,24 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
 
     @override
     def new_environment(
-        self, env_template: str, env_factory: str, env_tag: str
+        self,
+        env_tmpl_cfg: EnvironmentTemplateCfg,
+        env_tag: str,
     ) -> Environment:
         """
         Create an environment.
         """
-        match env_factory:
+        match env_tmpl_cfg.factory:
             case Constants.ENV_FACTORY_DEFAULT:
                 return DockerComposeEnv(
                     self.configMng,
                     self.svcFactory,
-                    EnvironmentCfg.from_tag(env_template, env_factory, env_tag),
+                    EnvironmentCfg.from_tag(env_tmpl_cfg, env_tag),
                 )
             case _:
-                raise ValueError(f"Unknown environment factory: {env_factory}")
+                raise ValueError(
+                    f"Unknown environment factory: {env_tmpl_cfg.factory}"
+                )
 
     @override
     def new_environment_cfg(self, envCfg: EnvironmentCfg) -> Environment:

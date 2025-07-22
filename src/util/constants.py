@@ -96,6 +96,9 @@ class Constants:
 
     # Default configuration values
 
+    NET_KEY_DEFAULT: str = "shpdnet"
+    NET_NAME_DEFAULT: str = "envnet"
+
     @property
     def DEFAULT_CONFIG(self) -> dict[Any, Any]:
         return {
@@ -109,6 +112,13 @@ class Constants:
                 {
                     "tag": self.ENV_TEMPLATE_DEFAULT,
                     "factory": self.ENV_FACTORY_DEFAULT,
+                    "networks": [
+                        {
+                            "key": self.NET_KEY_DEFAULT,
+                            "name": self.NET_NAME_DEFAULT,
+                            "external": True,
+                        }
+                    ],
                 }
             ],
             "service_templates": [

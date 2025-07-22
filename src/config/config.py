@@ -51,6 +51,17 @@ class UpstreamCfg:
 
 
 @dataclass
+class NetworkCfg:
+    """
+    Represents an network configuration.
+    """
+
+    key: str
+    name: str
+    external: bool
+
+
+@dataclass
 class ServiceTemplateCfg:
     """
     Represents a service template configuration.
@@ -248,6 +259,7 @@ class EnvironmentTemplateCfg:
 
     tag: str
     factory: str
+    networks: Optional[list[NetworkCfg]]
 
 
 @dataclass
@@ -260,19 +272,25 @@ class EnvironmentCfg:
     factory: str
     tag: str
     services: Optional[list[ServiceCfg]]
+    networks: Optional[list[NetworkCfg]]
     archived: bool
     active: bool
 
     @classmethod
-    def from_tag(cls, env_template: str, env_factory: str, env_tag: str):
+    def from_tag(
+        cls,
+        env_tmpl_cfg: EnvironmentTemplateCfg,
+        env_tag: str,
+    ):
         """
         Creates an EnvironmentCfg object from a tag.
         """
         return EnvironmentCfg(
-            template=env_template,
-            factory=env_factory,
+            template=env_tmpl_cfg.tag,
+            factory=env_tmpl_cfg.factory,
             tag=env_tag,
             services=[],
+            networks=env_tmpl_cfg.networks,
             archived=False,
             active=False,
         )
@@ -287,6 +305,7 @@ class EnvironmentCfg:
             factory=other.factory,
             tag=other.tag,
             services=deepcopy(other.services),
+            networks=deepcopy(other.networks),
             archived=other.archived,
             active=other.active,
         )
@@ -451,10 +470,18 @@ def parse_config(json_str: str) -> Config:
             ],
         )
 
+    def parse_network(item: Any) -> NetworkCfg:
+        return NetworkCfg(
+            key=item["key"], name=item["name"], external=item["external"]
+        )
+
     def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
         return EnvironmentTemplateCfg(
             tag=item["tag"],
             factory=item["factory"],
+            networks=[
+                parse_network(network) for network in item.get("networks", [])
+            ],
         )
 
     def parse_environment(item: Any) -> EnvironmentCfg:
@@ -464,6 +491,9 @@ def parse_config(json_str: str) -> Config:
             tag=item["tag"],
             services=[
                 parse_service(service) for service in item.get("services", [])
+            ],
+            networks=[
+                parse_network(network) for network in item.get("networks", [])
             ],
             archived=item["archived"],
             active=item["active"],

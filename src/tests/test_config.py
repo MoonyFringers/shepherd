@@ -66,7 +66,14 @@ config_json = """{
   "env_templates": [
     {
       "tag": "default",
-      "factory": "docker-compose"
+      "factory": "docker-compose",
+      "networks": [
+        {
+          "key": "shpdnet",
+          "name": "envnet",
+          "external": true
+        }
+      ]
     }
   ],
   "service_templates": [
@@ -257,6 +264,13 @@ config_json = """{
           "upstreams": []
         }
       ],
+      "networks": [
+        {
+          "key": "shpdnet",
+          "name": "envnet",
+          "external": true
+        }
+      ],
       "archived": false,
       "active": false
     }
@@ -345,6 +359,14 @@ def test_load_config(mocker: MockerFixture):
     assert config.logging.level == "WARNING"
     assert not config.logging.stdout
     assert config.logging.format == "%(asctime)s - %(levelname)s - %(message)s"
+
+    env_templates = config.env_templates
+    assert env_templates and env_templates[0].tag == "default"
+    assert env_templates[0].factory == "docker-compose"
+    assert env_templates[0].networks
+    assert env_templates[0].networks[0].key == "shpdnet"
+    assert env_templates[0].networks[0].name == "envnet"
+    assert env_templates[0].networks[0].external is True
 
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"
@@ -439,6 +461,10 @@ def test_load_config(mocker: MockerFixture):
     assert environment and environment[0] == "USER=user"
     assert environment and environment[1] == "PSW=psw"
     ports = services[3].ports
+    assert config.envs[0].networks
+    assert config.envs[0].networks[0].key == "shpdnet"
+    assert config.envs[0].networks[0].name == "envnet"
+    assert config.envs[0].networks[0].external is True
     assert ports and ports[0] == "3000:3000"
     assert config.host_inet_ip == "127.0.0.1"
     assert config.domain == "sslip.io"

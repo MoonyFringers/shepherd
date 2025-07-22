@@ -22,7 +22,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from config import ConfigMng, EnvironmentCfg, ServiceCfg
+from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg, ServiceCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
 
@@ -170,7 +170,9 @@ class EnvironmentFactory(ABC):
 
     @abstractmethod
     def new_environment(
-        self, env_template: str, env_factory: str, env_tag: str
+        self,
+        env_tmpl_cfg: EnvironmentTemplateCfg,
+        env_tag: str,
     ) -> Environment:
         """
         Create an environment.
@@ -223,10 +225,9 @@ class EnvironmentMng:
             Util.print_error_and_die(
                 f"Environment with tag '{env_tag}' already exists."
             )
-        if envCfg := self.configMng.get_environment_template(env_template):
+        if envTmplCfg := self.configMng.get_environment_template(env_template):
             env = self.envFactory.new_environment(
-                self.configMng.constants.ENV_TEMPLATE_DEFAULT,
-                envCfg.factory,
+                envTmplCfg,
                 env_tag,
             )
             env.realize()
