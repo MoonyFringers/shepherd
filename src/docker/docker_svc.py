@@ -37,7 +37,7 @@ class DockerSvc(Service):
     @override
     def clone(self, dst_svc_tag: str) -> DockerSvc:
         """Clone a service."""
-        clonedCfg = ServiceCfg.from_other(self.to_config())
+        clonedCfg = self.configMng.svc_cfg_from_other(self.to_config())
         clonedCfg.tag = dst_svc_tag
         clonedSvc = DockerSvc(
             self.configMng,

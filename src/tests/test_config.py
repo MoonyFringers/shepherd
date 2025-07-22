@@ -23,7 +23,6 @@ import pytest
 from pytest_mock import MockerFixture
 
 from config import Config, ConfigMng
-from config.config import EnvironmentCfg, ServiceCfg, ServiceTemplateCfg
 from util import Constants
 
 config_json = """{
@@ -67,6 +66,12 @@ config_json = """{
     {
       "tag": "default",
       "factory": "docker-compose",
+      "service_templates": [
+        {
+          "template": "default",
+          "tag": "service-default"
+        }
+      ],
       "networks": [
         {
           "key": "shpdnet",
@@ -363,6 +368,9 @@ def test_load_config(mocker: MockerFixture):
     env_templates = config.env_templates
     assert env_templates and env_templates[0].tag == "default"
     assert env_templates[0].factory == "docker-compose"
+    assert env_templates[0].service_templates
+    assert env_templates[0].service_templates[0].tag == "service-default"
+    assert env_templates[0].service_templates[0].template == "default"
     assert env_templates[0].networks
     assert env_templates[0].networks[0].key == "shpdnet"
     assert env_templates[0].networks[0].name == "envnet"
@@ -567,16 +575,16 @@ def test_copy_config(mocker: MockerFixture):
     service_templates = config.service_templates
     assert service_templates
     svc_templ = service_templates[0]
-    svc_templ_cloned = ServiceTemplateCfg.from_other(svc_templ)
+    svc_templ_cloned = cMng.svc_tmpl_cfg_from_other(svc_templ)
     assert svc_templ_cloned == svc_templ
 
     env = config.envs[0]
     assert env
-    env_cloned = EnvironmentCfg.from_other(env)
+    env_cloned = cMng.env_cfg_from_other(env)
     assert env_cloned == env
 
     services = config.envs[0].services
     assert services
     svc = services[0]
-    svc_cloned = ServiceCfg.from_other(svc)
+    svc_cloned = cMng.svc_cfg_from_other(svc)
     assert svc_cloned == svc

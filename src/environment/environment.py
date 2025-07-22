@@ -22,7 +22,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg, ServiceCfg
+from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
 
@@ -343,11 +343,11 @@ class EnvironmentMng:
             )
 
             if svc_type_cfg:
-                svcCfg = ServiceCfg.from_service_template(
+                svcCfg = self.configMng.svc_cfg_from_service_template(
                     svc_type_cfg, svc_tag, svc_class
                 )
             else:
-                svcCfg = ServiceCfg.from_tag(
+                svcCfg = self.configMng.svc_cfg_from_tag(
                     (
                         svc_template
                         if svc_template

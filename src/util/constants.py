@@ -79,6 +79,7 @@ class Constants:
     # Service templates:
 
     SVC_TEMPLATE_DEFAULT: str = "default"
+    SVC_TAG_DEFAULT: str = "service-default"
 
     # Service factories:
 
@@ -112,6 +113,12 @@ class Constants:
                 {
                     "tag": self.ENV_TEMPLATE_DEFAULT,
                     "factory": self.ENV_FACTORY_DEFAULT,
+                    "service_templates": [
+                        {
+                            "template": self.SVC_TEMPLATE_DEFAULT,
+                            "tag": self.SVC_TAG_DEFAULT,
+                        }
+                    ],
                     "networks": [
                         {
                             "key": self.NET_KEY_DEFAULT,

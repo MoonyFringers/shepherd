@@ -119,7 +119,20 @@ shpd_config_svc_default = """
   "env_templates": [
     {
       "tag": "default",
-      "factory": "docker-compose"
+      "factory": "docker-compose",
+      "service_templates": [
+        {
+          "template": "default",
+          "tag": "service-default"
+        }
+      ],
+      "networks": [
+        {
+          "key": "shpdnet",
+          "name": "envnet",
+          "external": true
+        }
+      ]
     }
   ],
   "service_templates": [
@@ -240,7 +253,20 @@ shpd_config_pg_template = """
   "env_templates": [
     {
       "tag": "default",
-      "factory": "docker-compose"
+      "factory": "docker-compose",
+      "service_templates": [
+        {
+          "template": "default",
+          "tag": "service-default"
+        }
+      ],
+      "networks": [
+        {
+          "key": "shpdnet",
+          "name": "envnet",
+          "external": true
+        }
+      ]
     }
   ],
   "service_templates": [
@@ -336,10 +362,14 @@ def test_svc_add_one_default(
     sm = ShepherdMng()
 
     env = sm.configMng.get_active_environment()
+
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
-    assert len(env.services) == 1, "There should be exactly one service"
-    assert env.services[0].tag == "svc-1", "Service tag should be 'svc-1'"
+    assert len(env.services) == 2, "There should be exactly two services"
+
+    assert (
+        env.services[0].tag == "service-default"
+    ), "Service tag should be 'service-default'"
     assert (
         env.services[0].template == "default"
     ), "Service type should be 'default'"
@@ -358,6 +388,27 @@ def test_svc_add_one_default(
     ), "Service properties should be empty"
     assert (
         env.services[0].subject_alternative_name is None
+    ), "Service SAN should be None"
+
+    assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
+    assert (
+        env.services[1].template == "default"
+    ), "Service type should be 'default'"
+    assert (
+        env.services[1].factory == "docker"
+    ), "Service factory should be 'docker'"
+    assert env.services[1].image == "", "Service image should be ''"
+
+    assert env.services[1].ingress is False, "Service ingress should be False"
+    assert (
+        env.services[1].environment == []
+    ), "Service environment should be empty"
+    assert env.services[1].ports == [], "Service ports should be empty"
+    assert (
+        env.services[1].properties == {}
+    ), "Service properties should be empty"
+    assert (
+        env.services[1].subject_alternative_name is None
     ), "Service SAN should be None"
 
 
@@ -391,29 +442,9 @@ def test_svc_add_two_default(
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
-    assert len(env.services) == 2, "There should be exactly two services"
-    assert env.services[0].tag == "svc-1", "Service tag should be 'svc-1'"
-    assert (
-        env.services[0].template == "default"
-    ), "Service type should be 'default'"
-    assert (
-        env.services[0].factory == "docker"
-    ), "Service factory should be 'docker'"
-    assert env.services[0].image == "", "Service image should be ''"
+    assert len(env.services) == 3, "There should be exactly three services"
 
-    assert env.services[0].ingress is False, "Service ingress should be False"
-    assert (
-        env.services[0].environment == []
-    ), "Service environment should be empty"
-    assert env.services[0].ports == [], "Service ports should be empty"
-    assert (
-        env.services[0].properties == {}
-    ), "Service properties should be empty"
-    assert (
-        env.services[0].subject_alternative_name is None
-    ), "Service SAN should be None"
-
-    assert env.services[1].tag == "svc-2", "Service tag should be 'svc-2'"
+    assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
     assert (
         env.services[1].template == "default"
     ), "Service type should be 'default'"
@@ -432,6 +463,27 @@ def test_svc_add_two_default(
     ), "Service properties should be empty"
     assert (
         env.services[1].subject_alternative_name is None
+    ), "Service SAN should be None"
+
+    assert env.services[2].tag == "svc-2", "Service tag should be 'svc-2'"
+    assert (
+        env.services[2].template == "default"
+    ), "Service type should be 'default'"
+    assert (
+        env.services[2].factory == "docker"
+    ), "Service factory should be 'docker'"
+    assert env.services[2].image == "", "Service image should be ''"
+
+    assert env.services[2].ingress is False, "Service ingress should be False"
+    assert (
+        env.services[2].environment == []
+    ), "Service environment should be empty"
+    assert env.services[2].ports == [], "Service ports should be empty"
+    assert (
+        env.services[2].properties == {}
+    ), "Service properties should be empty"
+    assert (
+        env.services[2].subject_alternative_name is None
     ), "Service SAN should be None"
 
 
@@ -465,26 +517,26 @@ def test_svc_add_two_same_tag_default(
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
-    assert len(env.services) == 1, "There should be exactly one service"
-    assert env.services[0].tag == "svc-1", "Service tag should be 'svc-1'"
+    assert len(env.services) == 2, "There should be exactly one service"
+    assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
     assert (
-        env.services[0].template == "default"
+        env.services[1].template == "default"
     ), "Service type should be 'default'"
     assert (
-        env.services[0].factory == "docker"
+        env.services[1].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[0].image == "", "Service image should be ''"
+    assert env.services[1].image == "", "Service image should be ''"
 
-    assert env.services[0].ingress is False, "Service ingress should be False"
+    assert env.services[1].ingress is False, "Service ingress should be False"
     assert (
-        env.services[0].environment == []
+        env.services[1].environment == []
     ), "Service environment should be empty"
-    assert env.services[0].ports == [], "Service ports should be empty"
+    assert env.services[1].ports == [], "Service ports should be empty"
     assert (
-        env.services[0].properties == {}
+        env.services[1].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[0].subject_alternative_name is None
+        env.services[1].subject_alternative_name is None
     ), "Service SAN should be None"
 
 
@@ -523,7 +575,13 @@ def test_svc_add_one_with_template(
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
-    assert len(env.services) == 0, "There should be exactly zero services"
+    assert (
+        len(env.services) == 1
+    ), "There should be exactly one (default) service"
+
+    assert (
+        env.services[0].tag == "service-default"
+    ), "Service tag should be 'service-default'"
 
 
 @pytest.mark.svc

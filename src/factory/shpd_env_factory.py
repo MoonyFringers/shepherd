@@ -45,7 +45,7 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
                 return DockerComposeEnv(
                     self.configMng,
                     self.svcFactory,
-                    EnvironmentCfg.from_tag(env_tmpl_cfg, env_tag),
+                    self.configMng.env_cfg_from_tag(env_tmpl_cfg, env_tag),
                 )
             case _:
                 raise ValueError(

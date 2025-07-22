@@ -119,7 +119,20 @@ shpd_config = """
   "env_templates":[
     {
       "tag": "default",
-      "factory": "docker-compose"
+      "factory": "docker-compose",
+      "service_templates": [
+        {
+          "template": "default",
+          "tag": "service-default"
+        }
+      ],
+      "networks": [
+        {
+          "key": "shpdnet",
+          "name": "envnet",
+          "external": true
+        }
+      ]
     }
   ],
   "service_templates": [

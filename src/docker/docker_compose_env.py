@@ -39,7 +39,7 @@ class DockerComposeEnv(Environment):
     @override
     def clone(self, dst_env_tag: str) -> DockerComposeEnv:
         """Clone an environment."""
-        clonedCfg = EnvironmentCfg.from_other(self.to_config())
+        clonedCfg = self.configMng.env_cfg_from_other(self.to_config())
         clonedCfg.tag = dst_env_tag
         clonedEnv = DockerComposeEnv(
             self.configMng,

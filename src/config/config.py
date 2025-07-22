@@ -84,53 +84,15 @@ class ServiceTemplateCfg:
     extra_hosts: Optional[list[str]] = field(default_factory=list)
     subject_alternative_name: Optional[str] = None
 
-    @classmethod
-    def from_tag(cls, service_template: str):
-        """
-        Creates a ServiceTemplateCfg object from a type-tag.
-        """
-        return ServiceTemplateCfg(
-            tag=service_template,
-            factory="",
-            image="",
-            hostname=None,
-            container_name=None,
-            labels=[],
-            workdir=None,
-            volumes=[],
-            ingress=False,
-            empty_env=None,
-            environment=[],
-            ports=[],
-            properties={},
-            networks=[],
-            extra_hosts=[],
-            subject_alternative_name=None,
-        )
 
-    @classmethod
-    def from_other(cls, other: "ServiceTemplateCfg"):
-        """
-        Creates a copy of an existing ServiceTemplateCfg object.
-        """
-        return cls(
-            tag=other.tag,
-            factory=other.factory,
-            image=other.image,
-            hostname=other.hostname,
-            container_name=other.container_name,
-            labels=deepcopy(other.labels),
-            workdir=other.workdir,
-            volumes=deepcopy(other.volumes),
-            ingress=other.ingress,
-            empty_env=other.empty_env,
-            environment=deepcopy(other.environment),
-            ports=deepcopy(other.ports),
-            properties=deepcopy(other.properties),
-            networks=deepcopy(other.networks),
-            extra_hosts=deepcopy(other.extra_hosts),
-            subject_alternative_name=other.subject_alternative_name,
-        )
+@dataclass
+class ServiceTemplateRefCfg:
+    """
+    Represents a service template reference.
+    """
+
+    template: str
+    tag: str
 
 
 @dataclass
@@ -159,97 +121,6 @@ class ServiceCfg:
     subject_alternative_name: Optional[str] = None
     upstreams: Optional[list[UpstreamCfg]] = field(default_factory=list)
 
-    @classmethod
-    def from_tag(
-        cls,
-        service_template: str,
-        service_tag: str,
-        service_class: Optional[str],
-    ):
-        """
-        Creates a ServiceCfg object from a tag.
-        """
-        return ServiceCfg(
-            template=service_template,
-            factory="",
-            tag=service_tag,
-            service_class=service_class,
-            image="",
-            hostname=None,
-            container_name=None,
-            labels=[],
-            workdir=None,
-            volumes=[],
-            ingress=False,
-            empty_env=None,
-            environment=[],
-            ports=[],
-            properties={},
-            networks=[],
-            extra_hosts=[],
-            subject_alternative_name=None,
-            upstreams=[],
-        )
-
-    @classmethod
-    def from_other(cls, other: "ServiceCfg"):
-        """
-        Creates a copy of an existing ServiceCfg object.
-        """
-        return cls(
-            template=other.template,
-            factory=other.factory,
-            tag=other.tag,
-            service_class=other.service_class,
-            image=other.image,
-            hostname=other.hostname,
-            container_name=other.container_name,
-            labels=deepcopy(other.labels),
-            workdir=other.workdir,
-            volumes=deepcopy(other.volumes),
-            ingress=other.ingress,
-            empty_env=other.empty_env,
-            environment=deepcopy(other.environment),
-            ports=deepcopy(other.ports),
-            properties=deepcopy(other.properties),
-            networks=deepcopy(other.networks),
-            extra_hosts=deepcopy(other.extra_hosts),
-            subject_alternative_name=other.subject_alternative_name,
-            upstreams=deepcopy(other.upstreams),
-        )
-
-    @classmethod
-    def from_service_template(
-        cls,
-        service_template: ServiceTemplateCfg,
-        service_tag: str,
-        service_class: Optional[str],
-    ):
-        """
-        Creates a ServiceCfg object from a ServiceTemplateCfg object.
-        """
-        return cls(
-            template=service_template.tag,
-            factory=service_template.factory,
-            tag=service_tag,
-            service_class=service_class,
-            image=service_template.image,
-            hostname=service_template.hostname,
-            container_name=service_template.container_name,
-            labels=deepcopy(service_template.labels),
-            workdir=service_template.workdir,
-            volumes=deepcopy(service_template.volumes),
-            ingress=service_template.ingress,
-            empty_env=service_template.empty_env,
-            environment=deepcopy(service_template.environment),
-            ports=deepcopy(service_template.ports),
-            properties=deepcopy(service_template.properties),
-            networks=deepcopy(service_template.networks),
-            extra_hosts=deepcopy(service_template.extra_hosts),
-            subject_alternative_name=service_template.subject_alternative_name,
-            upstreams=[],
-        )
-
 
 @dataclass
 class EnvironmentTemplateCfg:
@@ -259,6 +130,7 @@ class EnvironmentTemplateCfg:
 
     tag: str
     factory: str
+    service_templates: Optional[list[ServiceTemplateRefCfg]]
     networks: Optional[list[NetworkCfg]]
 
 
@@ -275,40 +147,6 @@ class EnvironmentCfg:
     networks: Optional[list[NetworkCfg]]
     archived: bool
     active: bool
-
-    @classmethod
-    def from_tag(
-        cls,
-        env_tmpl_cfg: EnvironmentTemplateCfg,
-        env_tag: str,
-    ):
-        """
-        Creates an EnvironmentCfg object from a tag.
-        """
-        return EnvironmentCfg(
-            template=env_tmpl_cfg.tag,
-            factory=env_tmpl_cfg.factory,
-            tag=env_tag,
-            services=[],
-            networks=env_tmpl_cfg.networks,
-            archived=False,
-            active=False,
-        )
-
-    @classmethod
-    def from_other(cls, other: "EnvironmentCfg"):
-        """
-        Creates a copy of an existing EnvironmentCfg object.
-        """
-        return cls(
-            template=other.template,
-            factory=other.factory,
-            tag=other.tag,
-            services=deepcopy(other.services),
-            networks=deepcopy(other.networks),
-            archived=other.archived,
-            active=other.active,
-        )
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -475,10 +313,17 @@ def parse_config(json_str: str) -> Config:
             key=item["key"], name=item["name"], external=item["external"]
         )
 
+    def parse_service_template_refs(item: Any) -> ServiceTemplateRefCfg:
+        return ServiceTemplateRefCfg(template=item["template"], tag=item["tag"])
+
     def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
         return EnvironmentTemplateCfg(
             tag=item["tag"],
             factory=item["factory"],
+            service_templates=[
+                parse_service_template_refs(svc_templ_ref)
+                for svc_templ_ref in item.get("service_templates", [])
+            ],
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -981,3 +826,163 @@ class ConfigMng:
         if env.services:
             return sorted({svc.tag for svc in env.services if svc.tag})
         return []
+
+    def env_cfg_from_tag(
+        self,
+        env_tmpl_cfg: EnvironmentTemplateCfg,
+        env_tag: str,
+    ):
+        """
+        Creates an EnvironmentCfg object from a tag.
+        """
+
+        services: Optional[list[ServiceCfg]] = []
+
+        if env_tmpl_cfg.service_templates:
+            services = [
+                self.svc_cfg_from_service_template(
+                    template, svc_template_ref.tag, None
+                )
+                for svc_template_ref in env_tmpl_cfg.service_templates
+                if (
+                    template := self.get_service_template(
+                        svc_template_ref.template
+                    )
+                )
+                is not None
+            ]
+
+        return EnvironmentCfg(
+            template=env_tmpl_cfg.tag,
+            factory=env_tmpl_cfg.factory,
+            tag=env_tag,
+            services=services,
+            networks=env_tmpl_cfg.networks,
+            archived=False,
+            active=False,
+        )
+
+    def env_cfg_from_other(self, other: EnvironmentCfg):
+        """
+        Creates a copy of an existing EnvironmentCfg object.
+        """
+        return EnvironmentCfg(
+            template=other.template,
+            factory=other.factory,
+            tag=other.tag,
+            services=deepcopy(other.services),
+            networks=deepcopy(other.networks),
+            archived=other.archived,
+            active=other.active,
+        )
+
+    def svc_tmpl_cfg_from_other(self, other: ServiceTemplateCfg):
+        """
+        Creates a copy of an existing ServiceTemplateCfg object.
+        """
+        return ServiceTemplateCfg(
+            tag=other.tag,
+            factory=other.factory,
+            image=other.image,
+            hostname=other.hostname,
+            container_name=other.container_name,
+            labels=deepcopy(other.labels),
+            workdir=other.workdir,
+            volumes=deepcopy(other.volumes),
+            ingress=other.ingress,
+            empty_env=other.empty_env,
+            environment=deepcopy(other.environment),
+            ports=deepcopy(other.ports),
+            properties=deepcopy(other.properties),
+            networks=deepcopy(other.networks),
+            extra_hosts=deepcopy(other.extra_hosts),
+            subject_alternative_name=other.subject_alternative_name,
+        )
+
+    def svc_cfg_from_tag(
+        self,
+        service_template: str,
+        service_tag: str,
+        service_class: Optional[str],
+    ):
+        """
+        Creates a ServiceCfg object from a tag.
+        """
+        return ServiceCfg(
+            template=service_template,
+            factory="",
+            tag=service_tag,
+            service_class=service_class,
+            image="",
+            hostname=None,
+            container_name=None,
+            labels=[],
+            workdir=None,
+            volumes=[],
+            ingress=False,
+            empty_env=None,
+            environment=[],
+            ports=[],
+            properties={},
+            networks=[],
+            extra_hosts=[],
+            subject_alternative_name=None,
+            upstreams=[],
+        )
+
+    def svc_cfg_from_other(self, other: ServiceCfg):
+        """
+        Creates a copy of an existing ServiceCfg object.
+        """
+        return ServiceCfg(
+            template=other.template,
+            factory=other.factory,
+            tag=other.tag,
+            service_class=other.service_class,
+            image=other.image,
+            hostname=other.hostname,
+            container_name=other.container_name,
+            labels=deepcopy(other.labels),
+            workdir=other.workdir,
+            volumes=deepcopy(other.volumes),
+            ingress=other.ingress,
+            empty_env=other.empty_env,
+            environment=deepcopy(other.environment),
+            ports=deepcopy(other.ports),
+            properties=deepcopy(other.properties),
+            networks=deepcopy(other.networks),
+            extra_hosts=deepcopy(other.extra_hosts),
+            subject_alternative_name=other.subject_alternative_name,
+            upstreams=deepcopy(other.upstreams),
+        )
+
+    def svc_cfg_from_service_template(
+        self,
+        service_template: ServiceTemplateCfg,
+        service_tag: str,
+        service_class: Optional[str],
+    ):
+        """
+        Creates a ServiceCfg object from a ServiceTemplateCfg object.
+        """
+        return ServiceCfg(
+            template=service_template.tag,
+            factory=service_template.factory,
+            tag=service_tag,
+            service_class=service_class,
+            image=service_template.image,
+            hostname=service_template.hostname,
+            container_name=service_template.container_name,
+            labels=deepcopy(service_template.labels),
+            workdir=service_template.workdir,
+            volumes=deepcopy(service_template.volumes),
+            ingress=service_template.ingress,
+            empty_env=service_template.empty_env,
+            environment=deepcopy(service_template.environment),
+            ports=deepcopy(service_template.ports),
+            properties=deepcopy(service_template.properties),
+            networks=deepcopy(service_template.networks),
+            extra_hosts=deepcopy(service_template.extra_hosts),
+            subject_alternative_name=service_template.subject_alternative_name,
+            upstreams=[],
+        )
