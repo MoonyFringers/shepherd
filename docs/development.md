@@ -7,9 +7,9 @@ for contributors.
 
 Ensure you have the following installed on your system:
 
-- Python 3.12 or later
-- `pip` (Python package installer)
-- `virtualenv` (optional but recommended for managing dependencies)
+- Python 3.12+
+- `pip`
+- `virtualenv`
 
 To install these on Ubuntu, run:
 
@@ -60,63 +60,6 @@ sudo apt install python3 python3-pip python3-venv -y
    ```
 
    You should see the list of available commands and options.
-
-5. **Run the Automatic Installer**
-
-   Run the python implemented automatic installer using the
-   install script from the scripts/ directory using:
-
-   ```bash
-   ./install.sh
-   ```
-
-   Options are shown running the script without any argument.
-
-   In alternative the script can be run manually from the src/
-   directory using:
-
-   ```bash
-   python3 -m installer.install
-   ```
-
-   The old installer (in bash) can be found in the scripts/ directory
-   and will be removed soon
-
-6. **Run the CLI**
-
-   You can now use the CLI:
-
-   ```bash
-   python3 src/shepctl.py <command> [options]
-   ```
-
-## Install from Source
-
-To install `shepctl` from source for development purposes, use the
-`--install-method source` option (or `-m source`). This will:
-
-1. Copy the source files into the install directory
-2. Set up a Python virtual environment
-3. Install dependencies from `requirements.txt`
-4. Create a `shepctl` launcher in your `$PATH`
-
-```bash
-cd shepherd/scripts
-
-sudo ./install.sh -m source install
-```
-
-> 📌 You can also skip dependency installation if you've already satisfied all requirements:
-
-```bash
-sudo INSTALL_SHEPCTL_DIR=/opt/shepctl ./install.sh -m source --skip-deps install
-```
-
-After installing, you can run the tool with:
-
-```bash
-shepctl
-```
 
 ## Lints & Checks
 
