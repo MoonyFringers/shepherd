@@ -59,6 +59,12 @@ class NetworkCfg:
     key: str
     name: str
     external: bool
+    driver: Optional[str] = None  # bridge / overlay
+    attachable: Optional[bool] = None
+    internal: Optional[bool] = None
+    enable_ipv6: Optional[bool] = None
+    driver_opts: Optional[dict[str, str]] = None
+    ipam: Optional[dict[str, Any]] = None  # full IPAM config
 
 
 @dataclass
@@ -310,7 +316,15 @@ def parse_config(json_str: str) -> Config:
 
     def parse_network(item: Any) -> NetworkCfg:
         return NetworkCfg(
-            key=item["key"], name=item["name"], external=item["external"]
+            key=item["key"],
+            name=item.get("name"),
+            external=item.get("external", False),
+            driver=item.get("driver"),
+            attachable=item.get("attachable"),
+            internal=item.get("internal"),
+            enable_ipv6=item.get("enable_ipv6"),
+            driver_opts=item.get("driver_opts"),
+            ipam=item.get("ipam"),
         )
 
     def parse_service_template_refs(item: Any) -> ServiceTemplateRefCfg:

@@ -72,12 +72,38 @@ class DockerComposeEnv(Environment):
         """
 
         compose_config: dict[str, Any] = {
+            "name": self.envCfg.tag,
             "services": {},
+            "networks": {},
         }
 
         for svc in self.services:
             svc_yaml = yaml.safe_load(svc.render())
             compose_config["services"].update(svc_yaml["services"])
+
+        if self.envCfg.networks:
+            for net in self.envCfg.networks:
+                net_config = {}
+
+                if net.external:
+                    if net.name:
+                        net_config["name"] = net.name
+                    net_config["external"] = True
+                else:
+                    if net.driver:
+                        net_config["driver"] = net.driver
+                    if net.internal is not None:
+                        net_config["internal"] = net.internal
+                    if net.attachable is not None:
+                        net_config["attachable"] = net.attachable
+                    if net.enable_ipv6 is not None:
+                        net_config["enable_ipv6"] = net.enable_ipv6
+                    if net.driver_opts:
+                        net_config["driver_opts"] = net.driver_opts
+                    if net.ipam:
+                        net_config["ipam"] = net.ipam
+
+                compose_config["networks"][net.key] = net_config
 
         return yaml.dump(compose_config, sort_keys=False)
 
