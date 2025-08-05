@@ -75,6 +75,7 @@ class DockerComposeEnv(Environment):
             "name": self.envCfg.tag,
             "services": {},
             "networks": {},
+            "volumes": {},
         }
 
         for svc in self.services:
@@ -104,6 +105,24 @@ class DockerComposeEnv(Environment):
                         net_config["ipam"] = net.ipam
 
                 compose_config["networks"][net.key] = net_config
+
+        if self.envCfg.volumes:
+            for vol in self.envCfg.volumes:
+                vol_config = {}
+
+                if vol.external:
+                    if vol.name:
+                        vol_config["name"] = vol.name
+                    vol_config["external"] = True
+                else:
+                    if vol.driver:
+                        vol_config["driver"] = vol.driver
+                    if vol.driver_opts:
+                        vol_config["driver_opts"] = vol.driver_opts
+                    if vol.labels:
+                        vol_config["labels"] = vol.labels
+
+                compose_config["volumes"][vol.key] = vol_config
 
         return yaml.dump(compose_config, sort_keys=False)
 

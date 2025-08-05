@@ -68,6 +68,20 @@ class NetworkCfg:
 
 
 @dataclass
+class VolumeCfg:
+    """
+    Represents a volume configuration.
+    """
+
+    key: str
+    external: bool = False
+    name: Optional[str] = None
+    driver: Optional[str] = None
+    driver_opts: Optional[dict[str, str]] = None
+    labels: Optional[dict[str, str]] = None
+
+
+@dataclass
 class ServiceTemplateCfg:
     """
     Represents a service template configuration.
@@ -138,6 +152,7 @@ class EnvironmentTemplateCfg:
     factory: str
     service_templates: Optional[list[ServiceTemplateRefCfg]]
     networks: Optional[list[NetworkCfg]]
+    volumes: Optional[list[VolumeCfg]]
 
 
 @dataclass
@@ -151,6 +166,7 @@ class EnvironmentCfg:
     tag: str
     services: Optional[list[ServiceCfg]]
     networks: Optional[list[NetworkCfg]]
+    volumes: Optional[list[VolumeCfg]]
     archived: bool
     active: bool
 
@@ -327,6 +343,16 @@ def parse_config(json_str: str) -> Config:
             ipam=item.get("ipam"),
         )
 
+    def parse_volume(item: Any) -> VolumeCfg:
+        return VolumeCfg(
+            key=item["key"],
+            external=item.get("external", False),
+            name=item.get("name"),
+            driver=item.get("driver"),
+            driver_opts=item.get("driver_opts"),
+            labels=item.get("labels"),
+        )
+
     def parse_service_template_refs(item: Any) -> ServiceTemplateRefCfg:
         return ServiceTemplateRefCfg(template=item["template"], tag=item["tag"])
 
@@ -341,6 +367,9 @@ def parse_config(json_str: str) -> Config:
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
+            volumes=[
+                parse_volume(volume) for volume in item.get("volumes", [])
+            ],
         )
 
     def parse_environment(item: Any) -> EnvironmentCfg:
@@ -353,6 +382,9 @@ def parse_config(json_str: str) -> Config:
             ],
             networks=[
                 parse_network(network) for network in item.get("networks", [])
+            ],
+            volumes=[
+                parse_volume(volume) for volume in item.get("volumes", [])
             ],
             archived=item["archived"],
             active=item["active"],
@@ -872,6 +904,7 @@ class ConfigMng:
             tag=env_tag,
             services=services,
             networks=env_tmpl_cfg.networks,
+            volumes=env_tmpl_cfg.volumes,
             archived=False,
             active=False,
         )
@@ -886,6 +919,7 @@ class ConfigMng:
             tag=other.tag,
             services=deepcopy(other.services),
             networks=deepcopy(other.networks),
+            volumes=deepcopy(other.volumes),
             archived=other.archived,
             active=other.active,
         )

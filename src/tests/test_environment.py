@@ -194,6 +194,20 @@ shpd_config = """
           "name": "envnet",
           "external": true
         }
+      ],
+      "volumes":[
+        {
+          "key": "app_data",
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "/srv/data"
+          },
+          "labels": {
+            "env": "production"
+          }
+        }
       ]
     }
   ],
@@ -305,6 +319,13 @@ shpd_config = """
           "external": true
         }
       ],
+      "volumes":[
+        {
+          "key": "app_data_ext",
+          "external": true,
+          "name": "nfs-1"
+        }
+      ],
       "archived": false,
       "active": true
     },
@@ -395,6 +416,20 @@ shpd_config = """
                 "gateway": "172.30.0.1"
               }
             ]
+          }
+        }
+      ],
+      "volumes":[
+        {
+          "key": "app_data",
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "/srv/data"
+          },
+          "labels": {
+            "env": "production"
           }
         }
       ],
@@ -750,6 +785,10 @@ def test_env_render_compose_env_ext_net(
         "networks:\n"
         "  default:\n"
         "    name: envnet\n"
+        "    external: true\n"
+        "volumes:\n"
+        "  app_data_ext:\n"
+        "    name: nfs-1\n"
         "    external: true\n\n"
     )
 
@@ -825,5 +864,14 @@ def test_env_render_compose_env_int_net(
         "      driver: default\n"
         "      config:\n"
         "      - subnet: 172.30.0.0/16\n"
-        "        gateway: 172.30.0.1\n\n"
+        "        gateway: 172.30.0.1\n"
+        "volumes:\n"
+        "  app_data:\n"
+        "    driver: local\n"
+        "    driver_opts:\n"
+        "      type: none\n"
+        "      o: bind\n"
+        "      device: /srv/data\n"
+        "    labels:\n"
+        "      env: production\n\n"
     )

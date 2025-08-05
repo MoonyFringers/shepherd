@@ -84,6 +84,22 @@ config_json = """{
           "driver_opts": null,
           "ipam": null
         }
+      ],
+      "volumes": [
+        {
+          "key": "app_data",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "/srv/data"
+          },
+          "labels": {
+            "env": "production"
+          }
+        }
       ]
     }
   ],
@@ -96,7 +112,9 @@ config_json = """{
       "container_name": null,
       "labels": [],
       "workdir": null,
-      "volumes": [],
+      "volumes": [
+        "app_data:/mnt/test"
+      ],
       "ingress": false,
       "empty_env": "${ora_empty_env}",
       "environment": [],
@@ -288,6 +306,22 @@ config_json = """{
           "ipam": null
         }
       ],
+      "volumes": [
+        {
+          "key": "app_data",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "/srv/data"
+          },
+          "labels": {
+            "env": "production"
+          }
+        }
+      ],
       "archived": false,
       "active": false
     }
@@ -387,6 +421,10 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].networks[0].key == "shpdnet"
     assert env_templates[0].networks[0].name == "envnet"
     assert env_templates[0].networks[0].external is True
+    assert env_templates[0].volumes
+    assert env_templates[0].volumes[0].key == "app_data"
+    assert env_templates[0].volumes[0].driver == "local"
+    assert env_templates[0].volumes[0].external is False
 
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"
@@ -400,6 +438,10 @@ def test_load_config(mocker: MockerFixture):
     assert (
         service_templates[0].ports
         and service_templates[0].ports[0] == "1521:1521"
+    )
+    assert (
+        service_templates[0].volumes
+        and service_templates[0].volumes[0] == "app_data:/mnt/test"
     )
     assert (
         service_templates[0].properties
@@ -485,6 +527,11 @@ def test_load_config(mocker: MockerFixture):
     assert config.envs[0].networks[0].key == "shpdnet"
     assert config.envs[0].networks[0].name == "envnet"
     assert config.envs[0].networks[0].external is True
+    assert config.envs[0].volumes
+    assert config.envs[0].volumes[0].key == "app_data"
+    assert config.envs[0].volumes[0].driver == "local"
+    assert config.envs[0].volumes[0].external is False
+
     assert ports and ports[0] == "3000:3000"
     assert config.host_inet_ip == "127.0.0.1"
     assert config.domain == "sslip.io"
