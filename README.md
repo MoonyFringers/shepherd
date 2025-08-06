@@ -47,8 +47,6 @@ the corresponding environment state will evolve privately.
 
 Set the `VER` environment variable to specify the desired version of the tool:
 
-Use the `VER` env variable to specify the desired tool's version.
-
 ```bash
 VER=0.0.0 sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFringers/shepherd/main/scripts/install.sh)"
 ```
