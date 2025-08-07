@@ -76,7 +76,13 @@ config_json = """{
         {
           "key": "shpdnet",
           "name": "envnet",
-          "external": true
+          "external": true,
+          "driver": null,
+          "attachable": null,
+          "internal": null,
+          "enable_ipv6": null,
+          "driver_opts": null,
+          "ipam": null
         }
       ]
     }
@@ -273,7 +279,13 @@ config_json = """{
         {
           "key": "shpdnet",
           "name": "envnet",
-          "external": true
+          "external": true,
+          "driver": null,
+          "attachable": null,
+          "internal": null,
+          "enable_ipv6": null,
+          "driver_opts": null,
+          "ipam": null
         }
       ],
       "archived": false,

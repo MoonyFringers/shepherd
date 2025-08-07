@@ -298,6 +298,106 @@ shpd_config = """
           "subject_alternative_name": null
         }
       ],
+      "networks": [
+        {
+          "key": "default",
+          "name": "envnet",
+          "external": true
+        }
+      ],
+      "archived": false,
+      "active": true
+    },
+    {
+      "template": "default",
+      "factory": "docker-compose",
+      "tag": "test-2",
+      "services": [
+        {
+          "template": "default",
+          "factory": "docker",
+          "tag": "test-1",
+          "image": "test-1-image:latest",
+          "labels": [
+            "com.example.label1=value1",
+            "com.example.label2=value2"
+          ],
+          "workdir": "/test",
+          "volumes": [
+              "/home/test/.ssh:/home/test/.ssh",
+              "/etc/ssh:/etc/ssh"
+          ],
+          "ingress": false,
+          "empty_env": null,
+          "environment": [],
+          "ports": [
+            "80:80",
+            "443:443",
+            "8080:8080"
+          ],
+          "properties": {},
+          "networks": [
+            "internal_net"
+          ],
+          "extra_hosts": [
+            "host.docker.internal:host-gateway"
+          ],
+          "subject_alternative_name": null
+        },
+        {
+          "template": "default",
+          "factory": "docker",
+          "tag": "test-2",
+          "image": "test-2-image:latest",
+          "labels": [
+            "com.example.label1=value1",
+            "com.example.label2=value2"
+          ],
+          "workdir": "/test",
+          "volumes": [
+              "/home/test/.ssh:/home/test/.ssh",
+              "/etc/ssh:/etc/ssh"
+          ],
+          "ingress": false,
+          "empty_env": null,
+          "environment": [],
+          "ports": [
+            "80:80",
+            "443:443",
+            "8080:8080"
+          ],
+          "properties": {},
+          "networks": [
+            "internal_net"
+          ],
+          "extra_hosts": [
+            "host.docker.internal:host-gateway"
+          ],
+          "subject_alternative_name": null
+        }
+      ],
+      "networks": [
+        {
+          "key": "internal_net",
+          "external": false,
+          "driver": "bridge",
+          "internal": true,
+          "attachable": true,
+          "enable_ipv6": false,
+          "driver_opts": {
+            "com.docker.network.bridge.name": "br-internal"
+          },
+          "ipam": {
+            "driver": "default",
+            "config": [
+              {
+                "subnet": "172.30.0.0/16",
+                "gateway": "172.30.0.1"
+              }
+            ]
+          }
+        }
+      ],
       "archived": false,
       "active": true
     }
@@ -590,7 +690,7 @@ def test_env_add_nonexisting_resource(
 
 @pytest.mark.env
 @pytest.mark.parametrize("expanduser_side_effects", [1])
-def test_env_render_compose_env(
+def test_env_render_compose_env_ext_net(
     temp_home: Path,
     runner: CliRunner,
     mocker: MockerFixture,
@@ -609,6 +709,7 @@ def test_env_render_compose_env(
     assert result.exit_code == 0
 
     assert result.output == (
+        "name: test-1\n"
         "services:\n"
         "  test-1-test-1:\n"
         "    image: test-1-image:latest\n"
@@ -645,5 +746,84 @@ def test_env_render_compose_env(
         "    extra_hosts:\n"
         "    - host.docker.internal:host-gateway\n"
         "    networks:\n"
-        "    - default\n\n"
+        "    - default\n"
+        "networks:\n"
+        "  default:\n"
+        "    name: envnet\n"
+        "    external: true\n\n"
+    )
+
+
+@pytest.mark.env
+@pytest.mark.parametrize("expanduser_side_effects", [1])
+def test_env_render_compose_env_int_net(
+    temp_home: Path,
+    runner: CliRunner,
+    mocker: MockerFixture,
+    expanduser_side_effects: int,
+):
+    side_effect = make_expanduser_side_effect(
+        temp_home, expanduser_side_effects
+    )
+    mocker.patch("os.path.expanduser", side_effect=side_effect)
+    shpd_dir = temp_home / "shpd"
+    shpd_dir.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_dir / ".shpd.json"
+    shpd_json.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "render", "test-2"])
+    assert result.exit_code == 0
+
+    assert result.output == (
+        "name: test-2\n"
+        "services:\n"
+        "  test-1-test-2:\n"
+        "    image: test-1-image:latest\n"
+        "    hostname: test-1-test-2\n"
+        "    container_name: test-1-test-2\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - internal_net\n"
+        "  test-2-test-2:\n"
+        "    image: test-2-image:latest\n"
+        "    hostname: test-2-test-2\n"
+        "    container_name: test-2-test-2\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - internal_net\n"
+        "networks:\n"
+        "  internal_net:\n"
+        "    driver: bridge\n"
+        "    internal: true\n"
+        "    attachable: true\n"
+        "    enable_ipv6: false\n"
+        "    driver_opts:\n"
+        "      com.docker.network.bridge.name: br-internal\n"
+        "    ipam:\n"
+        "      driver: default\n"
+        "      config:\n"
+        "      - subnet: 172.30.0.0/16\n"
+        "        gateway: 172.30.0.1\n\n"
     )
