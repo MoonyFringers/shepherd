@@ -21,7 +21,7 @@ import os
 import re
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Match, Optional
 
 from util import Constants, Util
 
@@ -474,19 +474,34 @@ class ConfigMng:
         )
         self.original_placeholders = {}
 
+    def expand_value(self, value: str, variables: Dict[str, str]) -> str:
+        """
+        Expand ${VAR} references using values from the given dictionary or
+        environment.
+        """
+        pattern = re.compile(r"\$\{([^}]+)\}")
+
+        def replacer(match: Match[str]) -> str:
+            var_name = match.group(1)
+            return variables.get(
+                var_name, os.environ.get(var_name, match.group(0))
+            )
+
+        return pattern.sub(replacer, value)
+
     def load_user_values(self) -> Dict[str, str]:
         """
-        Loads user-defined configuration values from a file in key=value format.
+        Loads user-defined configuration values from a file in key=value
+        format.
 
-        Reads the configuration values file and returns a dictionary of
-        key-value pairs.
-        Ignores empty lines and comments (lines starting with '#').
+        Supports variable interpolation using ${VAR} referencing previous
+        keys or environment variables.
+        Ignores empty lines and comments (starting with '#').
 
-        :return: A dictionary containing user-defined key-value pairs.
+        :return: A dictionary of resolved key-value pairs.
 
-        :raises FileNotFoundError: If the configuration values file is missing.
-        :raises ValueError: If a line is incorrectly formatted
-        (i.e., missing '=' separator).
+        :raises FileNotFoundError: If the config file is missing.
+        :raises ValueError: If a line is invalid (missing '=' separator).
         """
         user_values: Dict[str, str] = {}
 
@@ -496,6 +511,8 @@ class ConfigMng:
             )
 
         try:
+            raw_values: Dict[str, str] = {}
+
             with open(self.file_values_path, "r") as file:
                 for line in file:
                     line = line.strip()
@@ -504,11 +521,17 @@ class ConfigMng:
 
                     if "=" in line:
                         key, value = line.split("=", 1)
-                        user_values[key.strip()] = value.strip()
+                        raw_values[key.strip()] = value.strip()
                     else:
                         raise ValueError(
                             f"Invalid line format in config file: '{line}'"
                         )
+
+            # Expand values using previously defined keys and environment
+            # variables
+            for key, raw_value in raw_values.items():
+                user_values[key] = self.expand_value(raw_value, user_values)
+
         except Exception as e:
             Util.print_error_and_die(f"Error reading configuration file: {e}")
 

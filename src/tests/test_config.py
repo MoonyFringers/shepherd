@@ -94,7 +94,7 @@ config_json = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "/srv/data"
+            "device": "${shpd_volumes_dir}/srv/data"
           },
           "labels": {
             "env": "production"
@@ -375,6 +375,7 @@ values = """
   cert_subject_alternative_names=
 
   shpd_dir=.
+  shpd_volumes_dir=${shpd_dir}/volumes
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -425,6 +426,11 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].volumes[0].key == "app_data"
     assert env_templates[0].volumes[0].driver == "local"
     assert env_templates[0].volumes[0].external is False
+    assert env_templates[0].volumes[0].driver_opts
+    assert (
+        env_templates[0].volumes[0].driver_opts["device"]
+        == "./volumes/srv/data"
+    )
 
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"

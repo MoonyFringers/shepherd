@@ -76,6 +76,7 @@ values = """
   cert_subject_alternative_names=
 
   shpd_dir=.
+  shpd_volumes_dir=${shpd_dir}/volumes
 
   # Database Default Configuration
   db_sys_usr=sys
