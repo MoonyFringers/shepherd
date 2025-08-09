@@ -1,0 +1,13 @@
+# <type>[optional scope]: <description>
+#  feat: add new feature
+#  fix: bug fix
+#  Append a `!` to indicate a breaking change
+
+
+# [optional body]
+
+# [optional footer(s)]
+
+#  BREAKING CHANGE: introduce breaking change
+
+# Specification: https://www.conventionalcommits.org/en/v1.0.0/#specification
