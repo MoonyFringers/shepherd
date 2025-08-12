@@ -114,6 +114,15 @@ below.
       by the issue number. This allows GitHub to automatically link and close
       issues when the PR is merged.
 
+   - **NOTE:** A commit-template file is available in the _docs_ directory.
+   You can copy it to your home directory (optionally as a hidden file) and
+   add the following to your .gitconfig:
+
+   ```bash
+   [init]
+    templateDir = ~/.commit-template
+   ```
+
 4. **Follow coding standards**: Adhere to the project's code
    style guidelines. Run tests and linters where applicable.
 
