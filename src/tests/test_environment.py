@@ -199,6 +199,7 @@ shpd_config = """
       "volumes":[
         {
           "key": "app_data",
+          "external": false,
           "driver": "local",
           "driver_opts": {
             "type": "none",
@@ -403,7 +404,6 @@ shpd_config = """
           "key": "internal_net",
           "external": false,
           "driver": "bridge",
-          "internal": true,
           "attachable": true,
           "enable_ipv6": false,
           "driver_opts": {
@@ -423,6 +423,7 @@ shpd_config = """
       "volumes":[
         {
           "key": "app_data",
+          "external": false,
           "driver": "local",
           "driver_opts": {
             "type": "none",
@@ -856,7 +857,6 @@ def test_env_render_compose_env_int_net(
         "networks:\n"
         "  internal_net:\n"
         "    driver: bridge\n"
-        "    internal: true\n"
         "    attachable: true\n"
         "    enable_ipv6: false\n"
         "    driver_opts:\n"

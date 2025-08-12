@@ -20,69 +20,335 @@ import json
 import os
 import re
 from copy import deepcopy
-from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Match, Optional
+from dataclasses import dataclass, field, fields, is_dataclass
+from typing import Any, Dict, Match, Optional, cast
 
 from util import Constants, Util
 
+VAR_RE = re.compile(r"\$\{([^}]+)\}")
+
+
+def str_to_bool(val: str) -> bool:
+    if val == "true":
+        return True
+    if val == "false":
+        return False
+    raise ValueError(
+        f"Invalid boolean string: {val!r}. Expected 'true' or 'false'."
+    )
+
+
+def bool_to_str(val: bool) -> str:
+    return "true" if val else "false"
+
+
+def cfg_asdict(obj: Any) -> dict[str, Any] | list[Any] | Any:
+    """
+    Recursively convert a dataclass (including Resolvable objects) into a
+    plain Python structure of dicts, lists, and primitives, with special
+    handling for fields marked as boolean.
+
+    Behavior:
+        • Traverses dataclasses, lists, and dictionaries recursively.
+        • Fields with ``metadata={"boolify": True}`` that contain the strings
+          "true" or "false" (case-insensitive) are converted to actual
+          booleans. Any other string values are preserved as-is.
+        • All nested dataclasses are converted to dicts using the same logic.
+        • Lists and dicts are deep-converted element by element.
+
+    Args:
+        obj: The object to convert. May be a dataclass instance, list,
+             dictionary, or primitive value.
+
+    Returns:
+        A representation of the input object where all dataclasses are replaced
+        with dictionaries, lists are deep-converted, and booleans are parsed
+        from marked string fields.
+
+    Example:
+        @dataclass
+        class Config:
+            flag: str = field(metadata={"boolify": True})
+            name: str
+
+        cfg = Config(flag="true", name="test")
+        cfg_asdict(cfg)  # -> {"flag": True, "name": "test"}
+
+    Notes:
+        • Dictionary keys are left untouched.
+        • For boolean conversion, only exact string matches of "true" or "false"
+          (case-insensitive) are considered.
+    """
+
+    if is_dataclass(obj):
+        result: dict[str, Any] = {}
+        for f in fields(obj):
+            val = getattr(obj, f.name)
+            if f.metadata.get("boolify") and isinstance(val, str):
+                if val.lower() == "true":
+                    result[f.name] = True
+                elif val.lower() == "false":
+                    result[f.name] = False
+                else:
+                    # keep original string
+                    result[f.name] = val
+            else:
+                result[f.name] = cfg_asdict(val)
+        return result
+    elif isinstance(obj, list):
+        objListWithTypes: list[Any] = obj
+        return [cfg_asdict(v) for v in objListWithTypes]
+    elif isinstance(obj, dict):
+        objMapWithTypes: dict[str, Any] = obj
+        return {k: cfg_asdict(v) for k, v in objMapWithTypes.items()}
+    else:
+        return obj
+
 
 @dataclass
-class LoggingCfg:
+class Resolvable:
+    """
+    A mixin class for dataclasses that supports deferred resolution of string
+    placeholders from a mapping or environment variables.
+
+    This class enables any nested dataclass structure to have string fields
+    containing placeholders of the form ``${VAR_NAME}`` that can be dynamically
+    resolved at attribute access time. Resolution can be toggled on or off.
+
+    Features:
+        • Recursive traversal of dataclasses, lists, and dicts to propagate a
+          variable mapping and resolution state.
+        • Placeholder substitution using a resolver mapping (dict[str, str])
+          or environment variables as fallback.
+        • Support for setting/unsetting resolution state without modifying
+          field values.
+        • Resolution is performed lazily when accessing attributes.
+
+    Key Methods:
+        set_resolver(mapping):
+            Set the placeholder resolver mapping and mark the object
+            as resolved.
+
+        set_resolved():
+            Mark the object (and its nested structures) as resolved, causing
+            future string accesses to have placeholders substituted.
+
+        set_unresolved():
+            Mark the object (and its nested structures) as unresolved,
+            returning raw placeholder strings.
+
+    Example:
+        @dataclass
+        class Config(Resolvable):
+            path: str
+            options: list[str]
+
+        cfg = Config(path="${HOME}/data", options=["${USER}"])
+        cfg.set_resolver({"HOME": "/tmp", "USER": "alice"})
+
+        print(cfg.path)       # -> "/tmp/data"
+        print(cfg.options)    # -> ["alice"]
+
+    Implementation Notes:
+        • The `_walk_and_set` method traverses the structure to propagate the
+          resolver mapping and resolution state.
+        • The `__getattribute__` method intercepts attribute access to perform
+          lazy resolution only when `_resolved` is True.
+        • Lists and dictionaries are deeply resolved, but dictionary keys are
+          assumed to be literal strings without placeholders.
+    """
+
+    def _walk_and_set(
+        self, resolver: dict[str, str] | None, resolved: bool, obj: Any = None
+    ):
+        if obj is None:
+            obj = self
+
+        if is_dataclass(obj) and isinstance(obj, Resolvable):
+            object.__setattr__(obj, "_resolver", resolver or os.environ)
+            for f in fields(obj):
+                if fVal := getattr(obj, f.name, None):
+                    self._walk_and_set(resolver, resolved, fVal)
+            object.__setattr__(obj, "_resolved", resolved)
+
+        elif isinstance(obj, list):
+            objListWithTypes: list[Any] = obj
+            for item in objListWithTypes:
+                self._walk_and_set(resolver, resolved, item)
+
+        elif isinstance(obj, dict):
+            objMapWithTypes: dict[str, Any] = obj
+            for item in objMapWithTypes.values():
+                self._walk_and_set(resolver, resolved, item)
+
+    def set_resolved(self):
+        self._walk_and_set(getattr(self, "_resolver", None), True)
+
+    def set_unresolved(self):
+        self._walk_and_set(getattr(self, "_resolver", None), False)
+
+    def set_resolver(self, mapping: dict[str, str] | None):
+        self._walk_and_set(mapping, True)
+
+    def _is_resolved(self) -> bool:
+        return getattr(self, "_resolved", False)
+
+    def _resolve_str(self, s: str) -> str:
+        mapping = getattr(self, "_resolver", None) or os.environ
+
+        def repl(match: Match[str]) -> str:
+            key = match.group(1)
+            if key in mapping:
+                return str(mapping[key])
+            return os.environ.get(key, match.group(0))
+
+        return VAR_RE.sub(repl, s)
+
+    def __getattribute__(self, name: str) -> Any:
+        if (
+            name.startswith("_")
+            or name
+            in (
+                "set_resolver",
+                "set_resolved",
+                "set_unresolved",
+            )
+            or not self._is_resolved()
+        ):
+            return object.__getattribute__(self, name)
+
+        val = object.__getattribute__(self, name)
+
+        # resolve plain strings with placeholders
+        if isinstance(val, str) and VAR_RE.search(val):
+            return self._resolve_str(val)
+
+        # pass resolver to nested dataclasses
+        elif is_dataclass(val) and isinstance(val, Resolvable):
+            return val
+
+        # resolve lists
+        elif isinstance(val, list):
+            resultList: list[Any] = []
+            for v in cast(list[Any], val):
+                if isinstance(v, str) and VAR_RE.search(v):
+                    resultList.append(self._resolve_str(v))
+                elif is_dataclass(v) and isinstance(v, Resolvable):
+                    resultList.append(v)
+                else:
+                    resultList.append(v)
+            return resultList
+
+        # resolve dicts
+        elif isinstance(val, dict):
+            valWithTypes: dict[str, Any] = val
+            resultDict: dict[str, Any] = {}
+            for k, v in valWithTypes.items():
+                # keys are assumed to be strings and not placeholders
+                if isinstance(v, str) and VAR_RE.search(v):
+                    resultDict[k] = self._resolve_str(v)
+                elif is_dataclass(v) and isinstance(v, Resolvable):
+                    resultDict[k] = v
+                elif isinstance(v, list):
+                    vWithTypes: list[Any] = v
+                    # resolve strings and dataclasses
+                    # inside lists in dict values
+                    lst: list[Any] = []
+                    for item in vWithTypes:
+                        if isinstance(item, str) and VAR_RE.search(item):
+                            lst.append(self._resolve_str(item))
+                        elif is_dataclass(item) and isinstance(
+                            item, Resolvable
+                        ):
+                            lst.append(item)
+                        else:
+                            lst.append(item)
+                    resultDict[k] = lst
+                else:
+                    resultDict[k] = v
+            return resultDict
+
+        return val
+
+
+@dataclass
+class LoggingCfg(Resolvable):
     """
     Represents the logging configuration.
     """
 
     file: str
     level: str
-    stdout: bool
-    format: str
+    stdout: str = field(default="false", metadata={"boolify": True})
+    format: str = ""
+
+    def is_stdout(self) -> bool:
+        return str_to_bool(self.stdout)
 
 
 @dataclass
-class UpstreamCfg:
+class UpstreamCfg(Resolvable):
     """
     Represents an upstream service configuration.
     """
 
     type: str
     tag: str
-    enabled: bool
+    enabled: str = field(default="false", metadata={"boolify": True})
     properties: Optional[dict[str, str]] = field(default_factory=dict)
+
+    def is_enabled(self) -> bool:
+        return str_to_bool(self.enabled)
 
 
 @dataclass
-class NetworkCfg:
+class NetworkCfg(Resolvable):
     """
     Represents an network configuration.
     """
 
     key: str
-    name: str
-    external: bool
+    name: Optional[str] = None
+    external: str = field(default="false", metadata={"boolify": True})
     driver: Optional[str] = None  # bridge / overlay
-    attachable: Optional[bool] = None
-    internal: Optional[bool] = None
-    enable_ipv6: Optional[bool] = None
+    attachable: Optional[str] = field(default=None, metadata={"boolify": True})
+    enable_ipv6: Optional[str] = field(default=None, metadata={"boolify": True})
     driver_opts: Optional[dict[str, str]] = None
     ipam: Optional[dict[str, Any]] = None  # full IPAM config
 
+    def is_external(self) -> bool:
+        return str_to_bool(self.external)
+
+    def is_attachable(self) -> bool:
+        return str_to_bool(
+            self.attachable if self.attachable is not None else "false"
+        )
+
+    def is_enable_ipv6(self) -> bool:
+        return str_to_bool(
+            self.enable_ipv6 if self.enable_ipv6 is not None else "false"
+        )
+
 
 @dataclass
-class VolumeCfg:
+class VolumeCfg(Resolvable):
     """
     Represents a volume configuration.
     """
 
     key: str
-    external: bool = False
+    external: str = field(default="false", metadata={"boolify": True})
     name: Optional[str] = None
     driver: Optional[str] = None
     driver_opts: Optional[dict[str, str]] = None
     labels: Optional[dict[str, str]] = None
 
+    def is_external(self) -> bool:
+        return str_to_bool(self.external)
+
 
 @dataclass
-class ServiceTemplateCfg:
+class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
     """
@@ -95,7 +361,7 @@ class ServiceTemplateCfg:
     labels: Optional[list[str]] = field(default_factory=list)
     workdir: Optional[str] = None
     volumes: Optional[list[str]] = field(default_factory=list)
-    ingress: Optional[bool] = None
+    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     empty_env: Optional[str] = None
     environment: Optional[list[str]] = field(default_factory=list)
     ports: Optional[list[str]] = field(default_factory=list)
@@ -104,9 +370,14 @@ class ServiceTemplateCfg:
     extra_hosts: Optional[list[str]] = field(default_factory=list)
     subject_alternative_name: Optional[str] = None
 
+    def is_ingress(self) -> bool:
+        return str_to_bool(
+            self.ingress if self.ingress is not None else "false"
+        )
+
 
 @dataclass
-class ServiceTemplateRefCfg:
+class ServiceTemplateRefCfg(Resolvable):
     """
     Represents a service template reference.
     """
@@ -116,7 +387,7 @@ class ServiceTemplateRefCfg:
 
 
 @dataclass
-class ServiceCfg:
+class ServiceCfg(Resolvable):
     """
     Represents a service configuration.
     """
@@ -131,7 +402,7 @@ class ServiceCfg:
     labels: Optional[list[str]] = field(default_factory=list)
     workdir: Optional[str] = None
     volumes: Optional[list[str]] = field(default_factory=list)
-    ingress: Optional[bool] = None
+    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     empty_env: Optional[str] = None
     environment: Optional[list[str]] = field(default_factory=list)
     ports: Optional[list[str]] = field(default_factory=list)
@@ -141,9 +412,14 @@ class ServiceCfg:
     subject_alternative_name: Optional[str] = None
     upstreams: Optional[list[UpstreamCfg]] = field(default_factory=list)
 
+    def is_ingress(self) -> bool:
+        return str_to_bool(
+            self.ingress if self.ingress is not None else "false"
+        )
+
 
 @dataclass
-class EnvironmentTemplateCfg:
+class EnvironmentTemplateCfg(Resolvable):
     """
     Represents an environment template configuration.
     """
@@ -156,7 +432,7 @@ class EnvironmentTemplateCfg:
 
 
 @dataclass
-class EnvironmentCfg:
+class EnvironmentCfg(Resolvable):
     """
     Represents an environment configuration.
     """
@@ -186,7 +462,7 @@ class EnvironmentCfg:
 
 
 @dataclass
-class ShpdRegistryCfg:
+class ShpdRegistryCfg(Resolvable):
     """
     Represents the configuration for the shepherd registry.
     """
@@ -199,7 +475,7 @@ class ShpdRegistryCfg:
 
 
 @dataclass
-class CACfg:
+class CACfg(Resolvable):
     """
     Represents the configuration for the Certificate Authority.
     """
@@ -215,7 +491,7 @@ class CACfg:
 
 
 @dataclass
-class CertCfg:
+class CertCfg(Resolvable):
     """
     Represents the configuration for the certificate.
     """
@@ -231,7 +507,7 @@ class CertCfg:
 
 
 @dataclass
-class Config:
+class Config(Resolvable):
     """
     Represents the shepherd configuration.
     """
@@ -259,20 +535,15 @@ def parse_config(json_str: str) -> Config:
 
     data = json.loads(json_str)
 
-    def str_to_bool(val: str) -> bool:
-        if val == "true":
-            return True
-        if val == "false":
-            return False
-        raise ValueError(
-            f"Invalid boolean string: {val!r}. Expected 'true' or 'false'."
-        )
-
     def parse_logging(item: Any) -> LoggingCfg:
         return LoggingCfg(
             file=item["file"],
             level=item["level"],
-            stdout=str_to_bool(item["stdout"]),
+            stdout=(
+                bool_to_str(val)
+                if isinstance(val := item["stdout"], bool)
+                else val
+            ),
             format=item["format"],
         )
 
@@ -281,7 +552,11 @@ def parse_config(json_str: str) -> Config:
             type=item["type"],
             tag=item["tag"],
             properties=item.get("properties", {}),
-            enabled=item["enabled"],
+            enabled=(
+                bool_to_str(val)
+                if isinstance(val := item["enabled"], bool)
+                else val
+            ),
         )
 
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
@@ -294,7 +569,11 @@ def parse_config(json_str: str) -> Config:
             labels=item.get("labels", []),
             workdir=item.get("workdir"),
             volumes=item.get("volumes", []),
-            ingress=item.get("ingress"),
+            ingress=(
+                bool_to_str(val)
+                if isinstance(val := item["ingress"], bool)
+                else val
+            ),
             empty_env=item.get("empty_env"),
             environment=item.get("environment", []),
             ports=item.get("ports", []),
@@ -316,7 +595,11 @@ def parse_config(json_str: str) -> Config:
             labels=item.get("labels", []),
             workdir=item.get("workdir"),
             volumes=item.get("volumes", []),
-            ingress=item.get("ingress"),
+            ingress=(
+                bool_to_str(val)
+                if isinstance(val := item["ingress"], bool)
+                else val
+            ),
             empty_env=item.get("empty_env"),
             environment=item.get("environment", []),
             ports=item.get("ports", []),
@@ -333,12 +616,23 @@ def parse_config(json_str: str) -> Config:
     def parse_network(item: Any) -> NetworkCfg:
         return NetworkCfg(
             key=item["key"],
-            name=item.get("name"),
-            external=item.get("external", False),
-            driver=item.get("driver"),
-            attachable=item.get("attachable"),
-            internal=item.get("internal"),
-            enable_ipv6=item.get("enable_ipv6"),
+            name=item.get("name", None),
+            external=(
+                bool_to_str(val)
+                if isinstance(val := item["external"], bool)
+                else val
+            ),
+            driver=item.get("driver", None),
+            attachable=(
+                bool_to_str(val)
+                if isinstance(val := item.get("attachable"), bool)
+                else val
+            ),
+            enable_ipv6=(
+                bool_to_str(val)
+                if isinstance(val := item.get("enable_ipv6"), bool)
+                else val
+            ),
             driver_opts=item.get("driver_opts"),
             ipam=item.get("ipam"),
         )
@@ -346,7 +640,11 @@ def parse_config(json_str: str) -> Config:
     def parse_volume(item: Any) -> VolumeCfg:
         return VolumeCfg(
             key=item["key"],
-            external=item.get("external", False),
+            external=(
+                bool_to_str(val)
+                if isinstance(val := item["external"], bool)
+                else val
+            ),
             name=item.get("name"),
             driver=item.get("driver"),
             driver_opts=item.get("driver_opts"),
@@ -445,18 +743,16 @@ def parse_config(json_str: str) -> Config:
 
 class ConfigMng:
     """
-    Manages the loading, substitution, and storage of configuration data.
+    Manages the loading and storage of configuration data.
 
     This class handles:
     - Reading user-defined key-value pairs from a configuration values file.
-    - Loading a JSON configuration file and replacing placeholders with
-      user-defined values.
-    - Storing the final configuration, converting known values back into
-      placeholders.
+    - Loading a JSON configuration file.
+    - Storing the configuration back to file.
     """
 
     file_values_path: str
-    original_placeholders: Dict[str, str]
+    user_values: Dict[str, str]
     config: Config
 
     def __init__(self, file_values_path: str):
@@ -467,12 +763,11 @@ class ConfigMng:
         are stored.
         """
         self.file_values_path = os.path.expanduser(file_values_path)
-        self.values = self.load_user_values()
+        self.user_values = self.load_user_values()
         self.constants = Constants(
             SHPD_CONFIG_VALUES_FILE=self.file_values_path,
-            SHPD_DIR=os.path.expanduser(self.values["shpd_dir"]),
+            SHPD_DIR=os.path.expanduser(self.user_values["shpd_dir"]),
         )
-        self.original_placeholders = {}
 
     def expand_value(self, value: str, variables: Dict[str, str]) -> str:
         """
@@ -537,80 +832,10 @@ class ConfigMng:
 
         return user_values
 
-    def get_list_item_key(self, item: Any, index: int) -> str:
-        """
-        Determines a unique identifier for list elements using:
-        1. item["tag"] if available
-        2. item["type"] if available
-        3. fallback to index
-        """
-        if isinstance(item, dict):
-            if "tag" in item:
-                return f"tag={item['tag']}"
-            elif "type" in item:
-                return f"type={item['type']}"
-        return str(index)
-
-    def substitute_placeholders(
-        self, config_data: Dict[Any, Any], values: Dict[str, str]
-    ) -> Dict[Any, Any]:
-        """
-        Replaces placeholders in the configuration data with actual values.
-
-        This function performs a recursive traversal of the configuration
-        dictionary, replacing placeholders in the format '${key}' with
-        their corresponding values from the provided dictionary.
-        If a placeholder key is not found, it is replaced with `None`.
-
-        :param config_data: The configuration dictionary containing
-        placeholders.
-        :param values: A dictionary of user-defined values used to replace
-        placeholders.
-        :return: A new dictionary with placeholders replaced by actual values.
-        """
-
-        placeholder_pattern = re.compile(r"\$\{([^}]+)\}")
-
-        def replace(value: Any, path: str = "") -> Any:
-            if isinstance(value, str):
-                # Replace all placeholders in the string
-                def replacer(match: re.Match[str]) -> str:
-                    key = match.group(1)
-                    if path:
-                        self.original_placeholders[path] = value
-                    return str(values.get(key, None))
-
-                return placeholder_pattern.sub(replacer, value)
-
-            elif isinstance(value, dict):
-                valDict: Dict[Any, Any] = value
-                return {
-                    k: replace(v, f"{path}.{k}" if path else k)
-                    for k, v in valDict.items()
-                }
-
-            elif isinstance(value, list):
-                valList: list[Any] = value
-                return [
-                    replace(v, f"{path}[{self.get_list_item_key(v, i)}]")
-                    for i, v in enumerate(valList)
-                ]
-
-            return value
-
-        return replace(config_data)
-
     def load_config(self) -> Config:
         """
         Loads and processes the configuration file.
-
-        Steps:
-        1. Reads the JSON configuration file.
-        2. Loads user-defined values from the values file.
-        3. Replaces placeholders in the configuration with actual values.
-        4. Parses the resulting JSON into a `Config` object.
-
-        :return: A `Config` object with placeholders resolved.
+        Reads the JSON configuration file.
 
         :raises FileNotFoundError: If the configuration file is missing.
         :raises ValueError: If the configuration file is malformed.
@@ -618,11 +843,9 @@ class ConfigMng:
         with open(self.constants.SHPD_CONFIG_FILE, "r", encoding="utf-8") as f:
             config_data = json.load(f)
 
-        substituted_config = self.substitute_placeholders(
-            config_data, self.values
-        )
-
-        return parse_config(json.dumps(substituted_config))
+        config = parse_config(json.dumps(config_data))
+        config.set_resolver(self.user_values)
+        return config
 
     def load(self):
         """
@@ -632,55 +855,17 @@ class ConfigMng:
 
     def store_config(self, config: Config):
         """
-        Stores the modified configuration while preserving placeholders.
-
-        This function:
-        - Converts the `Config` object into a dictionary.
-        - Restores placeholders for known keys (those tracked in
-          `original_placeholders`).
-        - Writes the final configuration back to a JSON file.
+        Stores the configuration.
+        Writes the final configuration back to a JSON file.
 
         :param config: The `Config` object to be saved.
         """
-
-        def replace_keys_with_placeholders(
-            config: Any, parent_key: str = ""
-        ) -> Any:
-            """
-            Recursively traverses the configuration dictionary, restoring
-            placeholders for keys stored in `original_placeholders`.
-            """
-            if isinstance(config, dict):
-                new_dict: Dict[Any, Any] = {}
-                configDict: Dict[Any, Any] = config
-                for k, v in configDict.items():
-                    full_key = f"{parent_key}.{k}" if parent_key else k
-                    new_dict[k] = (
-                        replace_keys_with_placeholders(v, full_key)
-                        if isinstance(v, (dict, list))
-                        else self.original_placeholders.get(full_key, v)
-                    )
-                return new_dict
-
-            elif isinstance(config, list):
-                configList: list[Any] = config
-                return [
-                    replace_keys_with_placeholders(
-                        item,
-                        f"{parent_key}[{self.get_list_item_key(item, i)}]",
-                    )
-                    for i, item in enumerate(configList)
-                ]
-
-            elif isinstance(config, str):
-                return self.original_placeholders.get(parent_key, config)
-
-            return config
-
-        processed_config = replace_keys_with_placeholders(asdict(config))
+        config.set_unresolved()
+        config_dict = cfg_asdict(config)
+        config.set_resolved()
 
         with open(self.constants.SHPD_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(processed_config, f, indent=2)
+            json.dump(config_dict, f, indent=2)
 
     def store(self):
         """
@@ -812,6 +997,7 @@ class ConfigMng:
         :param envTag: The tag of the environment to be added/replaced.
         :param newEnv: The new environment configuration.
         """
+        self.config.set_unresolved()
         for i, env in enumerate(self.config.envs):
             if env.tag == envTag:
                 self.config.envs[i] = newEnv
@@ -990,7 +1176,7 @@ class ConfigMng:
             labels=[],
             workdir=None,
             volumes=[],
-            ingress=False,
+            ingress="false",
             empty_env=None,
             environment=[],
             ports=[],

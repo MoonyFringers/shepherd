@@ -79,7 +79,6 @@ config_json = """{
           "external": true,
           "driver": null,
           "attachable": null,
-          "internal": null,
           "enable_ipv6": null,
           "driver_opts": null,
           "ipam": null
@@ -108,8 +107,8 @@ config_json = """{
       "tag": "oracle",
       "factory": "docker",
       "image": "${ora_image}",
-      "hostname": null,
-      "container_name": null,
+      "hostname": "${ora_hostname}",
+      "container_name": "${ora_container_name}",
       "labels": [],
       "workdir": null,
       "volumes": [
@@ -300,7 +299,6 @@ config_json = """{
           "external": true,
           "driver": null,
           "attachable": null,
-          "internal": null,
           "enable_ipv6": null,
           "driver_opts": null,
           "ipam": null
@@ -395,6 +393,14 @@ values = """
 def test_load_config(mocker: MockerFixture):
     """Test regular parsing"""
 
+    mocker.patch.dict(
+        os.environ,
+        {
+            "ora_container_name": "ora-cnt-1",
+            "ora_hostname": "ora-host",
+        },
+    )
+
     mock_open1 = mock_open(read_data=values)
     mock_open2 = mock_open(read_data=config_json)
 
@@ -409,7 +415,7 @@ def test_load_config(mocker: MockerFixture):
 
     assert config.logging.file == "shepctl.log"
     assert config.logging.level == "WARNING"
-    assert not config.logging.stdout
+    assert not config.logging.is_stdout()
     assert config.logging.format == "%(asctime)s - %(levelname)s - %(message)s"
 
     env_templates = config.env_templates
@@ -421,11 +427,11 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].networks
     assert env_templates[0].networks[0].key == "shpdnet"
     assert env_templates[0].networks[0].name == "envnet"
-    assert env_templates[0].networks[0].external is True
+    assert env_templates[0].networks[0].is_external()
     assert env_templates[0].volumes
     assert env_templates[0].volumes[0].key == "app_data"
     assert env_templates[0].volumes[0].driver == "local"
-    assert env_templates[0].volumes[0].external is False
+    assert not env_templates[0].volumes[0].is_external()
     assert env_templates[0].volumes[0].driver_opts
     assert (
         env_templates[0].volumes[0].driver_opts["device"]
@@ -438,8 +444,10 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].image == (
         "ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40"
     )
+    assert service_templates[0].hostname == "ora-host"
+    assert service_templates[0].container_name == "ora-cnt-1"
     assert service_templates[0].empty_env == "fresh-ora-19300"
-    assert service_templates[0].ingress is False
+    assert not service_templates[0].is_ingress()
     assert service_templates[0].environment == []
     assert (
         service_templates[0].ports
@@ -466,7 +474,7 @@ def test_load_config(mocker: MockerFixture):
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
     )
     assert service_templates[1].empty_env == "fresh-pg-1735"
-    assert service_templates[1].ingress is False
+    assert not service_templates[1].is_ingress()
     assert service_templates[1].environment == []
     assert (
         service_templates[1].ports
@@ -507,7 +515,7 @@ def test_load_config(mocker: MockerFixture):
     assert properties["database"] == "d_pg1"
     assert properties["unix_user"] == "postgres"
     assert properties["dump_dir"] == "/dumps"
-    assert upstreams[0].enabled is True
+    assert upstreams[0].is_enabled()
     assert upstreams[1].tag == "upstream-2"
     properties = upstreams[1].properties
     assert properties and properties["user"] == "pg2up"
@@ -517,10 +525,10 @@ def test_load_config(mocker: MockerFixture):
     assert properties["database"] == "d_pg2"
     assert properties["unix_user"] == "postgres"
     assert properties["dump_dir"] == "/dumps/2"
-    assert upstreams[1].enabled is False
+    assert not upstreams[1].is_enabled()
     assert services[1].template == "traefik"
     assert services[1].factory == "docker"
-    assert services[1].ingress is True
+    assert services[1].is_ingress
     assert services[2].template == "custom-1"
     assert services[2].tag == "primary"
     assert services[3].template == "nodejs"
@@ -532,11 +540,11 @@ def test_load_config(mocker: MockerFixture):
     assert config.envs[0].networks
     assert config.envs[0].networks[0].key == "shpdnet"
     assert config.envs[0].networks[0].name == "envnet"
-    assert config.envs[0].networks[0].external is True
+    assert config.envs[0].networks[0].is_external()
     assert config.envs[0].volumes
     assert config.envs[0].volumes[0].key == "app_data"
     assert config.envs[0].volumes[0].driver == "local"
-    assert config.envs[0].volumes[0].external is False
+    assert not config.envs[0].volumes[0].is_external()
 
     assert ports and ports[0] == "3000:3000"
     assert config.host_inet_ip == "127.0.0.1"

@@ -86,19 +86,17 @@ class DockerComposeEnv(Environment):
             for net in self.envCfg.networks:
                 net_config = {}
 
-                if net.external:
+                if net.is_external():
                     if net.name:
                         net_config["name"] = net.name
                     net_config["external"] = True
                 else:
                     if net.driver:
                         net_config["driver"] = net.driver
-                    if net.internal is not None:
-                        net_config["internal"] = net.internal
                     if net.attachable is not None:
-                        net_config["attachable"] = net.attachable
+                        net_config["attachable"] = net.is_attachable()
                     if net.enable_ipv6 is not None:
-                        net_config["enable_ipv6"] = net.enable_ipv6
+                        net_config["enable_ipv6"] = net.is_enable_ipv6()
                     if net.driver_opts:
                         net_config["driver_opts"] = net.driver_opts
                     if net.ipam:
@@ -110,7 +108,7 @@ class DockerComposeEnv(Environment):
             for vol in self.envCfg.volumes:
                 vol_config = {}
 
-                if vol.external:
+                if vol.is_external():
                     if vol.name:
                         vol_config["name"] = vol.name
                     vol_config["external"] = True
