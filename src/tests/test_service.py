@@ -379,7 +379,7 @@ def test_svc_add_one_default(
     ), "Service factory should be 'docker'"
     assert env.services[0].image == "", "Service image should be ''"
 
-    assert env.services[0].ingress is False, "Service ingress should be False"
+    assert not env.services[0].is_ingress(), "Service ingress should be False"
     assert (
         env.services[0].environment == []
     ), "Service environment should be empty"
@@ -400,7 +400,7 @@ def test_svc_add_one_default(
     ), "Service factory should be 'docker'"
     assert env.services[1].image == "", "Service image should be ''"
 
-    assert env.services[1].ingress is False, "Service ingress should be False"
+    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].environment == []
     ), "Service environment should be empty"
@@ -454,7 +454,7 @@ def test_svc_add_two_default(
     ), "Service factory should be 'docker'"
     assert env.services[1].image == "", "Service image should be ''"
 
-    assert env.services[1].ingress is False, "Service ingress should be False"
+    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].environment == []
     ), "Service environment should be empty"
@@ -475,7 +475,7 @@ def test_svc_add_two_default(
     ), "Service factory should be 'docker'"
     assert env.services[2].image == "", "Service image should be ''"
 
-    assert env.services[2].ingress is False, "Service ingress should be False"
+    assert not env.services[2].is_ingress(), "Service ingress should be False"
     assert (
         env.services[2].environment == []
     ), "Service environment should be empty"
@@ -528,7 +528,7 @@ def test_svc_add_two_same_tag_default(
     ), "Service factory should be 'docker'"
     assert env.services[1].image == "", "Service image should be ''"
 
-    assert env.services[1].ingress is False, "Service ingress should be False"
+    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].environment == []
     ), "Service environment should be empty"

@@ -123,7 +123,7 @@ class Constants:
                         {
                             "key": self.NET_KEY_DEFAULT,
                             "name": self.NET_NAME_DEFAULT,
-                            "external": True,
+                            "external": "true",
                         }
                     ],
                 }
@@ -133,7 +133,7 @@ class Constants:
                     "tag": self.SVC_TEMPLATE_DEFAULT,
                     "factory": self.SVC_FACTORY_DEFAULT,
                     "image": "",
-                    "ingress": False,
+                    "ingress": "false",
                     "envvars": {},
                     "ports": [],
                     "properties": {},
