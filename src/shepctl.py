@@ -42,7 +42,7 @@ class ShepherdMng:
             self.configMng.config.logging.file,
             self.configMng.config.logging.format,
             self.configMng.config.logging.level,
-            self.configMng.config.logging.stdout,
+            self.configMng.config.logging.is_stdout(),
         )
         logging.debug(
             "### shepctl version:%s started",
