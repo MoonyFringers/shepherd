@@ -1,7 +1,7 @@
 ---
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: check-yaml
@@ -21,7 +21,7 @@ repos:
       - id: codespell
 
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.17.2
+    rev: v0.18.1
     hooks:
       - id: markdownlint-cli2
 
@@ -38,20 +38,20 @@ repos:
             "--check",
           ]
   - repo: https://github.com/PyCQA/isort
-    rev: 6.0.0
+    rev: 6.0.1
     hooks:
       - id: isort
         args: ["--sp", "src/pyproject.toml", "--check-only"]
         files: ".*\\.py$"
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 7.1.2
+    rev: 7.3.0
     hooks:
       - id: flake8
         args: ["--config", "src/.flake8"]
 
   - repo: https://github.com/RobertCraigie/pyright-python
-    rev: v1.1.394
+    rev: v1.1.403
     hooks:
       - id: pyright
         args: ["--project", "src/pyproject.toml"]
