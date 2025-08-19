@@ -129,7 +129,7 @@ shpd_config = """
       ],
       "networks": [
         {
-          "key": "shpdnet",
+          "tag": "shpdnet",
           "name": "envnet",
           "external": true
         }

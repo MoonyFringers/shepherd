@@ -191,14 +191,14 @@ shpd_config = """
       ],
       "networks": [
         {
-          "key": "shpdnet",
+          "tag": "shpdnet",
           "name": "envnet",
           "external": true
         }
       ],
       "volumes":[
         {
-          "key": "app_data",
+          "tag": "app_data",
           "external": false,
           "driver": "local",
           "driver_opts": {
@@ -316,14 +316,14 @@ shpd_config = """
       ],
       "networks": [
         {
-          "key": "default",
+          "tag": "default",
           "name": "envnet",
           "external": true
         }
       ],
       "volumes":[
         {
-          "key": "app_data_ext",
+          "tag": "app_data_ext",
           "external": true,
           "name": "nfs-1"
         }
@@ -401,7 +401,7 @@ shpd_config = """
       ],
       "networks": [
         {
-          "key": "internal_net",
+          "tag": "internal_net",
           "external": false,
           "driver": "bridge",
           "attachable": true,
@@ -422,7 +422,7 @@ shpd_config = """
       ],
       "volumes":[
         {
-          "key": "app_data",
+          "tag": "app_data",
           "external": false,
           "driver": "local",
           "driver_opts": {

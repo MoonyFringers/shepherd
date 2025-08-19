@@ -121,7 +121,7 @@ class Constants:
                     ],
                     "networks": [
                         {
-                            "key": self.NET_KEY_DEFAULT,
+                            "tag": self.NET_KEY_DEFAULT,
                             "name": self.NET_NAME_DEFAULT,
                             "external": "true",
                         }

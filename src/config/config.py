@@ -307,7 +307,7 @@ class NetworkCfg(Resolvable):
     Represents an network configuration.
     """
 
-    key: str
+    tag: str
     name: Optional[str] = None
     external: str = field(default="false", metadata={"boolify": True})
     driver: Optional[str] = None  # bridge / overlay
@@ -336,7 +336,7 @@ class VolumeCfg(Resolvable):
     Represents a volume configuration.
     """
 
-    key: str
+    tag: str
     external: str = field(default="false", metadata={"boolify": True})
     name: Optional[str] = None
     driver: Optional[str] = None
@@ -615,7 +615,7 @@ def parse_config(json_str: str) -> Config:
 
     def parse_network(item: Any) -> NetworkCfg:
         return NetworkCfg(
-            key=item["key"],
+            tag=item["tag"],
             name=item.get("name", None),
             external=(
                 bool_to_str(val)
@@ -639,7 +639,7 @@ def parse_config(json_str: str) -> Config:
 
     def parse_volume(item: Any) -> VolumeCfg:
         return VolumeCfg(
-            key=item["key"],
+            tag=item["tag"],
             external=(
                 bool_to_str(val)
                 if isinstance(val := item["external"], bool)

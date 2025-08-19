@@ -141,7 +141,7 @@ shpd_config_svc_default = """
       ],
       "networks": [
         {
-          "key": "shpdnet",
+          "tag": "shpdnet",
           "name": "envnet",
           "external": true
         }

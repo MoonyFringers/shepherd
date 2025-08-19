@@ -74,7 +74,7 @@ config_json = """{
       ],
       "networks": [
         {
-          "key": "shpdnet",
+          "tag": "shpdnet",
           "name": "envnet",
           "external": true,
           "driver": null,
@@ -86,7 +86,7 @@ config_json = """{
       ],
       "volumes": [
         {
-          "key": "app_data",
+          "tag": "app_data",
           "external": false,
           "name": null,
           "driver": "local",
@@ -294,7 +294,7 @@ config_json = """{
       ],
       "networks": [
         {
-          "key": "shpdnet",
+          "tag": "shpdnet",
           "name": "envnet",
           "external": true,
           "driver": null,
@@ -306,7 +306,7 @@ config_json = """{
       ],
       "volumes": [
         {
-          "key": "app_data",
+          "tag": "app_data",
           "external": false,
           "name": null,
           "driver": "local",
@@ -425,11 +425,11 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].service_templates[0].tag == "service-default"
     assert env_templates[0].service_templates[0].template == "default"
     assert env_templates[0].networks
-    assert env_templates[0].networks[0].key == "shpdnet"
+    assert env_templates[0].networks[0].tag == "shpdnet"
     assert env_templates[0].networks[0].name == "envnet"
     assert env_templates[0].networks[0].is_external()
     assert env_templates[0].volumes
-    assert env_templates[0].volumes[0].key == "app_data"
+    assert env_templates[0].volumes[0].tag == "app_data"
     assert env_templates[0].volumes[0].driver == "local"
     assert not env_templates[0].volumes[0].is_external()
     assert env_templates[0].volumes[0].driver_opts
@@ -538,11 +538,11 @@ def test_load_config(mocker: MockerFixture):
     assert environment and environment[1] == "PSW=psw"
     ports = services[3].ports
     assert config.envs[0].networks
-    assert config.envs[0].networks[0].key == "shpdnet"
+    assert config.envs[0].networks[0].tag == "shpdnet"
     assert config.envs[0].networks[0].name == "envnet"
     assert config.envs[0].networks[0].is_external()
     assert config.envs[0].volumes
-    assert config.envs[0].volumes[0].key == "app_data"
+    assert config.envs[0].volumes[0].tag == "app_data"
     assert config.envs[0].volumes[0].driver == "local"
     assert not config.envs[0].volumes[0].is_external()
 
