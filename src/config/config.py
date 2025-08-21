@@ -96,11 +96,9 @@ def cfg_asdict(obj: Any) -> dict[str, Any] | list[Any] | Any:
                 result[f.name] = cfg_asdict(val)
         return result
     elif isinstance(obj, list):
-        objListWithTypes: list[Any] = obj
-        return [cfg_asdict(v) for v in objListWithTypes]
+        return [cfg_asdict(v) for v in cast(list[Any], obj)]
     elif isinstance(obj, dict):
-        objMapWithTypes: dict[str, Any] = obj
-        return {k: cfg_asdict(v) for k, v in objMapWithTypes.items()}
+        return {k: cfg_asdict(v) for k, v in cast(dict[str, Any], obj).items()}
     else:
         return obj
 
@@ -172,14 +170,12 @@ class Resolvable:
             object.__setattr__(obj, "_resolved", resolved)
 
         elif isinstance(obj, list):
-            objListWithTypes: list[Any] = obj
-            for item in objListWithTypes:
+            for item in cast(list[Any], obj):
                 self._walk_and_set(resolver, resolved, item)
 
         elif isinstance(obj, dict):
-            objMapWithTypes: dict[str, Any] = obj
-            for item in objMapWithTypes.values():
-                self._walk_and_set(resolver, resolved, item)
+            for _, v in cast(dict[str, Any], obj).items():
+                self._walk_and_set(resolver, resolved, v)
 
     def set_resolved(self):
         self._walk_and_set(getattr(self, "_resolver", None), True)
@@ -241,20 +237,18 @@ class Resolvable:
 
         # resolve dicts
         elif isinstance(val, dict):
-            valWithTypes: dict[str, Any] = val
             resultDict: dict[str, Any] = {}
-            for k, v in valWithTypes.items():
+            for k, v in cast(dict[str, Any], val).items():
                 # keys are assumed to be strings and not placeholders
                 if isinstance(v, str) and VAR_RE.search(v):
                     resultDict[k] = self._resolve_str(v)
                 elif is_dataclass(v) and isinstance(v, Resolvable):
                     resultDict[k] = v
                 elif isinstance(v, list):
-                    vWithTypes: list[Any] = v
                     # resolve strings and dataclasses
                     # inside lists in dict values
                     lst: list[Any] = []
-                    for item in vWithTypes:
+                    for item in cast(list[Any], v):
                         if isinstance(item, str) and VAR_RE.search(item):
                             lst.append(self._resolve_str(item))
                         elif is_dataclass(item) and isinstance(
@@ -295,7 +289,7 @@ class UpstreamCfg(Resolvable):
     type: str
     tag: str
     enabled: str = field(default="false", metadata={"boolify": True})
-    properties: Optional[dict[str, str]] = field(default_factory=dict)
+    properties: Optional[dict[str, str]] = None
 
     def is_enabled(self) -> bool:
         return str_to_bool(self.enabled)
@@ -307,7 +301,7 @@ class NetworkCfg(Resolvable):
     Represents an network configuration.
     """
 
-    key: str
+    tag: str
     name: Optional[str] = None
     external: str = field(default="false", metadata={"boolify": True})
     driver: Optional[str] = None  # bridge / overlay
@@ -336,7 +330,7 @@ class VolumeCfg(Resolvable):
     Represents a volume configuration.
     """
 
-    key: str
+    tag: str
     external: str = field(default="false", metadata={"boolify": True})
     name: Optional[str] = None
     driver: Optional[str] = None
@@ -358,16 +352,16 @@ class ServiceTemplateCfg(Resolvable):
     image: str
     hostname: Optional[str] = None
     container_name: Optional[str] = None
-    labels: Optional[list[str]] = field(default_factory=list)
+    labels: Optional[list[str]] = None
     workdir: Optional[str] = None
-    volumes: Optional[list[str]] = field(default_factory=list)
+    volumes: Optional[list[str]] = None
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     empty_env: Optional[str] = None
-    environment: Optional[list[str]] = field(default_factory=list)
-    ports: Optional[list[str]] = field(default_factory=list)
-    properties: Optional[dict[str, str]] = field(default_factory=dict)
-    networks: Optional[list[str]] = field(default_factory=list)
-    extra_hosts: Optional[list[str]] = field(default_factory=list)
+    environment: Optional[list[str]] = None
+    ports: Optional[list[str]] = None
+    properties: Optional[dict[str, str]] = None
+    networks: Optional[list[str]] = None
+    extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
 
     def is_ingress(self) -> bool:
@@ -399,18 +393,18 @@ class ServiceCfg(Resolvable):
     image: str = ""
     hostname: Optional[str] = None
     container_name: Optional[str] = None
-    labels: Optional[list[str]] = field(default_factory=list)
+    labels: Optional[list[str]] = None
     workdir: Optional[str] = None
-    volumes: Optional[list[str]] = field(default_factory=list)
+    volumes: Optional[list[str]] = None
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     empty_env: Optional[str] = None
-    environment: Optional[list[str]] = field(default_factory=list)
-    ports: Optional[list[str]] = field(default_factory=list)
-    properties: Optional[dict[str, str]] = field(default_factory=dict)
-    networks: Optional[list[str]] = field(default_factory=list)
-    extra_hosts: Optional[list[str]] = field(default_factory=list)
+    environment: Optional[list[str]] = None
+    ports: Optional[list[str]] = None
+    properties: Optional[dict[str, str]] = None
+    networks: Optional[list[str]] = None
+    extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
-    upstreams: Optional[list[UpstreamCfg]] = field(default_factory=list)
+    upstreams: Optional[list[UpstreamCfg]] = None
 
     def is_ingress(self) -> bool:
         return str_to_bool(
@@ -503,7 +497,7 @@ class CertCfg(Resolvable):
     organizational_unit: str
     common_name: str
     email: str
-    subject_alternative_names: list[str] = field(default_factory=list)
+    subject_alternative_names: Optional[list[str]] = None
 
 
 @dataclass
@@ -519,13 +513,9 @@ class Config(Resolvable):
     dns_type: str
     ca: CACfg
     cert: CertCfg
-    env_templates: Optional[list[EnvironmentTemplateCfg]] = field(
-        default_factory=list
-    )
-    service_templates: Optional[list[ServiceTemplateCfg]] = field(
-        default_factory=list
-    )
-    envs: list[EnvironmentCfg] = field(default_factory=list)
+    env_templates: Optional[list[EnvironmentTemplateCfg]] = None
+    service_templates: Optional[list[ServiceTemplateCfg]] = None
+    envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
 
 def parse_config(json_str: str) -> Config:
@@ -615,7 +605,7 @@ def parse_config(json_str: str) -> Config:
 
     def parse_network(item: Any) -> NetworkCfg:
         return NetworkCfg(
-            key=item["key"],
+            tag=item["tag"],
             name=item.get("name", None),
             external=(
                 bool_to_str(val)
@@ -639,7 +629,7 @@ def parse_config(json_str: str) -> Config:
 
     def parse_volume(item: Any) -> VolumeCfg:
         return VolumeCfg(
-            key=item["key"],
+            tag=item["tag"],
             external=(
                 bool_to_str(val)
                 if isinstance(val := item["external"], bool)

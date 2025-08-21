@@ -102,7 +102,7 @@ class DockerComposeEnv(Environment):
                     if net.ipam:
                         net_config["ipam"] = net.ipam
 
-                compose_config["networks"][net.key] = net_config
+                compose_config["networks"][net.tag] = net_config
 
         if self.envCfg.volumes:
             for vol in self.envCfg.volumes:
@@ -120,7 +120,7 @@ class DockerComposeEnv(Environment):
                     if vol.labels:
                         vol_config["labels"] = vol.labels
 
-                compose_config["volumes"][vol.key] = vol_config
+                compose_config["volumes"][vol.tag] = vol_config
 
         return yaml.dump(compose_config, sort_keys=False)
 
