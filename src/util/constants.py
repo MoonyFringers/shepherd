@@ -168,7 +168,7 @@ class Constants:
                 "organizational_unit": "${cert_org_unit}",
                 "common_name": "${cert_cn}",
                 "email": "${cert_email}",
-                "subject_alternative_names": [],
+                "subject_alternative_names": None,
             },
             "envs": [],
         }

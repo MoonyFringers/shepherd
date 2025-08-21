@@ -326,6 +326,281 @@ config_json = """{
   ]
 }"""
 
+
+config_json_with_refs: str = """{
+  "logging": {
+    "file": "${log_file}",
+    "level": "${log_level}",
+    "stdout": "${log_stdout}",
+    "format": "${log_format}"
+  },
+  "shpd_registry": {
+    "ftp_server": "${shpd_registry}",
+    "ftp_user": "${shpd_registry_ftp_usr}",
+    "ftp_psw": "${shpd_registry_ftp_psw}",
+    "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
+    "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
+  },
+  "host_inet_ip": "${host_inet_ip}",
+  "domain": "${domain}",
+  "dns_type": "${dns_type}",
+  "ca": {
+    "country": "${ca_country}",
+    "state": "${ca_state}",
+    "locality": "${ca_locality}",
+    "organization": "${ca_org}",
+    "organizational_unit": "${ca_org_unit}",
+    "common_name": "${ca_cn}",
+    "email": "${ca_email}",
+    "passphrase": "${ca_passphrase}"
+  },
+  "cert": {
+    "country": "${cert_country}",
+    "state": "${cert_state}",
+    "locality": "${cert_locality}",
+    "organization": "${cert_org}",
+    "organizational_unit": "${cert_org_unit}",
+    "common_name": "${cert_cn}",
+    "email": "${cert_email}",
+    "subject_alternative_names": []
+  },
+  "env_templates": [
+    {
+      "tag": "nginx-postgres",
+      "factory": "docker-compose",
+      "service_templates": [
+        {
+          "template": "nginx",
+          "tag": "web"
+        },
+        {
+          "template": "postgres",
+          "tag": "db"
+        }
+      ],
+      "networks": [
+        {
+          "tag": "#{env.tag}",
+          "name": "#{net.tag}",
+          "external": false,
+          "driver": "bridge",
+          "attachable": null,
+          "enable_ipv6": null,
+          "driver_opts": null,
+          "ipam": null
+        }
+      ],
+      "volumes": [
+        {
+          "tag": "nginx",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+          },
+          "labels": {
+            "env": "production"
+          }
+        },
+        {
+          "tag": "postgres",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+          },
+          "labels": {
+            "env": "production"
+          }
+        }
+      ]
+    }
+  ],
+  "service_templates": [
+    {
+      "tag": "nginx",
+      "factory": "docker",
+      "image": "nginx:latest",
+      "hostname": "web-instance",
+      "container_name": "web-instance",
+      "labels": [
+        "com.example.type=web"
+      ],
+      "workdir": "/usr/share/nginx/html",
+      "volumes": [
+        "nginx:/usr/share/nginx/html"
+      ],
+      "ingress": true,
+      "empty_env": "",
+      "environment": [
+        "NGINX_PORT=80"
+      ],
+      "ports": [
+        "8080:80"
+      ],
+      "properties": {},
+      "networks": [
+        "#{env.tag}"
+      ],
+      "extra_hosts": [],
+      "subject_alternative_name": null
+    },
+    {
+      "tag": "postgres",
+      "factory": "docker",
+      "image": "postgres:14",
+      "hostname": "db-instance",
+      "container_name": "db-instance",
+      "labels": [
+        "com.example.type=db"
+      ],
+      "workdir": "/var/lib/postgresql/data",
+      "volumes": [
+        "postgres:/var/lib/postgresql/data"
+      ],
+      "ingress": false,
+      "empty_env": "",
+      "environment": [
+        "POSTGRES_PASSWORD=secret"
+      ],
+      "ports": [
+        "5432:5432"
+      ],
+      "properties": {},
+      "networks": [
+        "#{env.tag}"
+      ],
+      "extra_hosts": [],
+      "subject_alternative_name": null
+    }
+  ],
+  "envs": [
+    {
+      "template": "nginx-postgres",
+      "factory": "docker-compose",
+      "tag": "foo",
+      "services": [
+        {
+          "template": "nginx",
+          "factory": "docker",
+          "tag": "web",
+          "service_class": null,
+          "image": "nginx:latest",
+          "hostname": "web-instance",
+          "container_name": "web-instance",
+          "labels": [
+            "com.example.type=web"
+          ],
+          "workdir": "/usr/share/nginx/html",
+          "volumes": [
+            "nginx:/usr/share/nginx/html"
+          ],
+          "ingress": true,
+          "empty_env": "",
+          "environment": [
+            "NGINX_PORT=80"
+          ],
+          "ports": [
+            "8080:80"
+          ],
+          "properties": {
+            "com.example.type": "#{svc.tag}"
+          },
+          "networks": [
+            "#{env.tag}"
+          ],
+          "extra_hosts": [],
+          "subject_alternative_name": null,
+          "upstreams": []
+        },
+        {
+          "template": "postgres",
+          "factory": "docker",
+          "tag": "db",
+          "service_class": "#{not.exist}",
+          "image": "postgres:14",
+          "hostname": "db-instance",
+          "container_name": "db-instance",
+          "labels": [
+            "com.example.type=db"
+          ],
+          "workdir": "/var/lib/postgresql/data",
+          "volumes": [
+            "postgres:/var/lib/postgresql/data"
+          ],
+          "ingress": false,
+          "empty_env": "",
+          "environment": [
+            "POSTGRES_PASSWORD=secret"
+          ],
+          "ports": [
+            "5432:5432"
+          ],
+          "properties": {
+            "com.example.type": "#{svc.tag}"
+          },
+          "networks": [
+            "#{env.tag}"
+          ],
+          "extra_hosts": [],
+          "subject_alternative_name": null,
+          "upstreams": []
+        }
+      ],
+      "networks": [
+        {
+          "tag": "#{env.tag}",
+          "name": "#{net.tag}",
+          "external": false,
+          "driver": "bridge",
+          "attachable": null,
+          "enable_ipv6": null,
+          "driver_opts": null,
+          "ipam": null
+        }
+      ],
+      "volumes": [
+        {
+          "tag": "nginx",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+          },
+          "labels": {
+            "env": "production"
+          }
+        },
+        {
+          "tag": "postgres",
+          "external": false,
+          "name": null,
+          "driver": "local",
+          "driver_opts": {
+            "type": "none",
+            "o": "bind",
+            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+          },
+          "labels": {
+            "env": "production"
+          }
+        }
+      ],
+      "archived": false,
+      "active": true
+    }
+  ]
+}"""
+
 values = """
   # Oracle (ora) Configuration
   ora_image=ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40
@@ -661,3 +936,82 @@ def test_copy_config(mocker: MockerFixture):
     svc = services[0]
     svc_cloned = cMng.svc_cfg_from_other(svc)
     assert svc_cloned == svc
+
+
+@pytest.mark.cfg
+def test_load_config_with_refs(mocker: MockerFixture):
+    """Test loading config with references"""
+
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_json_with_refs)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    config: Config = cMng.load_config()
+
+    assert config.envs
+    assert config.envs[0].template == "nginx-postgres"
+    assert config.envs[0].factory == Constants.ENV_FACTORY_DEFAULT
+    assert config.envs[0].tag == "foo"
+    assert config.envs[0].services
+    assert config.envs[0].services[0].template == "nginx"
+    assert config.envs[0].services[0].factory == Constants.SVC_FACTORY_DEFAULT
+    assert config.envs[0].services[0].image == "nginx:latest"
+    assert config.envs[0].services[0].networks
+    assert config.envs[0].services[0].networks[0] == "foo"
+    assert config.envs[0].services[0].properties
+    assert config.envs[0].services[0].properties["com.example.type"] == "web"
+    assert config.envs[0].volumes
+    assert config.envs[0].volumes[0].tag == "nginx"
+    assert config.envs[0].volumes[0].driver_opts
+    assert (
+        config.envs[0].volumes[0].driver_opts["device"] == "./volumes/foo/nginx"
+    )
+    assert config.envs[0].volumes[1].tag == "postgres"
+    assert config.envs[0].volumes[1].driver_opts
+    assert (
+        config.envs[0].volumes[1].driver_opts["device"]
+        == "./volumes/foo/postgres"
+    )
+    assert config.envs[0].networks
+    assert config.envs[0].networks[0].tag == "foo"
+    assert config.envs[0].networks[0].name == "foo"
+    assert config.envs[0].services[1].template == "postgres"
+    assert config.envs[0].services[1].service_class == "#{not.exist}"
+    assert config.envs[0].services[1].factory == Constants.SVC_FACTORY_DEFAULT
+    assert config.envs[0].services[1].image == "postgres:14"
+    assert config.envs[0].services[1].networks
+    assert config.envs[0].services[1].networks[0] == "foo"
+    assert config.envs[0].services[1].properties
+    assert config.envs[0].services[1].properties["com.example.type"] == "db"
+
+
+@pytest.mark.cfg
+def test_store_config_with_refs_with_real_files():
+    """Test storing config using real files in ./"""
+
+    try:
+        with (
+            open(".shpd.json", "w") as config_file,
+            open(".shpd.conf", "w") as values_file,
+        ):
+            config_file.write(config_json_with_refs)
+            values_file.write(values)
+
+        cMng = ConfigMng(values_file.name)
+        config: Config = cMng.load_config()
+        cMng.store_config(config)
+
+        with open(".shpd.json", "r") as output_file:
+            content = output_file.read()
+            assert content == config_json_with_refs
+
+    finally:
+        for file_path in (".shpd.json", ".shpd.conf"):
+            if os.path.exists(file_path):
+                os.remove(file_path)
