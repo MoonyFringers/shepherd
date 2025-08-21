@@ -60,6 +60,13 @@ jobs:
           name: shepctl-${{ env.VERSION }}
           path: shepctl-${{ env.VERSION }}.tar.gz
 
+      - name: Create changelog text
+        id: changelog
+        uses: loopwerk/tag-changelog@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          exclude_types: other,doc,chore
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
