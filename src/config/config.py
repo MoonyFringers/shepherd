@@ -19,13 +19,35 @@
 import json
 import os
 import re
-from copy import deepcopy
+from copy import copy, deepcopy
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, Match, Optional, cast
 
+from glom import glom  # type: ignore[import]
+
 from util import Constants, Util
 
+# Regular expression for variables in .shpd.conf or environment variables
+# es: ${VAR_NAME}
 VAR_RE = re.compile(r"\$\{([^}]+)\}")
+
+# Regular expression for references inside .shpd.json
+# es: #{REF_NAME}
+REF_RE = re.compile(r"#\{([^}]+)\}")
+
+# Reference constants
+REF_ENV: str = "env"
+REF_SVC: str = "svc"
+REF_VOL: str = "vol"
+REF_NET: str = "net"
+
+
+REF_MAP: dict[str, str] = {
+    "EnvironmentCfg": REF_ENV,
+    "ServiceCfg": REF_SVC,
+    "VolumeCfg": REF_VOL,
+    "NetworkCfg": REF_NET,
+}
 
 
 def str_to_bool(val: str) -> bool:
@@ -107,17 +129,31 @@ def cfg_asdict(obj: Any) -> dict[str, Any] | list[Any] | Any:
 class Resolvable:
     """
     A mixin class for dataclasses that supports deferred resolution of string
-    placeholders from a mapping or environment variables.
+    placeholders from a mapping, environment variables, or references to other
+    configuration objects.
 
     This class enables any nested dataclass structure to have string fields
-    containing placeholders of the form ``${VAR_NAME}`` that can be dynamically
-    resolved at attribute access time. Resolution can be toggled on or off.
+    containing placeholders of the form ``${VAR_NAME}`` or references of the
+    form ``#{REF_NAME}``, both of which can be dynamically resolved at
+    attribute access time. Resolution can be toggled on or off.
+
+    Supported Placeholders:
+        • Environment / mapping variables:
+          ``${VAR_NAME}`` → replaced from the resolver mapping or, if missing,
+          from process environment variables.
+        • Object references:
+          ``#{REF_TYPE.path.to.attr}`` → replaced by accessing attributes from
+          other `Resolvable` objects within the same configuration tree. The
+          `REF_TYPE` is a symbolic root (e.g., ``env``, ``svc``, ``vol``,
+          ``net``) automatically registered in the reference map.
 
     Features:
         • Recursive traversal of dataclasses, lists, and dicts to propagate a
-          variable mapping and resolution state.
+          variable mapping, reference map, and resolution state.
         • Placeholder substitution using a resolver mapping (dict[str, str])
-          or environment variables as fallback.
+          with environment fallback.
+        • Reference substitution using `REF_MAP` to navigate to related
+          configuration objects.
         • Support for setting/unsetting resolution state without modifying
           field values.
         • Resolution is performed lazily when accessing attributes.
@@ -129,53 +165,71 @@ class Resolvable:
 
         set_resolved():
             Mark the object (and its nested structures) as resolved, causing
-            future string accesses to have placeholders substituted.
+            future string accesses to have placeholders and references
+            substituted.
 
         set_unresolved():
             Mark the object (and its nested structures) as unresolved,
-            returning raw placeholder strings.
+            returning raw placeholder and reference strings.
 
     Example:
         @dataclass
-        class Config(Resolvable):
-            path: str
-            options: list[str]
+        class ServiceCfg(Resolvable):
+            tag: str
+            service_class: str
 
-        cfg = Config(path="${HOME}/data", options=["${USER}"])
-        cfg.set_resolver({"HOME": "/tmp", "USER": "alice"})
+        cfg = ServiceCfg(tag="${HOME}/data", service_class="#{env.tag}")
+        cfg.set_resolver({"HOME": "/tmp"})
+        cfg.set_resolved()
 
-        print(cfg.path)       # -> "/tmp/data"
-        print(cfg.options)    # -> ["alice"]
+        print(cfg.tag)            # -> "/tmp/data"
+        print(cfg.service_class)  # -> "alice"   (resolved from env.tag)
 
     Implementation Notes:
         • The `_walk_and_set` method traverses the structure to propagate the
-          resolver mapping and resolution state.
+          resolver mapping, reference map, and resolution state.
+        • The `_set_refMap` method maintains the mapping of reference roots
+          (env, svc, vol, net) to their corresponding objects.
         • The `__getattribute__` method intercepts attribute access to perform
           lazy resolution only when `_resolved` is True.
         • Lists and dictionaries are deeply resolved, but dictionary keys are
           assumed to be literal strings without placeholders.
     """
 
+    def _set_refMap(
+        self, refMap: dict[str, "Resolvable"] | None
+    ) -> dict[str, "Resolvable"]:
+        lRefMap = copy(refMap) if refMap else dict[str, Resolvable]()
+        object.__setattr__(self, "_refMap", lRefMap)
+        if self.__class__.__name__ in REF_MAP:
+            lRefMap[REF_MAP[self.__class__.__name__]] = self
+        return lRefMap
+
     def _walk_and_set(
-        self, resolver: dict[str, str] | None, resolved: bool, obj: Any = None
+        self,
+        resolver: dict[str, str] | None,
+        resolved: bool,
+        obj: Any = None,
+        refMap: dict[str, "Resolvable"] | None = None,
     ):
         if obj is None:
             obj = self
 
         if is_dataclass(obj) and isinstance(obj, Resolvable):
+            lRefMap = obj._set_refMap(refMap)
             object.__setattr__(obj, "_resolver", resolver or os.environ)
             for f in fields(obj):
                 if fVal := getattr(obj, f.name, None):
-                    self._walk_and_set(resolver, resolved, fVal)
+                    self._walk_and_set(resolver, resolved, fVal, lRefMap)
             object.__setattr__(obj, "_resolved", resolved)
 
         elif isinstance(obj, list):
             for item in cast(list[Any], obj):
-                self._walk_and_set(resolver, resolved, item)
+                self._walk_and_set(resolver, resolved, item, refMap)
 
         elif isinstance(obj, dict):
             for _, v in cast(dict[str, Any], obj).items():
-                self._walk_and_set(resolver, resolved, v)
+                self._walk_and_set(resolver, resolved, v, refMap)
 
     def set_resolved(self):
         self._walk_and_set(getattr(self, "_resolver", None), True)
@@ -191,14 +245,32 @@ class Resolvable:
 
     def _resolve_str(self, s: str) -> str:
         mapping = getattr(self, "_resolver", None) or os.environ
+        refMap = cast(dict[str, Resolvable], getattr(self, "_refMap", {}))
 
-        def repl(match: Match[str]) -> str:
+        def var_repl(match: Match[str]) -> str:
             key = match.group(1)
             if key in mapping:
                 return str(mapping[key])
             return os.environ.get(key, match.group(0))
 
-        return VAR_RE.sub(repl, s)
+        def ref_repl(match: Match[str]) -> str:
+            expr = match.group(1)  # e.g. "env.tag"
+            parts = expr.split(".", 1)
+            root = parts[0]
+            if root not in refMap:
+                return match.group(0)  # return untouched
+            target = refMap[root]
+            try:
+                return cast(
+                    str, glom(target, parts[1] if len(parts) > 1 else "")
+                )
+            except Exception:
+                return match.group(0)
+
+        # first resolve ${...}, then #{...}
+        s = VAR_RE.sub(var_repl, s)
+        s = REF_RE.sub(ref_repl, s)
+        return s
 
     def __getattribute__(self, name: str) -> Any:
         if (
@@ -216,7 +288,7 @@ class Resolvable:
         val = object.__getattribute__(self, name)
 
         # resolve plain strings with placeholders
-        if isinstance(val, str) and VAR_RE.search(val):
+        if isinstance(val, str):
             return self._resolve_str(val)
 
         # pass resolver to nested dataclasses
@@ -227,7 +299,7 @@ class Resolvable:
         elif isinstance(val, list):
             resultList: list[Any] = []
             for v in cast(list[Any], val):
-                if isinstance(v, str) and VAR_RE.search(v):
+                if isinstance(v, str):
                     resultList.append(self._resolve_str(v))
                 elif is_dataclass(v) and isinstance(v, Resolvable):
                     resultList.append(v)
@@ -240,7 +312,7 @@ class Resolvable:
             resultDict: dict[str, Any] = {}
             for k, v in cast(dict[str, Any], val).items():
                 # keys are assumed to be strings and not placeholders
-                if isinstance(v, str) and VAR_RE.search(v):
+                if isinstance(v, str):
                     resultDict[k] = self._resolve_str(v)
                 elif is_dataclass(v) and isinstance(v, Resolvable):
                     resultDict[k] = v
@@ -249,7 +321,7 @@ class Resolvable:
                     # inside lists in dict values
                     lst: list[Any] = []
                     for item in cast(list[Any], v):
-                        if isinstance(item, str) and VAR_RE.search(item):
+                        if isinstance(item, str):
                             lst.append(self._resolve_str(item))
                         elif is_dataclass(item) and isinstance(
                             item, Resolvable
