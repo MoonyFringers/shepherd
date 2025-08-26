@@ -536,6 +536,12 @@ class StagingAreaCfg(Resolvable):
     env_volumes_path: str
     env_images_path: str
 
+    def get_env_volumes_path(self) -> str:
+        return os.path.expanduser(self.env_volumes_path)
+
+    def get_env_images_path(self) -> str:
+        return os.path.expanduser(self.env_images_path)
+
 
 @dataclass
 class ShpdRegistryCfg(Resolvable):
@@ -590,6 +596,7 @@ class Config(Resolvable):
 
     logging: LoggingCfg
     shpd_registry: ShpdRegistryCfg
+    envs_path: str
     host_inet_ip: str
     domain: str
     dns_type: str
@@ -599,6 +606,9 @@ class Config(Resolvable):
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
+
+    def get_envs_path(self) -> str:
+        return os.path.expanduser(self.envs_path)
 
 
 def parse_config(json_str: str) -> Config:
@@ -810,6 +820,7 @@ def parse_config(json_str: str) -> Config:
             for service_template in data.get("service_templates", [])
         ],
         shpd_registry=parse_shpd_registry(data["shpd_registry"]),
+        envs_path=data["envs_path"],
         host_inet_ip=data["host_inet_ip"],
         domain=data["domain"],
         dns_type=data["dns_type"],
@@ -851,8 +862,9 @@ class ConfigMng:
 
     def ensure_dirs(self):
         dirs = {
-            "ENV_VOLS": self.config.staging_area.env_volumes_path,
-            "ENV_IMGS": self.config.staging_area.env_images_path,
+            "ENVS": self.config.get_envs_path(),
+            "ENV_VOLS": self.config.staging_area.get_env_volumes_path(),
+            "ENV_IMGS": self.config.staging_area.get_env_images_path(),
         }
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)

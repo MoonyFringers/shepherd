@@ -73,6 +73,7 @@ values = """
   cert_subject_alternative_names=
 
   shpd_path=~/shpd
+  envs_path=${shpd_path}/envs
   shpd_volumes_dir=${shpd_path}/volumes
   env_volumes_path=${shpd_path}/volumes
   env_images_path=${shpd_path}/images
@@ -105,6 +106,7 @@ shpd_config = """
     "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
+  "envs_path": "${envs_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -447,9 +449,7 @@ def test_env_init(
     sm = ShepherdMng()
     assert sm.configMng.exists_environment("test-init-1")
 
-    expected_dirs = [
-        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-init-1")
-    ]
+    expected_dirs = [os.path.join(sm.configMng.config.envs_path, "test-init-1")]
 
     for directory in expected_dirs:
         assert os.path.isdir(
@@ -483,8 +483,8 @@ def test_env_clone(
     assert sm.configMng.exists_environment("test-clone-2")
 
     expected_dirs = [
-        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-clone-1"),
-        os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-clone-2"),
+        os.path.join(sm.configMng.config.envs_path, "test-clone-1"),
+        os.path.join(sm.configMng.config.envs_path, "test-clone-2"),
     ]
 
     for directory in expected_dirs:
@@ -518,12 +518,8 @@ def test_env_rename(
     assert not sm.configMng.exists_environment("test-rename-1")
     assert sm.configMng.exists_environment("test-rename-2")
 
-    renamed_dir = os.path.join(
-        sm.configMng.constants.SHPD_ENVS_DIR, "test-rename-2"
-    )
-    old_dir = os.path.join(
-        sm.configMng.constants.SHPD_ENVS_DIR, "test-rename-1"
-    )
+    renamed_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-2")
+    old_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-1")
 
     assert os.path.isdir(
         renamed_dir
@@ -617,7 +613,7 @@ def test_env_delete_yes(
     env = sm.configMng.get_environment("test-1")
     assert env is None
 
-    env_dir = os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-1")
+    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
 
     assert not os.path.exists(
         env_dir
@@ -648,7 +644,7 @@ def test_env_delete_no(
     env = sm.configMng.get_environment("test-1")
     assert env is not None
 
-    env_dir = os.path.join(sm.configMng.constants.SHPD_ENVS_DIR, "test-1")
+    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
 
     assert os.path.exists(
         env_dir

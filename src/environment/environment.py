@@ -89,12 +89,12 @@ class Environment(ABC):
     def get_dir(self) -> str:
         """Return the directory of the environment."""
         return os.path.join(
-            self.configMng.constants.SHPD_ENVS_DIR, self.envCfg.tag
+            self.configMng.config.get_envs_path(), self.envCfg.tag
         )
 
     def get_dir_for_tag(self, env_tag: str) -> str:
         """Return the directory for the environment with a given tag."""
-        return os.path.join(self.configMng.constants.SHPD_ENVS_DIR, env_tag)
+        return os.path.join(self.configMng.config.get_envs_path(), env_tag)
 
     def realize(self):
         """Realize the environment."""

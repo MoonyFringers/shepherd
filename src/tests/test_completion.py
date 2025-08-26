@@ -64,6 +64,7 @@ values = """
   cert_subject_alternative_names=
 
   shpd_path=~/shpd
+  envs_path=${shpd_path}/envs
   shpd_volumes_dir=${shpd_path}/volumes
   env_volumes_path=${shpd_path}/volumes
   env_images_path=${shpd_path}/images
@@ -96,6 +97,7 @@ shpd_config = """
     "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
+  "envs_path": "${envs_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",

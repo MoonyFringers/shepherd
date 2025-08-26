@@ -35,10 +35,6 @@ class Constants:
         return os.path.join(self.SHPD_PATH, ".shpd.json")
 
     @property
-    def SHPD_ENVS_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, "envs")
-
-    @property
     def SHPD_CERTS_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, ".certs")
 
@@ -143,6 +139,7 @@ class Constants:
                 "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
                 "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}",
             },
+            "envs_path": "${envs_path}",
             "host_inet_ip": "${host_inet_ip}",
             "domain": "${domain}",
             "dns_type": "${dns_type}",
