@@ -72,61 +72,10 @@ values = """
   cert_email=lf@sslip.io
   cert_subject_alternative_names=
 
-  shpd_dir=~/shpd
-  shpd_volumes_dir=${shpd_dir}/volumes
-
-  # Database Default Configuration
-  db_sys_usr=sys
-  db_sys_psw=sys
-  db_usr=docker
-  db_psw=docker
-
-  # Logging Configuration
-  log_file=~/shpd/shepctl.log
-  log_level=WARNING
-  log_stdout=false
-  log_format=%(asctime)s - %(levelname)s - %(message)s
-  """
-
-values = """
-  # PostgreSQL (pg) Configuration
-  pg_image=ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
-  pg_empty_env=fresh-pg-1735
-  pg_listener_port=5432
-
-  # SHPD Registry Configuration
-  shpd_registry=ftp.example.com
-  shpd_registry_ftp_usr=
-  shpd_registry_ftp_psw=
-  shpd_registry_ftp_shpd_path=shpd
-  shpd_registry_ftp_imgs_path=imgs
-
-  # Host and Domain Configuration
-  host_inet_ip=127.0.0.1
-  domain=sslip.io
-  dns_type=autoresolving
-
-  # Certificate Authority (CA) Configuration
-  ca_country=IT
-  ca_state=MS
-  ca_locality=Carrara
-  ca_org=MoonyFringe
-  ca_org_unit=Development
-  ca_cn=sslip.io
-  ca_email=lf@sslip.io
-  ca_passphrase=test
-
-  # Certificate Configuration
-  cert_country=IT
-  cert_state=MS
-  cert_locality=Carrara
-  cert_org=MoonyFringe
-  cert_org_unit=Development
-  cert_cn=sslip.io
-  cert_email=lf@sslip.io
-  cert_subject_alternative_names=
-
-  shpd_dir=~/shpd
+  shpd_path=~/shpd
+  shpd_volumes_dir=${shpd_path}/volumes
+  env_volumes_path=${shpd_path}/volumes
+  env_images_path=${shpd_path}/images
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -178,6 +127,10 @@ shpd_config = """
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -737,9 +690,9 @@ def test_env_render_compose_env_ext_net(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     result = runner.invoke(cli, ["env", "render", "test-1"])
@@ -807,9 +760,9 @@ def test_env_render_compose_env_int_net(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     result = runner.invoke(cli, ["env", "render", "test-2"])

@@ -63,8 +63,10 @@ values = """
   cert_email=lf@sslip.io
   cert_subject_alternative_names=
 
-  shpd_dir=~/shpd
-  shpd_volumes_dir=${shpd_dir}/volumes
+  shpd_path=~/shpd
+  shpd_volumes_dir=${shpd_path}/volumes
+  env_volumes_path=${shpd_path}/volumes
+  env_images_path=${shpd_path}/images
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -116,6 +118,10 @@ shpd_config_svc_default = """
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -250,6 +256,10 @@ shpd_config_pg_template = """
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -553,9 +563,9 @@ def test_svc_add_one_with_template(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_pg_template)
 
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
@@ -597,9 +607,9 @@ def test_svc_render_compose_service(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "render", "test"])

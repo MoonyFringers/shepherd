@@ -528,6 +528,16 @@ class EnvironmentCfg(Resolvable):
 
 
 @dataclass
+class StagingAreaCfg(Resolvable):
+    """
+    Represents the configuration for the staging area.
+    """
+
+    env_volumes_path: str
+    env_images_path: str
+
+
+@dataclass
 class ShpdRegistryCfg(Resolvable):
     """
     Represents the configuration for the shepherd registry.
@@ -585,6 +595,7 @@ class Config(Resolvable):
     dns_type: str
     ca: CACfg
     cert: CertCfg
+    staging_area: StagingAreaCfg
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
@@ -732,6 +743,12 @@ def parse_config(json_str: str) -> Config:
             ],
         )
 
+    def parse_staging_area(item: Any) -> StagingAreaCfg:
+        return StagingAreaCfg(
+            env_volumes_path=item["env_volumes_path"],
+            env_images_path=item["env_images_path"],
+        )
+
     def parse_environment(item: Any) -> EnvironmentCfg:
         return EnvironmentCfg(
             template=item["template"],
@@ -799,6 +816,7 @@ def parse_config(json_str: str) -> Config:
         ca=parse_ca_config(data["ca"]),
         logging=parse_logging(data["logging"]),
         cert=parse_cert_config(data["cert"]),
+        staging_area=parse_staging_area(data["staging_area"]),
         envs=[parse_environment(env) for env in data["envs"]],
     )
 
@@ -821,15 +839,27 @@ class ConfigMng:
         """
         Initializes the configuration manager.
 
-        :param shpd_dir: The base directory where configuration files
+        :param shpd_path: The base directory where configuration files
         are stored.
         """
         self.file_values_path = os.path.expanduser(file_values_path)
         self.user_values = self.load_user_values()
         self.constants = Constants(
             SHPD_CONFIG_VALUES_FILE=self.file_values_path,
-            SHPD_DIR=os.path.expanduser(self.user_values["shpd_dir"]),
+            SHPD_PATH=os.path.expanduser(self.user_values["shpd_path"]),
         )
+
+    def ensure_dirs(self):
+        dirs = {
+            "ENV_VOLS": self.config.staging_area.env_volumes_path,
+            "ENV_IMGS": self.config.staging_area.env_images_path,
+        }
+        for desc, dir_path in dirs.items():
+            resolved_path = os.path.realpath(dir_path)
+            if not os.path.exists(resolved_path) or not os.path.isdir(
+                resolved_path
+            ):
+                Util.create_dir(resolved_path, desc)
 
     def expand_value(self, value: str, variables: Dict[str, str]) -> str:
         """

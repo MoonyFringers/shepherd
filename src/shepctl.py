@@ -35,7 +35,7 @@ class ShepherdMng:
     def __init__(self, cli_flags: dict[str, bool] = {}):
         self.configMng = ConfigMng("~/.shpd.conf")
         self.cli_flags = cli_flags
-        Util.ensure_dirs(self.configMng.constants)
+        Util.ensure_shpd_dirs(self.configMng.constants)
         Util.ensure_config_file(self.configMng.constants)
         self.configMng.load()
         setup_logging(
@@ -44,6 +44,7 @@ class ShepherdMng:
             self.configMng.config.logging.level,
             self.configMng.config.logging.is_stdout(),
         )
+        self.configMng.ensure_dirs()
         logging.debug(
             "### shepctl version:%s started",
             self.configMng.constants.APP_VERSION,

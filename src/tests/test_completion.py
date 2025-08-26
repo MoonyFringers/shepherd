@@ -63,8 +63,10 @@ values = """
   cert_email=lf@sslip.io
   cert_subject_alternative_names=
 
-  shpd_dir=~/shpd
-  shpd_volumes_dir=${shpd_dir}/volumes
+  shpd_path=~/shpd
+  shpd_volumes_dir=${shpd_path}/volumes
+  env_volumes_path=${shpd_path}/volumes
+  env_images_path=${shpd_path}/images
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -116,6 +118,10 @@ shpd_config = """
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates":[
     {
@@ -400,9 +406,9 @@ def test_completion_env_init(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -424,9 +430,9 @@ def test_completion_env_clone(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -446,9 +452,9 @@ def test_completion_env_rename(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -468,9 +474,9 @@ def test_completion_env_checkout(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -492,9 +498,9 @@ def test_completion_env_delete(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -517,9 +523,9 @@ def test_completion_env_list(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -539,9 +545,9 @@ def test_completion_env_up(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -561,9 +567,9 @@ def test_completion_env_halt(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -583,9 +589,9 @@ def test_completion_env_reload(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -605,9 +611,9 @@ def test_completion_env_render(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -630,9 +636,9 @@ def test_completion_env_status(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -652,9 +658,9 @@ def test_completion_env_add_1(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -676,9 +682,9 @@ def test_completion_env_add_2(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -698,9 +704,9 @@ def test_completion_env_add_3(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -720,9 +726,9 @@ def test_completion_env_add_4(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -764,9 +770,9 @@ def test_completion_db_sql_shell(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -806,9 +812,9 @@ def test_completion_svc_build(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -828,9 +834,9 @@ def test_completion_svc_up(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -850,9 +856,9 @@ def test_completion_svc_halt(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -872,9 +878,9 @@ def test_completion_svc_reload(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -894,9 +900,9 @@ def test_completion_svc_render(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -916,9 +922,9 @@ def test_completion_svc_stdout(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -938,9 +944,9 @@ def test_completion_svc_shell(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()

@@ -28,31 +28,27 @@ class Constants:
     # Configuration and environment variables
 
     SHPD_CONFIG_VALUES_FILE: str
-    SHPD_DIR: str
+    SHPD_PATH: str
 
     @property
     def SHPD_CONFIG_FILE(self) -> str:
-        return os.path.join(self.SHPD_DIR, ".shpd.json")
+        return os.path.join(self.SHPD_PATH, ".shpd.json")
 
     @property
     def SHPD_ENVS_DIR(self) -> str:
-        return os.path.join(self.SHPD_DIR, "envs")
-
-    @property
-    def SHPD_ENV_IMGS_DIR(self) -> str:
-        return os.path.join(self.SHPD_DIR, ".env_imgs")
+        return os.path.join(self.SHPD_PATH, "envs")
 
     @property
     def SHPD_CERTS_DIR(self) -> str:
-        return os.path.join(self.SHPD_DIR, ".certs")
+        return os.path.join(self.SHPD_PATH, ".certs")
 
     @property
     def SHPD_SSH_DIR(self) -> str:
-        return os.path.join(self.SHPD_DIR, ".ssh")
+        return os.path.join(self.SHPD_PATH, ".ssh")
 
     @property
     def SHPD_SSHD_DIR(self) -> str:
-        return os.path.join(self.SHPD_DIR, ".sshd")
+        return os.path.join(self.SHPD_PATH, ".sshd")
 
     # Application metadata
 
@@ -169,6 +165,10 @@ class Constants:
                 "common_name": "${cert_cn}",
                 "email": "${cert_email}",
                 "subject_alternative_names": None,
+            },
+            "staging_area": {
+                "env_volumes_path": "${env_volumes_path}",
+                "env_images_path": "${env_images_path}",
             },
             "envs": [],
         }

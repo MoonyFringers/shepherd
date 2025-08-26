@@ -75,8 +75,10 @@ values = """
   cert_email=lf@sslip.io
   cert_subject_alternative_names=
 
-  shpd_dir=.
-  shpd_volumes_dir=${shpd_dir}/volumes
+  shpd_path=.
+  shpd_volumes_dir=${shpd_path}/volumes
+  env_volumes_path=${shpd_path}/volumes
+  env_images_path=${shpd_path}/images
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -128,6 +130,10 @@ shpd_config_svc_default = """
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -268,10 +274,11 @@ def test_shepherdmng_creates_dirs(
 
     expected_dirs = [
         sm.configMng.constants.SHPD_ENVS_DIR,
-        sm.configMng.constants.SHPD_ENV_IMGS_DIR,
         sm.configMng.constants.SHPD_CERTS_DIR,
         sm.configMng.constants.SHPD_SSH_DIR,
         sm.configMng.constants.SHPD_SSHD_DIR,
+        sm.configMng.config.staging_area.env_volumes_path,
+        sm.configMng.config.staging_area.env_images_path,
     ]
 
     for directory in expected_dirs:
@@ -663,9 +670,9 @@ def test_cli_srv_up(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "up", "service_tag"])
@@ -686,9 +693,9 @@ def test_cli_srv_halt(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "halt", "service_tag"])
@@ -709,9 +716,9 @@ def test_cli_srv_reload(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "reload", "service_tag"])
@@ -732,9 +739,9 @@ def test_cli_srv_stdout(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "stdout", "service_tag"])
@@ -755,9 +762,9 @@ def test_cli_srv_shell(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "shell", "service_tag"])
@@ -781,9 +788,9 @@ def test_cli_db_sql_shell(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["db", "sql-shell", "db-tag"])
@@ -883,9 +890,9 @@ def test_cli_env_up(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["env", "up"])
@@ -906,9 +913,9 @@ def test_cli_env_halt(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["env", "halt"])
@@ -929,9 +936,9 @@ def test_cli_env_reload(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["env", "reload"])
@@ -952,9 +959,9 @@ def test_cli_env_status(
         temp_home, expanduser_side_effects
     )
     mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_dir = temp_home / "shpd"
-    shpd_dir.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_dir / ".shpd.json"
+    shpd_path = temp_home / "shpd"
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["env", "status"])
