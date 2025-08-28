@@ -21,6 +21,7 @@ from unittest.mock import mock_open
 
 import pytest
 from pytest_mock import MockerFixture
+from test_util import values
 
 from config import Config, ConfigMng
 from util import Constants
@@ -39,6 +40,7 @@ config_json = """{
     "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
+  "envs_path": "${envs_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -61,6 +63,10 @@ config_json = """{
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -341,6 +347,7 @@ config_json_with_refs: str = """{
     "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
+  "envs_path": "${envs_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -363,6 +370,10 @@ config_json_with_refs: str = """{
     "common_name": "${cert_cn}",
     "email": "${cert_email}",
     "subject_alternative_names": []
+  },
+  "staging_area": {
+    "env_volumes_path": "${env_volumes_path}",
+    "env_images_path": "${env_images_path}"
   },
   "env_templates": [
     {
@@ -601,68 +612,6 @@ config_json_with_refs: str = """{
   ]
 }"""
 
-values = """
-  # Oracle (ora) Configuration
-  ora_image=ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40
-  ora_empty_env=fresh-ora-19300
-  ora_pump_dir=PUMP_DIR
-  ora_root_db_name=ORCLCDB
-  ora_plug_db_name=ORCLPDB1
-  ora_listener_port=1521
-
-  # PostgreSQL (pg) Configuration
-  pg_image=ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
-  pg_empty_env=fresh-pg-1735
-  pg_listener_port=5432
-
-  # SHPD Registry Configuration
-  shpd_registry=ftp.example.com
-  shpd_registry_ftp_usr=
-  shpd_registry_ftp_psw=
-  shpd_registry_ftp_shpd_path=shpd
-  shpd_registry_ftp_imgs_path=imgs
-
-  # Host and Domain Configuration
-  host_inet_ip=127.0.0.1
-  domain=sslip.io
-  dns_type=autoresolving
-
-  # Certificate Authority (CA) Configuration
-  ca_country=IT
-  ca_state=MS
-  ca_locality=Carrara
-  ca_org=MoonyFringe
-  ca_org_unit=Development
-  ca_cn=sslip.io
-  ca_email=lf@sslip.io
-  ca_passphrase=test
-
-  # Certificate Configuration
-  cert_country=IT
-  cert_state=MS
-  cert_locality=Carrara
-  cert_org=MoonyFringe
-  cert_org_unit=Development
-  cert_cn=sslip.io
-  cert_email=lf@sslip.io
-  cert_subject_alternative_names=
-
-  shpd_dir=.
-  shpd_volumes_dir=${shpd_dir}/volumes
-
-  # Database Default Configuration
-  db_sys_usr=sys
-  db_sys_psw=sys
-  db_usr=docker
-  db_psw=docker
-
-  # Logging Configuration
-  log_file=shepctl.log
-  log_level=WARNING
-  log_stdout=false
-  log_format=%(asctime)s - %(levelname)s - %(message)s
-  """
-
 
 @pytest.mark.cfg
 def test_load_config(mocker: MockerFixture):
@@ -841,6 +790,8 @@ def test_load_config(mocker: MockerFixture):
     assert config.cert.common_name == "sslip.io"
     assert config.cert.email == "lf@sslip.io"
     assert config.cert.subject_alternative_names == []
+    assert config.staging_area.env_volumes_path == "./volumes"
+    assert config.staging_area.env_images_path == "./images"
     assert config.envs[0].archived is False
     assert config.envs[0].active is False
 

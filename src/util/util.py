@@ -109,10 +109,8 @@ class Util:
         Util.console.print(f"{message}", highlight=False)
 
     @staticmethod
-    def ensure_dirs(constants: Constants):
+    def ensure_shpd_dirs(constants: Constants):
         dirs = {
-            "SHPD_ENVS_DIR": constants.SHPD_ENVS_DIR,
-            "SHPD_ENV_IMGS_DIR": constants.SHPD_ENV_IMGS_DIR,
             "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
             "SHPD_SSH_DIR": constants.SHPD_SSH_DIR,
             "SHPD_SSHD_DIR": constants.SHPD_SSHD_DIR,
