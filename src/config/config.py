@@ -347,6 +347,25 @@ class Resolvable:
 
 
 @dataclass
+class EntityStatus(Resolvable):
+    """
+    Represents the status of an entity.
+
+    - `active`: Whether this entity should be considered in
+      start/stop commands.
+      (Note: this is *not* the runtime state, which is queried dynamically.)
+    - `archived`: Marks the entity as archived (e.g., not used anymore).
+    - `triggered_config`: The rendered configuration for the target engine
+      (e.g., Docker Compose). This field is populated on `start` and
+      cleared on `stop`.
+    """
+
+    active: bool = False
+    archived: bool = False
+    triggered_config: Optional[str] = None
+
+
+@dataclass
 class LoggingCfg(Resolvable):
     """
     Represents the logging configuration.
@@ -486,6 +505,9 @@ class ServiceCfg(Resolvable):
     extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
     upstreams: Optional[list[UpstreamCfg]] = None
+    status: EntityStatus = field(
+        default_factory=lambda: EntityStatus(active=True)
+    )
 
     def is_ingress(self) -> bool:
         return str_to_bool(
@@ -518,8 +540,7 @@ class EnvironmentCfg(Resolvable):
     services: Optional[list[ServiceCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
-    archived: bool
-    active: bool
+    status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -619,6 +640,13 @@ def parse_config(json_str: str) -> Config:
 
     data = json.loads(json_str)
 
+    def parse_status(item: Any) -> EntityStatus:
+        return EntityStatus(
+            active=item["active"],
+            archived=item["archived"],
+            triggered_config=item.get("triggered_config"),
+        )
+
     def parse_logging(item: Any) -> LoggingCfg:
         return LoggingCfg(
             file=item["file"],
@@ -695,6 +723,7 @@ def parse_config(json_str: str) -> Config:
                 parse_upstream(upstream)
                 for upstream in item.get("upstreams", [])
             ],
+            status=parse_status(item["status"]),
         )
 
     def parse_network(item: Any) -> NetworkCfg:
@@ -774,8 +803,7 @@ def parse_config(json_str: str) -> Config:
             volumes=[
                 parse_volume(volume) for volume in item.get("volumes", [])
             ],
-            archived=item["archived"],
-            active=item["active"],
+            status=parse_status(item["status"]),
         )
 
     def parse_shpd_registry(item: Any) -> ShpdRegistryCfg:
@@ -1140,7 +1168,7 @@ class ConfigMng:
         :return: The active environment configuration if found, else None.
         """
         for env in self.config.envs:
-            if env.active:
+            if env.status.active:
                 return env
         return None
 
@@ -1152,9 +1180,9 @@ class ConfigMng:
         """
         for env in self.config.envs:
             if env.tag == envTag:
-                env.active = True
+                env.status.active = True
             else:
-                env.active = False
+                env.status.active = False
         self.store()
 
     def get_resource_classes(
@@ -1221,8 +1249,6 @@ class ConfigMng:
             services=services,
             networks=env_tmpl_cfg.networks,
             volumes=env_tmpl_cfg.volumes,
-            archived=False,
-            active=False,
         )
 
     def env_cfg_from_other(self, other: EnvironmentCfg):
@@ -1236,8 +1262,6 @@ class ConfigMng:
             services=deepcopy(other.services),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
-            archived=other.archived,
-            active=other.active,
         )
 
     def svc_tmpl_cfg_from_other(self, other: ServiceTemplateCfg):
@@ -1318,6 +1342,7 @@ class ConfigMng:
             extra_hosts=deepcopy(other.extra_hosts),
             subject_alternative_name=other.subject_alternative_name,
             upstreams=deepcopy(other.upstreams),
+            status=deepcopy(other.status),
         )
 
     def svc_cfg_from_service_template(

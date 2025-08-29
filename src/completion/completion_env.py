@@ -121,7 +121,7 @@ class CompletionEnvMng(AbstractCompletionMng):
             return [
                 env.tag
                 for env in self.configMng.get_environments()
-                if not env.active
+                if not env.status.active
             ]
         return []
 
