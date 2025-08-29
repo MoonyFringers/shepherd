@@ -65,9 +65,9 @@ values = """
 
   shpd_path=.
   envs_path=${shpd_path}/envs
-  shpd_volumes_dir=${shpd_path}/volumes
-  env_volumes_path=${shpd_path}/volumes
-  env_images_path=${shpd_path}/images
+  volumes_path=${shpd_path}/volumes
+  staging_area_volumes_path=${shpd_path}/sa_volumes
+  staging_area_images_path=${shpd_path}/sa_images
 
   # Database Default Configuration
   db_sys_usr=sys
@@ -104,6 +104,7 @@ def get_default_expanduser_side_effect(
         temp_home / shpd / "shepctl.log",
         temp_home / shpd / "envs",
         temp_home / shpd / "volumes",
-        temp_home / shpd / "images",
+        temp_home / shpd / "volumes_sa",
+        temp_home / shpd / "images_sa",
     ]
     return cycle

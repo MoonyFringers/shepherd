@@ -533,14 +533,14 @@ class StagingAreaCfg(Resolvable):
     Represents the configuration for the staging area.
     """
 
-    env_volumes_path: str
-    env_images_path: str
+    volumes_path: str
+    images_path: str
 
-    def get_env_volumes_path(self) -> str:
-        return os.path.expanduser(self.env_volumes_path)
+    def get_volumes_path(self) -> str:
+        return os.path.expanduser(self.volumes_path)
 
-    def get_env_images_path(self) -> str:
-        return os.path.expanduser(self.env_images_path)
+    def get_images_path(self) -> str:
+        return os.path.expanduser(self.images_path)
 
 
 @dataclass
@@ -597,6 +597,7 @@ class Config(Resolvable):
     logging: LoggingCfg
     shpd_registry: ShpdRegistryCfg
     envs_path: str
+    volumes_path: str
     host_inet_ip: str
     domain: str
     dns_type: str
@@ -609,6 +610,9 @@ class Config(Resolvable):
 
     def get_envs_path(self) -> str:
         return os.path.expanduser(self.envs_path)
+
+    def get_volumes_path(self) -> str:
+        return os.path.expanduser(self.volumes_path)
 
 
 def parse_config(json_str: str) -> Config:
@@ -755,8 +759,8 @@ def parse_config(json_str: str) -> Config:
 
     def parse_staging_area(item: Any) -> StagingAreaCfg:
         return StagingAreaCfg(
-            env_volumes_path=item["env_volumes_path"],
-            env_images_path=item["env_images_path"],
+            volumes_path=item["volumes_path"],
+            images_path=item["images_path"],
         )
 
     def parse_environment(item: Any) -> EnvironmentCfg:
@@ -821,6 +825,7 @@ def parse_config(json_str: str) -> Config:
         ],
         shpd_registry=parse_shpd_registry(data["shpd_registry"]),
         envs_path=data["envs_path"],
+        volumes_path=data["volumes_path"],
         host_inet_ip=data["host_inet_ip"],
         domain=data["domain"],
         dns_type=data["dns_type"],
@@ -863,8 +868,9 @@ class ConfigMng:
     def ensure_dirs(self):
         dirs = {
             "ENVS": self.config.get_envs_path(),
-            "ENV_VOLS": self.config.staging_area.get_env_volumes_path(),
-            "ENV_IMGS": self.config.staging_area.get_env_images_path(),
+            "VOLUMES": self.config.get_volumes_path(),
+            "VOLUMES_SA": self.config.staging_area.get_volumes_path(),
+            "IMAGES_SA": self.config.staging_area.get_images_path(),
         }
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)

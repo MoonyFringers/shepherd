@@ -41,6 +41,7 @@ config_json = """{
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -65,8 +66,8 @@ config_json = """{
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -99,7 +100,7 @@ config_json = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/srv/data"
+            "device": "${volumes_path}/srv/data"
           },
           "labels": {
             "env": "production"
@@ -348,6 +349,7 @@ config_json_with_refs: str = """{
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -372,8 +374,8 @@ config_json_with_refs: str = """{
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -410,7 +412,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -424,7 +426,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -585,7 +587,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -599,7 +601,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -771,6 +773,8 @@ def test_load_config(mocker: MockerFixture):
     assert not config.envs[0].volumes[0].is_external()
 
     assert ports and ports[0] == "3000:3000"
+    assert config.envs_path == "./envs"
+    assert config.volumes_path == "./volumes"
     assert config.host_inet_ip == "127.0.0.1"
     assert config.domain == "sslip.io"
     assert config.dns_type == "autoresolving"
@@ -790,8 +794,8 @@ def test_load_config(mocker: MockerFixture):
     assert config.cert.common_name == "sslip.io"
     assert config.cert.email == "lf@sslip.io"
     assert config.cert.subject_alternative_names == []
-    assert config.staging_area.env_volumes_path == "./volumes"
-    assert config.staging_area.env_images_path == "./images"
+    assert config.staging_area.volumes_path == "./sa_volumes"
+    assert config.staging_area.images_path == "./sa_images"
     assert config.envs[0].archived is False
     assert config.envs[0].active is False
 
