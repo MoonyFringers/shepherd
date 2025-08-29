@@ -274,6 +274,13 @@ class Resolvable:
         s = REF_RE.sub(ref_repl, s)
         return s
 
+    def _expand_path(self, name: str, value: str) -> str:
+        """Expand paths if field name ends with '_path'."""
+        value = self._resolve_str(value)
+        if name.endswith("_path"):
+            return os.path.expanduser(value)
+        return value
+
     def __getattribute__(self, name: str) -> Any:
         if (
             name.startswith("_")
@@ -291,7 +298,7 @@ class Resolvable:
 
         # resolve plain strings with placeholders
         if isinstance(val, str):
-            return self._resolve_str(val)
+            return self._expand_path(name, val)
 
         # pass resolver to nested dataclasses
         elif is_dataclass(val) and isinstance(val, Resolvable):
@@ -538,12 +545,6 @@ class StagingAreaCfg(Resolvable):
     volumes_path: str
     images_path: str
 
-    def get_volumes_path(self) -> str:
-        return os.path.expanduser(self.volumes_path)
-
-    def get_images_path(self) -> str:
-        return os.path.expanduser(self.images_path)
-
 
 @dataclass
 class ShpdRegistryCfg(Resolvable):
@@ -609,12 +610,6 @@ class Config(Resolvable):
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
-
-    def get_envs_path(self) -> str:
-        return os.path.expanduser(self.envs_path)
-
-    def get_volumes_path(self) -> str:
-        return os.path.expanduser(self.volumes_path)
 
 
 def parse_config(json_str: str) -> Config:
@@ -869,10 +864,10 @@ class ConfigMng:
 
     def ensure_dirs(self):
         dirs = {
-            "ENVS": self.config.get_envs_path(),
-            "VOLUMES": self.config.get_volumes_path(),
-            "VOLUMES_SA": self.config.staging_area.get_volumes_path(),
-            "IMAGES_SA": self.config.staging_area.get_images_path(),
+            "ENVS": self.config.envs_path,
+            "VOLUMES": self.config.volumes_path,
+            "VOLUMES_SA": self.config.staging_area.volumes_path,
+            "IMAGES_SA": self.config.staging_area.images_path,
         }
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)

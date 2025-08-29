@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import get_default_expanduser_side_effect, values
+from test_util import values
 
 from shepctl import ShepherdMng, cli
 
@@ -336,15 +336,16 @@ shpd_config = """
 
 
 @pytest.fixture
-def temp_home(tmp_path: Path, mocker: MockerFixture) -> Path:
+def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     """Fixture to create a temporary home directory and .shpd.conf file."""
     temp_home = tmp_path / "home"
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
-    config_file.write_text(values)
+    config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
-    return temp_home
+    os.environ["SHPD_CONF"] = str(config_file)
+    return temp_home, config_file
 
 
 @pytest.fixture
@@ -354,27 +355,17 @@ def runner() -> CliRunner:
 
 @pytest.mark.env
 def test_env_init(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-init-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     assert sm.configMng.exists_environment("test-init-1")
 
-    expected_dirs = [
-        os.path.join(sm.configMng.config.get_envs_path(), "test-init-1")
-    ]
+    expected_dirs = [os.path.join(sm.configMng.config.envs_path, "test-init-1")]
 
     for directory in expected_dirs:
         assert os.path.isdir(
@@ -384,39 +375,25 @@ def test_env_init(
 
 @pytest.mark.env
 def test_env_clone(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-clone-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(
         cli, ["env", "clone", "test-clone-1", "test-clone-2"]
     )
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
     assert sm.configMng.exists_environment("test-clone-1")
     assert sm.configMng.exists_environment("test-clone-2")
 
     expected_dirs = [
-        os.path.join(sm.configMng.config.get_envs_path(), "test-clone-1"),
-        os.path.join(sm.configMng.config.get_envs_path(), "test-clone-2"),
+        os.path.join(sm.configMng.config.envs_path, "test-clone-1"),
+        os.path.join(sm.configMng.config.envs_path, "test-clone-2"),
     ]
 
     for directory in expected_dirs:
@@ -427,40 +404,24 @@ def test_env_clone(
 
 @pytest.mark.env
 def test_env_rename(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-rename-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(
         cli, ["env", "rename", "test-rename-1", "test-rename-2"]
     )
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
     assert not sm.configMng.exists_environment("test-rename-1")
     assert sm.configMng.exists_environment("test-rename-2")
 
-    renamed_dir = os.path.join(
-        sm.configMng.config.get_envs_path(), "test-rename-2"
-    )
-    old_dir = os.path.join(sm.configMng.config.get_envs_path(), "test-rename-1")
+    renamed_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-2")
+    old_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-1")
 
     assert os.path.isdir(
         renamed_dir
@@ -472,54 +433,30 @@ def test_env_rename(
 
 @pytest.mark.env
 def test_env_checkout(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-2"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     env = sm.configMng.get_active_environment()
     assert env is None
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "checkout", "test-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     env = sm.configMng.get_active_environment()
     assert env is not None
     assert env.tag == "test-1"
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "checkout", "test-2"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     env = sm.configMng.get_active_environment()
@@ -529,20 +466,12 @@ def test_env_checkout(
 
 @pytest.mark.env
 def test_env_list(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "list"])
     assert result.exit_code == 0
@@ -550,50 +479,31 @@ def test_env_list(
 
 @pytest.mark.env
 def test_env_delete_yes(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     mocker.patch("builtins.input", return_value="y")
 
     result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
     mocker.patch("builtins.input", return_value="y")
 
     result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
     assert env is None
 
-    env_dir = os.path.join(sm.configMng.config.get_envs_path(), "test-1")
+    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
 
     assert not os.path.exists(
         env_dir
@@ -602,34 +512,23 @@ def test_env_delete_yes(
 
 @pytest.mark.env
 def test_env_delete_no(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
     mocker.patch("builtins.input", return_value="n")
 
     result = runner.invoke(cli, ["env", "init", "default", "test-1"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
     assert env is not None
 
-    env_dir = os.path.join(sm.configMng.config.get_envs_path(), "test-1")
+    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
 
     assert os.path.exists(
         env_dir
@@ -638,27 +537,15 @@ def test_env_delete_no(
 
 @pytest.mark.env
 def test_env_add_nonexisting_resource(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "add", "foo", "foo-1"])
     assert result.exit_code == 2
@@ -666,14 +553,11 @@ def test_env_add_nonexisting_resource(
 
 @pytest.mark.env
 def test_env_render_compose_env_ext_net(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
@@ -733,14 +617,11 @@ def test_env_render_compose_env_ext_net(
 
 @pytest.mark.env
 def test_env_render_compose_env_int_net(
-    temp_home: Path,
+    shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)

@@ -15,7 +15,6 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from pathlib import Path
 
 values = """
   # Oracle (ora) Configuration
@@ -63,7 +62,7 @@ values = """
   cert_email=lf@sslip.io
   cert_subject_alternative_names=
 
-  shpd_path=.
+  shpd_path=${test_path}
   envs_path=${shpd_path}/envs
   volumes_path=${shpd_path}/volumes
   staging_area_volumes_path=${shpd_path}/sa_volumes
@@ -76,35 +75,8 @@ values = """
   db_psw=docker
 
   # Logging Configuration
-  log_file=shepctl.log
+  log_file=${shpd_path}/logs/shepctl.log
   log_level=WARNING
   log_stdout=false
   log_format=%(asctime)s - %(levelname)s - %(message)s
   """
-
-
-def get_default_expanduser_side_effect(
-    temp_home: Path, shpd: str = "shpd"
-) -> list[Path]:
-    """Generate side effect values for mocking `os.path.expanduser`.
-
-    The return values repeat the sequence:
-    [temp_home/.shpd.conf, temp_home/shpd, temp_home/shpd/shepctl.log,
-     temp_home/shpd/envs, temp_home/shpd/volumes, temp_home/shpd/images]
-
-    Args:
-        temp_home: Base path where files are located.
-
-    Returns:
-        list of Path objects.
-    """
-    cycle = [
-        temp_home / ".shpd.conf",
-        temp_home / shpd,
-        temp_home / shpd / "shepctl.log",
-        temp_home / shpd / "envs",
-        temp_home / shpd / "volumes",
-        temp_home / shpd / "volumes_sa",
-        temp_home / shpd / "images_sa",
-    ]
-    return cycle

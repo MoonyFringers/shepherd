@@ -23,7 +23,7 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import get_default_expanduser_side_effect, values
+from test_util import values
 
 from database import DatabaseMng
 from environment import EnvironmentMng
@@ -172,37 +172,33 @@ shpd_config_svc_default = """
 
 
 @pytest.fixture
-def temp_home(tmp_path: Path, mocker: MockerFixture) -> Path:
+def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     """Fixture to create a temporary home directory and .shpd.conf file."""
     temp_home = tmp_path / "home"
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
-    config_file.write_text(values)
+    config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
-    return temp_home
+    os.environ["SHPD_CONF"] = str(config_file)
+    return temp_home, config_file
 
 
 @pytest.mark.shpd
-def test_shepherdmng_creates_dirs(temp_home: Path, mocker: MockerFixture):
+def test_shepherdmng_creates_dirs(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
     """Test that ShepherdMng creates the required directories."""
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
 
     expected_dirs = [
-        sm.configMng.config.get_envs_path(),
-        sm.configMng.config.get_volumes_path(),
+        sm.configMng.config.envs_path,
+        sm.configMng.config.volumes_path,
         sm.configMng.constants.SHPD_CERTS_DIR,
         sm.configMng.constants.SHPD_SSH_DIR,
         sm.configMng.constants.SHPD_SSHD_DIR,
-        sm.configMng.config.staging_area.get_volumes_path(),
-        sm.configMng.config.staging_area.get_images_path(),
+        sm.configMng.config.staging_area.volumes_path,
+        sm.configMng.config.staging_area.images_path,
     ]
 
     for directory in expected_dirs:
@@ -223,13 +219,9 @@ def runner() -> CliRunner:
 
 @pytest.mark.shpd
 def test_cli_flags_no_flags(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["test"])
 
@@ -250,13 +242,9 @@ def test_cli_flags_no_flags(
 
 @pytest.mark.shpd
 def test_cli_flags_verbose(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
@@ -282,11 +270,9 @@ def test_cli_flags_verbose(
 
 @pytest.mark.shpd
 def test_cli_flags_yes(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--yes", "test"])
 
@@ -312,11 +298,9 @@ def test_cli_flags_yes(
 
 @pytest.mark.shpd
 def test_cli_flags_all(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--all", "test"])
 
@@ -342,13 +326,9 @@ def test_cli_flags_all(
 
 @pytest.mark.shpd
 def test_cli_flags_follow(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--follow", "test"])
 
@@ -374,11 +354,9 @@ def test_cli_flags_follow(
 
 @pytest.mark.shpd
 def test_cli_flags_porcelain(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--porcelain", "test"])
 
@@ -404,11 +382,9 @@ def test_cli_flags_porcelain(
 
 @pytest.mark.shpd
 def test_cli_flags_keep(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--keep", "test"])
 
@@ -434,11 +410,9 @@ def test_cli_flags_keep(
 
 @pytest.mark.shpd
 def test_cli_flags_replace(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--replace", "test"])
 
@@ -464,11 +438,9 @@ def test_cli_flags_replace(
 
 @pytest.mark.shpd
 def test_cli_flags_checkout(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["--checkout", "test"])
 
@@ -497,10 +469,8 @@ def test_cli_flags_checkout(
 
 @pytest.mark.shpd
 def test_cli_complete(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
     result = runner.invoke(cli, ["__complete", "env"])
     assert result.exit_code == 0
 
@@ -510,13 +480,9 @@ def test_cli_complete(
 
 @pytest.mark.shpd
 def test_cli_srv_build(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_build = mocker.patch.object(ServiceMng, "build_image_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["svc", "build", "service_template"])
     assert result.exit_code == 0
@@ -524,11 +490,11 @@ def test_cli_srv_build(
 
 
 @pytest.mark.shpd
-def test_cli_srv_up(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
+def test_cli_srv_up(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
     mock_start = mocker.patch.object(ServiceMng, "start_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -540,12 +506,10 @@ def test_cli_srv_up(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
 
 @pytest.mark.shpd
 def test_cli_srv_halt(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_halt = mocker.patch.object(ServiceMng, "halt_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -557,14 +521,10 @@ def test_cli_srv_halt(
 
 @pytest.mark.shpd
 def test_cli_srv_reload(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_reload = mocker.patch.object(ServiceMng, "reload_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -576,12 +536,10 @@ def test_cli_srv_reload(
 
 @pytest.mark.shpd
 def test_cli_srv_stdout(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_stdout = mocker.patch.object(ServiceMng, "stdout_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -593,14 +551,10 @@ def test_cli_srv_stdout(
 
 @pytest.mark.shpd
 def test_cli_srv_shell(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_shell = mocker.patch.object(ServiceMng, "shell_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -615,14 +569,10 @@ def test_cli_srv_shell(
 
 @pytest.mark.shpd
 def test_cli_db_sql_shell(
-    temp_home: Path,
-    runner: CliRunner,
-    mocker: MockerFixture,
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_sql_shell = mocker.patch.object(DatabaseMng, "sql_shell_svc")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -637,11 +587,9 @@ def test_cli_db_sql_shell(
 
 @pytest.mark.shpd
 def test_cli_env_init(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_init = mocker.patch.object(EnvironmentMng, "init_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "init", "docker-compose", "env_tag"])
     assert result.exit_code == 0
@@ -650,11 +598,9 @@ def test_cli_env_init(
 
 @pytest.mark.shpd
 def test_cli_env_clone(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_clone = mocker.patch.object(EnvironmentMng, "clone_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "clone", "src_env_tag", "dst_env_tag"])
     assert result.exit_code == 0
@@ -663,11 +609,9 @@ def test_cli_env_clone(
 
 @pytest.mark.shpd
 def test_cli_env_checkout(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_checkout = mocker.patch.object(EnvironmentMng, "checkout_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "checkout", "env_tag"])
     assert result.exit_code == 0
@@ -676,11 +620,9 @@ def test_cli_env_checkout(
 
 @pytest.mark.shpd
 def test_cli_env_list(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_list = mocker.patch.object(EnvironmentMng, "list_envs")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "list"])
     assert result.exit_code == 0
@@ -688,11 +630,11 @@ def test_cli_env_list(
 
 
 @pytest.mark.shpd
-def test_cli_env_up(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
+def test_cli_env_up(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
     mock_start = mocker.patch.object(EnvironmentMng, "start_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -704,12 +646,10 @@ def test_cli_env_up(temp_home: Path, runner: CliRunner, mocker: MockerFixture):
 
 @pytest.mark.shpd
 def test_cli_env_halt(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_halt = mocker.patch.object(EnvironmentMng, "halt_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -721,12 +661,10 @@ def test_cli_env_halt(
 
 @pytest.mark.shpd
 def test_cli_env_reload(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_reload = mocker.patch.object(EnvironmentMng, "reload_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
@@ -738,12 +676,10 @@ def test_cli_env_reload(
 
 @pytest.mark.shpd
 def test_cli_env_status(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_status = mocker.patch.object(EnvironmentMng, "status_env")
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
