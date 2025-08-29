@@ -412,7 +412,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -426,7 +426,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -587,7 +587,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -601,7 +601,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${volumes_path}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"

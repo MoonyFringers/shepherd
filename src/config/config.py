@@ -36,6 +36,7 @@ VAR_RE = re.compile(r"\$\{([^}]+)\}")
 REF_RE = re.compile(r"#\{([^}]+)\}")
 
 # Reference constants
+REF_CFG: str = "cfg"
 REF_ENV: str = "env"
 REF_SVC: str = "svc"
 REF_VOL: str = "vol"
@@ -43,6 +44,7 @@ REF_NET: str = "net"
 
 
 REF_MAP: dict[str, str] = {
+    "Config": REF_CFG,
     "EnvironmentCfg": REF_ENV,
     "ServiceCfg": REF_SVC,
     "VolumeCfg": REF_VOL,
