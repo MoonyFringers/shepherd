@@ -157,11 +157,19 @@ shpd_config_svc_default = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
-      "archived": false,
-      "active": true
+      "status": {
+        "active": true,
+        "archived": false,
+        "triggered_config": null
+      }
     }
   ]
 }

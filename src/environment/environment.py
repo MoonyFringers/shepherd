@@ -135,13 +135,13 @@ class Environment(ABC):
         return self.envCfg.archived
 
     def set_archived(self, archived: bool):
-        self.envCfg.archived = archived
+        self.envCfg.status.archived = archived
 
     def is_active(self) -> bool:
-        return self.envCfg.active
+        return self.envCfg.status.active
 
     def set_active(self, active: bool):
-        self.envCfg.active = active
+        self.envCfg.status.active = active
 
     def add_service(self, service: Service):
         """Add a service to the environment."""
@@ -276,7 +276,7 @@ class EnvironmentMng:
                 f"Environment with tag '{env_tag}' does not exist."
             )
         else:
-            envCfg.active = True
+            envCfg.status.active = True
             self.configMng.set_active_environment(env_tag)
             Util.print(f"Switched to: {env_tag}")
 
@@ -290,8 +290,8 @@ class EnvironmentMng:
         else:
             if not self.cli_flags["yes"]:
                 if not Util.confirm(
-                    f"""Are you sure you want to
-                      delete the environment '{env_tag}'?"""
+                    f"Are you sure you want to "
+                    f"delete the environment '{env_tag}'?"
                 ):
                     Util.console.print("Aborted.", style="yellow")
                     return

@@ -188,7 +188,12 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "t1",
@@ -219,11 +224,19 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
-      "archived": false,
-      "active": true
+      "status": {
+        "active": true,
+        "archived": false,
+        "triggered_config": null
+      }
     },
     {
       "template": "default",
@@ -259,11 +272,19 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
-      "archived": false,
-      "active": false
+      "status": {
+        "active": false,
+        "archived": false,
+        "triggered_config": null
+      }
     }
   ]
 }

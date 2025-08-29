@@ -172,7 +172,12 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "default",
@@ -203,7 +208,12 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
       "networks": [
@@ -220,8 +230,11 @@ shpd_config = """
           "name": "nfs-1"
         }
       ],
-      "archived": false,
-      "active": true
+      "status": {
+        "active": true,
+        "archived": false,
+        "triggered_config": null
+      }
     },
     {
       "template": "default",
@@ -257,7 +270,12 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "default",
@@ -288,7 +306,12 @@ shpd_config = """
           "extra_hosts": [
             "host.docker.internal:host-gateway"
           ],
-          "subject_alternative_name": null
+          "subject_alternative_name": null,
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
       "networks": [
@@ -327,8 +350,11 @@ shpd_config = """
           }
         }
       ],
-      "archived": false,
-      "active": true
+      "status": {
+        "active": false,
+        "archived": false,
+        "triggered_config": null
+      }
     }
   ]
 }
