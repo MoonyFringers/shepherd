@@ -335,7 +335,48 @@ class EnvironmentMng:
 
     def status_env(self, envCfg: EnvironmentCfg):
         """Get environment status."""
-        pass
+        env = self.get_environment_from_cfg(envCfg)
+        env_status = env.status()
+
+        services: list[Service] = env.get_services()
+        status_by_service = {
+            row.get("Service"): row for row in env_status if row.get("Service")
+        }
+
+        rows: list[list[str]] = []
+        for svc in services:
+            svc_name = svc.canonical_name()
+            svc_info = status_by_service.get(svc_name)
+
+            if svc_info:
+                state = svc_info.get("State", "?").lower()
+            else:
+                state = "stopped"
+
+            if state == "running":
+                state_colored = f"[bold green]{state}[/bold green]"
+            elif state == "stopped":
+                state_colored = f"[bold red]{state}[/bold red]"
+            else:
+                state_colored = f"[yellow]{state}[/yellow]"
+
+            rows.append([svc.svcCfg.tag, state_colored])
+
+        if not rows:
+            Util.console.print(
+                f"[yellow]No services found for "
+                f"environment '{envCfg.tag}'[/yellow]"
+            )
+            return
+
+        Util.render_table(
+            title=f"[white]{envCfg.tag}[/white]",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "State"},
+            ],
+            rows=rows,
+        )
 
     def add_service(
         self,
