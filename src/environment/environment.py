@@ -298,11 +298,19 @@ class EnvironmentMng:
         """List all available environments."""
         envs = self.configMng.get_environments()
         if not envs:
-            Util.print("No environments available.")
+            Util.console.print("[yellow]No environments available.[/yellow]")
             return
-        Util.print("Available environments:")
-        for env in envs:
-            Util.print(f" - {env.tag} ({env.template})")
+
+        rows = [[env.tag, env.template] for env in envs]
+
+        Util.render_table(
+            title="Environments",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "Template", "style": "magenta"},
+            ],
+            rows=rows,
+        )
 
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""
