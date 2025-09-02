@@ -58,7 +58,11 @@ class DockerComposeEnv(Environment):
         self, *args: str, capture: bool = False
     ) -> subprocess.CompletedProcess[str]:
         """Run a docker compose command with the triggered_config YAML."""
-        yaml_str = self.envCfg.status.triggered_config
+        yaml_str = (
+            self.envCfg.status.triggered_config
+            if self.envCfg.status.triggered_config
+            else self.render()
+        )
         if not yaml_str:
             raise ValueError(
                 "No docker-compose config found in triggered_config"
@@ -155,11 +159,22 @@ class DockerComposeEnv(Environment):
 
         return yaml.dump(compose_config, sort_keys=False)
 
+    @override
     def status(self) -> list[dict[str, str]]:
         """Get environment status (list of services with state)."""
         result = self._run_compose("ps", "--format", "json", capture=True)
+        stdout_str = result.stdout.strip()
 
-        try:
-            return json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return []
+        services: list[dict[str, str]] = []
+        for line in stdout_str.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if obj:
+                    services.append(obj)
+            except json.JSONDecodeError:
+                continue
+
+        return services
