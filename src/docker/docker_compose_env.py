@@ -19,9 +19,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-import tempfile
-from pathlib import Path
 from typing import Any, override
 
 import yaml
@@ -29,6 +26,8 @@ import yaml
 from config import ConfigMng, EnvironmentCfg
 from environment import Environment
 from service import ServiceFactory
+
+from .docker_compose_util import run_compose
 
 
 class DockerComposeEnv(Environment):
@@ -54,51 +53,23 @@ class DockerComposeEnv(Environment):
         )
         return clonedEnv
 
-    def _run_compose(
-        self, *args: str, capture: bool = False
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a docker compose command with the triggered_config YAML."""
-        yaml_str = (
-            self.envCfg.status.triggered_config
-            if self.envCfg.status.triggered_config
-            else self.render()
-        )
-        if not yaml_str:
-            raise ValueError(
-                "No docker-compose config found in triggered_config"
-            )
-
-        with tempfile.NamedTemporaryFile(
-            "w", suffix=".yml", delete=False
-        ) as tmp:
-            tmp.write(yaml_str)
-            tmp_path = Path(tmp.name)
-
-        try:
-            cmd = ["docker", "compose", "-f", str(tmp_path), *args]
-            return subprocess.run(
-                cmd,
-                check=True,
-                text=True,
-                capture_output=capture,
-            )
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
     @override
     def start(self):
         """Start the environment."""
-        self._run_compose("up", "-d")
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "up", "-d")
 
     @override
     def halt(self):
         """Halt the environment."""
-        self._run_compose("down")
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "down")
 
     @override
     def reload(self):
         """Reload the environment."""
-        self._run_compose("restart")
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "restart")
 
     @override
     def render(self) -> str:
@@ -162,7 +133,14 @@ class DockerComposeEnv(Environment):
     @override
     def status(self) -> list[dict[str, str]]:
         """Get environment status (list of services with state)."""
-        result = self._run_compose("ps", "--format", "json", capture=True)
+
+        yaml = (
+            self.envCfg.status.triggered_config
+            if self.envCfg.status.triggered_config
+            else self.render()
+        )
+
+        result = run_compose(yaml, "ps", "--format", "json", capture=True)
         stdout_str = result.stdout.strip()
 
         services: list[dict[str, str]] = []

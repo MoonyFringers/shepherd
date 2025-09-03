@@ -201,7 +201,7 @@ class EnvironmentMng:
             envCfg = self.configMng.get_environment(env_tag)
             if not envCfg:
                 Util.print_error_and_die(
-                    f"Environment with tag '{env_tag}' does not exist."
+                    f"Environment: '{env_tag}' does not exist."
                 )
         else:
             envCfg = self.configMng.get_active_environment()
@@ -222,7 +222,7 @@ class EnvironmentMng:
         """Initialize an environment."""
         if self.configMng.get_environment(env_tag):
             Util.print_error_and_die(
-                f"Environment with tag '{env_tag}' already exists."
+                f"Environment: '{env_tag}' already exists."
             )
         if envTmplCfg := self.configMng.get_environment_template(env_template):
             env = self.envFactory.new_environment(
@@ -233,8 +233,7 @@ class EnvironmentMng:
             Util.print(f"{env_tag}")
         else:
             Util.print_error_and_die(
-                f"Environment Template with tag '{env_template}' "
-                f"does not exist."
+                f"Environment Template: '{env_template}' " f"does not exist."
             )
 
     def clone_env(self, src_env_tag: str, dst_env_tag: str):
@@ -242,7 +241,7 @@ class EnvironmentMng:
         envCfg = self.configMng.get_environment(src_env_tag)
         if not envCfg:
             Util.print_error_and_die(
-                f"Environment with tag '{src_env_tag}' does not exist."
+                f"Environment: '{src_env_tag}' does not exist."
             )
         else:
             env = self.envFactory.new_environment_cfg(envCfg)
@@ -255,7 +254,7 @@ class EnvironmentMng:
         envCfg = self.configMng.get_environment(src_env_tag)
         if not envCfg:
             Util.print_error_and_die(
-                f"Environment with tag '{src_env_tag}' does not exist."
+                f"Environment: '{src_env_tag}' does not exist."
             )
         else:
             env = self.envFactory.new_environment_cfg(envCfg)
@@ -267,7 +266,7 @@ class EnvironmentMng:
         envCfg = self.configMng.get_environment(env_tag)
         if not envCfg:
             Util.print_error_and_die(
-                f"Environment with tag '{env_tag}' does not exist."
+                f"Environment: '{env_tag}' does not exist."
             )
         else:
             envCfg.status.active = True
@@ -279,7 +278,7 @@ class EnvironmentMng:
         envCfg = self.configMng.get_environment(env_tag)
         if not envCfg:
             Util.print_error_and_die(
-                f"Environment with tag '{env_tag}' does not exist."
+                f"Environment: '{env_tag}' does not exist."
             )
         else:
             if not self.cli_flags["yes"]:
@@ -310,6 +309,9 @@ class EnvironmentMng:
                 {"header": "Template", "style": "magenta"},
             ],
             rows=rows,
+        )
+        Util.console.print(
+            f"{len(envs)} environment(s) found.", highlight=False
         )
 
     def start_env(self, envCfg: EnvironmentCfg):
@@ -405,8 +407,8 @@ class EnvironmentMng:
             envCfg = env.to_config()
             if env.get_service(svc_tag):
                 Util.print_error_and_die(
-                    f"Service with tag '{svc_tag}' already "
-                    f"exists in environment '{envCfg.tag}'."
+                    f"Service: '{svc_tag}' already "
+                    f"defined in environment: '{envCfg.tag}'."
                 )
             svc_type_cfg = self.configMng.get_service_template(
                 svc_template if svc_template else Constants.SVC_TEMPLATE_DEFAULT

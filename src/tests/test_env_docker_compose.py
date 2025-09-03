@@ -540,7 +540,7 @@ def test_env_start(
     shpd_json.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
-        "docker.docker_compose_env.subprocess.run",
+        "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "up", "-d"],
             returncode=0,
@@ -573,7 +573,19 @@ def test_env_stop(
     shpd_json.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
-        "docker.docker_compose_env.subprocess.run",
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "restart"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "up"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "down"],
             returncode=0,
@@ -606,7 +618,7 @@ def test_env_restart(
     shpd_json.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
-        "docker.docker_compose_env.subprocess.run",
+        "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "restart"],
             returncode=0,
@@ -618,7 +630,7 @@ def test_env_restart(
     result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
-        "docker.docker_compose_env.subprocess.run",
+        "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "restart"],
             returncode=0,
@@ -651,7 +663,7 @@ def test_env_status(
     shpd_json.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
-        "docker.docker_compose_env.subprocess.run",
+        "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "ps", "--format", "json"],
             returncode=0,
