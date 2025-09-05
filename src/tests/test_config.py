@@ -41,6 +41,7 @@ config_json = """{
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -65,8 +66,8 @@ config_json = """{
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -99,7 +100,7 @@ config_json = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/srv/data"
+            "device": "${volumes_path}/srv/data"
           },
           "labels": {
             "env": "production"
@@ -348,6 +349,7 @@ config_json_with_refs: str = """{
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -372,8 +374,8 @@ config_json_with_refs: str = """{
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -410,7 +412,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -424,7 +426,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -585,7 +587,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -599,7 +601,7 @@ config_json_with_refs: str = """{
           "driver_opts": {
             "type": "none",
             "o": "bind",
-            "device": "${shpd_volumes_dir}/#{env.tag}/#{vol.tag}"
+            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
           },
           "labels": {
             "env": "production"
@@ -637,7 +639,7 @@ def test_load_config(mocker: MockerFixture):
     cMng = ConfigMng(".shpd.conf")
     config: Config = cMng.load_config()
 
-    assert config.logging.file == "shepctl.log"
+    assert config.logging.file == "${test_path}/logs/shepctl.log"
     assert config.logging.level == "WARNING"
     assert not config.logging.is_stdout()
     assert config.logging.format == "%(asctime)s - %(levelname)s - %(message)s"
@@ -659,7 +661,7 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].volumes[0].driver_opts
     assert (
         env_templates[0].volumes[0].driver_opts["device"]
-        == "./volumes/srv/data"
+        == "${test_path}/volumes/srv/data"
     )
 
     service_templates = config.service_templates
@@ -771,6 +773,8 @@ def test_load_config(mocker: MockerFixture):
     assert not config.envs[0].volumes[0].is_external()
 
     assert ports and ports[0] == "3000:3000"
+    assert config.envs_path == "${test_path}/envs"
+    assert config.volumes_path == "${test_path}/volumes"
     assert config.host_inet_ip == "127.0.0.1"
     assert config.domain == "sslip.io"
     assert config.dns_type == "autoresolving"
@@ -790,8 +794,8 @@ def test_load_config(mocker: MockerFixture):
     assert config.cert.common_name == "sslip.io"
     assert config.cert.email == "lf@sslip.io"
     assert config.cert.subject_alternative_names == []
-    assert config.staging_area.env_volumes_path == "./volumes"
-    assert config.staging_area.env_images_path == "./images"
+    assert config.staging_area.volumes_path == "${test_path}/sa_volumes"
+    assert config.staging_area.images_path == "${test_path}/sa_images"
     assert config.envs[0].archived is False
     assert config.envs[0].active is False
 
@@ -839,7 +843,7 @@ def test_store_config_with_real_files():
             open(".shpd.conf", "w") as values_file,
         ):
             config_file.write(config_json)
-            values_file.write(values)
+            values_file.write(values.replace("${test_path}", "."))
 
         cMng = ConfigMng(values_file.name)
         config: Config = cMng.load_config()
@@ -893,7 +897,7 @@ def test_copy_config(mocker: MockerFixture):
 def test_load_config_with_refs(mocker: MockerFixture):
     """Test loading config with references"""
 
-    mock_open1 = mock_open(read_data=values)
+    mock_open1 = mock_open(read_data=values.replace("${test_path}", "."))
     mock_open2 = mock_open(read_data=config_json_with_refs)
 
     mocker.patch("os.path.exists", return_value=True)
@@ -952,7 +956,7 @@ def test_store_config_with_refs_with_real_files():
             open(".shpd.conf", "w") as values_file,
         ):
             config_file.write(config_json_with_refs)
-            values_file.write(values)
+            values_file.write(values.replace("${test_path}", "."))
 
         cMng = ConfigMng(values_file.name)
         config: Config = cMng.load_config()

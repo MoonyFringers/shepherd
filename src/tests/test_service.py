@@ -17,12 +17,13 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import get_default_expanduser_side_effect, values
+from test_util import values
 
 from shepctl import ShepherdMng, cli
 
@@ -42,6 +43,7 @@ shpd_config_svc_default = """
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -66,8 +68,8 @@ shpd_config_svc_default = """
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -181,6 +183,7 @@ shpd_config_pg_template = """
     "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
   },
   "envs_path": "${envs_path}",
+  "volumes_path": "${volumes_path}",
   "host_inet_ip": "${host_inet_ip}",
   "domain": "${domain}",
   "dns_type": "${dns_type}",
@@ -205,8 +208,8 @@ shpd_config_pg_template = """
     "subject_alternative_names": []
   },
   "staging_area": {
-    "env_volumes_path": "${env_volumes_path}",
-    "env_images_path": "${env_images_path}"
+    "volumes_path": "${staging_area_volumes_path}",
+    "images_path": "${staging_area_images_path}"
   },
   "env_templates": [
     {
@@ -264,15 +267,16 @@ shpd_config_pg_template = """
 
 
 @pytest.fixture
-def temp_home(tmp_path: Path, mocker: MockerFixture) -> Path:
+def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     """Fixture to create a temporary home directory and .shpd.conf file."""
     temp_home = tmp_path / "home"
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
-    config_file.write_text(values)
+    config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
-    return temp_home
+    os.environ["SHPD_CONF"] = str(config_file)
+    return temp_home, config_file
 
 
 @pytest.fixture
@@ -282,34 +286,18 @@ def runner() -> CliRunner:
 
 @pytest.mark.svc
 def test_svc_add_one_default(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
-
     env = sm.configMng.get_active_environment()
 
     assert env is not None, "Active environment should not be None"
@@ -363,41 +351,21 @@ def test_svc_add_one_default(
 
 @pytest.mark.svc
 def test_svc_add_two_default(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "add", "svc", "svc-2"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
-
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
@@ -448,41 +416,21 @@ def test_svc_add_two_default(
 
 @pytest.mark.svc
 def test_svc_add_two_same_tag_default(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
     assert result.exit_code == 1
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
-
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
@@ -511,13 +459,9 @@ def test_svc_add_two_same_tag_default(
 
 @pytest.mark.svc
 def test_svc_add_one_with_template(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_pg_template)
@@ -525,16 +469,8 @@ def test_svc_add_one_with_template(
     result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
-
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
 
     result = runner.invoke(
         cli, ["env", "add", "svc", "pg-1", "postgres", "database"]
@@ -543,11 +479,7 @@ def test_svc_add_one_with_template(
     # no 'postgres' factory, so this should fail
     assert result.exit_code == 1
 
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
     sm = ShepherdMng()
-
     env = sm.configMng.get_active_environment()
     assert env is not None, "Active environment should not be None"
     assert env.services is not None, "Services should not be None"
@@ -562,13 +494,9 @@ def test_svc_add_one_with_template(
 
 @pytest.mark.svc
 def test_svc_render_compose_service(
-    temp_home: Path, runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    side_effect = get_default_expanduser_side_effect(temp_home)
-    side_effect += [temp_home / "shpd" / "envs"]
-    mocker.patch("os.path.expanduser", side_effect=side_effect)
-
-    shpd_path = temp_home / "shpd"
+    shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)

@@ -86,39 +86,37 @@ class Environment(ABC):
         self.envCfg.services = [svc.svcCfg for svc in self.services]
         return self.envCfg
 
-    def get_dir(self) -> str:
+    def get_path(self) -> str:
         """Return the directory of the environment."""
-        return os.path.join(
-            self.configMng.config.get_envs_path(), self.envCfg.tag
-        )
+        return os.path.join(self.configMng.config.envs_path, self.envCfg.tag)
 
-    def get_dir_for_tag(self, env_tag: str) -> str:
+    def get_path_for_tag(self, env_tag: str) -> str:
         """Return the directory for the environment with a given tag."""
-        return os.path.join(self.configMng.config.get_envs_path(), env_tag)
+        return os.path.join(self.configMng.config.envs_path, env_tag)
 
     def realize(self):
         """Realize the environment."""
         Util.create_dir(
-            self.get_dir(),
+            self.get_path(),
             self.envCfg.tag,
         )
         self.sync_config()
 
     def realize_from(self, src_env: Environment):
         """Realize the environment."""
-        Util.copy_dir(src_env.get_dir(), self.get_dir())
+        Util.copy_dir(src_env.get_path(), self.get_path())
         self.sync_config()
 
     def move_to(self, dst_env_tag: str):
         """Move the environment to a new tag."""
-        Util.move_dir(self.get_dir(), self.get_dir_for_tag(dst_env_tag))
+        Util.move_dir(self.get_path(), self.get_path_for_tag(dst_env_tag))
         self.configMng.remove_environment(self.envCfg.tag)
         self.envCfg.tag = dst_env_tag
         self.sync_config()
 
     def delete(self):
         """Delete the environment."""
-        Util.remove_dir(self.get_dir())
+        Util.remove_dir(self.get_path())
         self.configMng.remove_environment(self.envCfg.tag)
 
     def sync_config(self):

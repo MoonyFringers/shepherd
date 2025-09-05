@@ -140,6 +140,7 @@ class Constants:
                 "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}",
             },
             "envs_path": "${envs_path}",
+            "volumes_path": "${volumes_path}",
             "host_inet_ip": "${host_inet_ip}",
             "domain": "${domain}",
             "dns_type": "${dns_type}",
@@ -164,8 +165,8 @@ class Constants:
                 "subject_alternative_names": None,
             },
             "staging_area": {
-                "env_volumes_path": "${env_volumes_path}",
-                "env_images_path": "${env_images_path}",
+                "volumes_path": "${staging_area_volumes_path}",
+                "images_path": "${staging_area_images_path}",
             },
             "envs": [],
         }
