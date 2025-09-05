@@ -32,7 +32,7 @@ class Constants:
 
     @property
     def SHPD_CONFIG_FILE(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".shpd.json")
+        return os.path.join(self.SHPD_PATH, ".shpd.yaml")
 
     @property
     def SHPD_CERTS_DIR(self) -> str:

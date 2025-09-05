@@ -31,336 +31,247 @@ from test_util import values
 from shepctl import ShepherdMng, cli
 
 shpd_config = """
-{
-  "logging": {
-    "file": "${log_file}",
-    "level": "${log_level}",
-    "stdout": "${log_stdout}",
-    "format": "${log_format}"
-  },
-  "shpd_registry": {
-    "ftp_server": "${shpd_registry}",
-    "ftp_user": "${shpd_registry_ftp_usr}",
-    "ftp_psw": "${shpd_registry_ftp_psw}",
-    "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
-    "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
-  },
-  "envs_path": "${envs_path}",
-  "volumes_path": "${volumes_path}",
-  "host_inet_ip": "${host_inet_ip}",
-  "domain": "${domain}",
-  "dns_type": "${dns_type}",
-  "ca": {
-    "country": "${ca_country}",
-    "state": "${ca_state}",
-    "locality": "${ca_locality}",
-    "organization": "${ca_org}",
-    "organizational_unit": "${ca_org_unit}",
-    "common_name": "${ca_cn}",
-    "email": "${ca_email}",
-    "passphrase": "${ca_passphrase}"
-  },
-  "cert": {
-    "country": "${cert_country}",
-    "state": "${cert_state}",
-    "locality": "${cert_locality}",
-    "organization": "${cert_org}",
-    "organizational_unit": "${cert_org_unit}",
-    "common_name": "${cert_cn}",
-    "email": "${cert_email}",
-    "subject_alternative_names": []
-  },
-  "staging_area": {
-    "volumes_path": "${staging_area_volumes_path}",
-    "images_path": "${staging_area_images_path}"
-  },
-  "env_templates": [
-    {
-      "tag": "default",
-      "factory": "docker-compose",
-      "service_templates": [
-        {
-          "template": "default",
-          "tag": "service-default"
-        }
-      ],
-      "networks": [
-        {
-          "tag": "shpdnet",
-          "name": "envnet",
-          "external": true
-        }
-      ],
-      "volumes":[
-        {
-          "tag": "app_data",
-          "external": false,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "/srv/data"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ]
-    }
-  ],
-  "service_templates": [
-    {
-      "tag": "default",
-      "factory": "docker",
-      "image": "busybox:stable-glibc",
-      "labels": [
-        "com.example.label1=value1",
-        "com.example.label2=value2"
-      ],
-      "workdir": "/test",
-      "volumes": [
-          "/home/test/.ssh:/home/test/.ssh",
-          "/etc/ssh:/etc/ssh"
-      ],
-      "ingress": false,
-      "empty_env": null,
-      "environment": [],
-      "ports": [
-        "80:80",
-        "443:443",
-        "8080:8080"
-      ],
-      "properties": {},
-      "networks": [
-        "default"
-      ],
-      "extra_hosts": [
-        "host.docker.internal:host-gateway"
-      ],
-      "subject_alternative_name": null
-    }
-  ],
-  "envs": [
-    {
-      "template": "default",
-      "factory": "docker-compose",
-      "tag": "test-1",
-      "services": [
-        {
-          "template": "default",
-          "factory": "docker",
-          "tag": "test-1",
-          "image": "busybox:stable-glibc",
-          "labels": [
-            "com.example.label1=value1",
-            "com.example.label2=value2"
-          ],
-          "workdir": "/test",
-          "volumes": [
-              "/home/test/.ssh:/home/test/.ssh",
-              "/etc/ssh:/etc/ssh"
-          ],
-          "ingress": false,
-          "empty_env": null,
-          "environment": [],
-          "ports": [
-            "80:80",
-            "443:443",
-            "8080:8080"
-          ],
-          "properties": {},
-          "networks": [
-            "default"
-          ],
-          "extra_hosts": [
-            "host.docker.internal:host-gateway"
-          ],
-          "subject_alternative_name": null,
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "default",
-          "factory": "docker",
-          "tag": "test-2",
-          "image": "busybox:stable-glibc",
-          "labels": [
-            "com.example.label1=value1",
-            "com.example.label2=value2"
-          ],
-          "workdir": "/test",
-          "volumes": [
-              "/home/test/.ssh:/home/test/.ssh",
-              "/etc/ssh:/etc/ssh"
-          ],
-          "ingress": false,
-          "empty_env": null,
-          "environment": [],
-          "ports": [
-            "80:80",
-            "443:443",
-            "8080:8080"
-          ],
-          "properties": {},
-          "networks": [
-            "default"
-          ],
-          "extra_hosts": [
-            "host.docker.internal:host-gateway"
-          ],
-          "subject_alternative_name": null,
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        }
-      ],
-      "networks": [
-        {
-          "tag": "default",
-          "name": "envnet",
-          "external": true
-        }
-      ],
-      "volumes":[
-        {
-          "tag": "app_data_ext",
-          "external": true,
-          "name": "nfs-1"
-        }
-      ],
-      "status": {
-        "active": true,
-        "archived": false,
-        "triggered_config": null
-      }
-    },
-    {
-      "template": "default",
-      "factory": "docker-compose",
-      "tag": "test-2",
-      "services": [
-        {
-          "template": "default",
-          "factory": "docker",
-          "tag": "test-1",
-          "image": "busybox:stable-glibc",
-          "labels": [
-            "com.example.label1=value1",
-            "com.example.label2=value2"
-          ],
-          "workdir": "/test",
-          "volumes": [
-              "/home/test/.ssh:/home/test/.ssh",
-              "/etc/ssh:/etc/ssh"
-          ],
-          "ingress": false,
-          "empty_env": null,
-          "environment": [],
-          "ports": [
-            "80:80",
-            "443:443",
-            "8080:8080"
-          ],
-          "properties": {},
-          "networks": [
-            "internal_net"
-          ],
-          "extra_hosts": [
-            "host.docker.internal:host-gateway"
-          ],
-          "subject_alternative_name": null,
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "default",
-          "factory": "docker",
-          "tag": "test-2",
-          "image": "busybox:stable-glibc",
-          "labels": [
-            "com.example.label1=value1",
-            "com.example.label2=value2"
-          ],
-          "workdir": "/test",
-          "volumes": [
-              "/home/test/.ssh:/home/test/.ssh",
-              "/etc/ssh:/etc/ssh"
-          ],
-          "ingress": false,
-          "empty_env": null,
-          "environment": [],
-          "ports": [
-            "80:80",
-            "443:443",
-            "8080:8080"
-          ],
-          "properties": {},
-          "networks": [
-            "internal_net"
-          ],
-          "extra_hosts": [
-            "host.docker.internal:host-gateway"
-          ],
-          "subject_alternative_name": null,
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        }
-      ],
-      "networks": [
-        {
-          "tag": "internal_net",
-          "external": false,
-          "driver": "bridge",
-          "attachable": true,
-          "enable_ipv6": false,
-          "driver_opts": {
-            "com.docker.network.bridge.name": "br-internal"
-          },
-          "ipam": {
-            "driver": "default",
-            "config": [
-              {
-                "subnet": "172.30.0.0/16",
-                "gateway": "172.30.0.1"
-              }
-            ]
-          }
-        }
-      ],
-      "volumes":[
-        {
-          "tag": "app_data",
-          "external": false,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "/srv/data"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ],
-      "status": {
-        "active": false,
-        "archived": false,
-        "triggered_config": null
-      }
-    }
-  ]
-}
+logging:
+  file: ${log_file}
+  level: ${log_level}
+  stdout: ${log_stdout}
+  format: ${log_format}
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates:
+  - tag: default
+    factory: docker-compose
+    service_templates:
+      - template: default
+        tag: service-default
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+    volumes:
+      - tag: app_data
+        external: false
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: /srv/data
+        labels:
+          env: production
+service_templates:
+  - tag: default
+    factory: docker
+    image: busybox:stable-glibc
+    labels:
+      - com.example.label1=value1
+      - com.example.label2=value2
+    workdir: /test
+    volumes:
+      - /home/test/.ssh:/home/test/.ssh
+      - /etc/ssh:/etc/ssh
+    ingress: false
+    empty_env: null
+    environment: []
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    properties: {}
+    networks:
+      - default
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    subject_alternative_name: null
+envs:
+  - template: default
+    factory: docker-compose
+    tag: test-1
+    services:
+      - template: default
+        factory: docker
+        tag: test-1
+        image: busybox:stable-glibc
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-2
+        image: busybox:stable-glibc
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    networks:
+      - tag: default
+        name: envnet
+        external: true
+    volumes:
+      - tag: app_data_ext
+        external: true
+        name: nfs-1
+    status:
+      active: true
+      archived: false
+      triggered_config: null
+  - template: default
+    factory: docker-compose
+    tag: test-2
+    services:
+      - template: default
+        factory: docker
+        tag: test-1
+        image: busybox:stable-glibc
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - internal_net
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-2
+        image: busybox:stable-glibc
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - internal_net
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    networks:
+      - tag: internal_net
+        external: false
+        driver: bridge
+        attachable: true
+        enable_ipv6: false
+        driver_opts:
+          com.docker.network.bridge.name: br-internal
+        ipam:
+          driver: default
+          config:
+            - subnet: 172.30.0.0/16
+              gateway: 172.30.0.1
+    volumes:
+      - tag: app_data
+        external: false
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: /srv/data
+        labels:
+          env: production
+    status:
+      active: false
+      archived: false
+      triggered_config: null
 """
 
 docker_compose_ps_output = """
@@ -395,8 +306,8 @@ def test_env_render_compose_env_ext_net(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["env", "render", "test-1"])
     assert result.exit_code == 0
@@ -459,8 +370,8 @@ def test_env_render_compose_env_int_net(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["env", "render", "test-2"])
     assert result.exit_code == 0
@@ -536,8 +447,8 @@ def test_env_start(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -569,8 +480,8 @@ def test_env_stop(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -614,8 +525,8 @@ def test_env_restart(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -659,8 +570,8 @@ def test_env_status(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",

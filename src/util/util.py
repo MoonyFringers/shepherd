@@ -16,7 +16,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import json
 import os
 import platform
 import shutil
@@ -25,6 +24,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
+import yaml
 from rich import box
 from rich.console import Console
 from rich.table import Table
@@ -164,8 +164,8 @@ class Util:
         if os.path.exists(config_file_path):
             try:
                 with open(config_file_path, "r", encoding="utf-8") as f:
-                    json.load(f)
-            except (json.JSONDecodeError, OSError) as e:
+                    yaml.safe_load(f)
+            except (yaml.YAMLError, OSError) as e:
                 Util.print_error_and_die(
                     f"Invalid config file: {config_file_path}\nError: {e}"
                 )
@@ -174,7 +174,7 @@ class Util:
         default_config = constants.DEFAULT_CONFIG
         try:
             with open(config_file_path, "w", encoding="utf-8") as f:
-                json.dump(default_config, f, indent=2)
+                yaml.dump(default_config, f, indent=2, sort_keys=False)
         except OSError as e:
             Util.print_error_and_die(
                 f"Failed to create config file: {config_file_path}\nError: {e}"

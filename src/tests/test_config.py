@@ -20,635 +20,496 @@ import os
 from unittest.mock import mock_open
 
 import pytest
+import yaml
 from pytest_mock import MockerFixture
 from test_util import values
 
 from config import Config, ConfigMng
 from util import Constants
 
-config_json = """{
-  "logging": {
-    "file": "${log_file}",
-    "level": "${log_level}",
-    "stdout": "${log_stdout}",
-    "format": "${log_format}"
-  },
-  "shpd_registry": {
-    "ftp_server": "${shpd_registry}",
-    "ftp_user": "${shpd_registry_ftp_usr}",
-    "ftp_psw": "${shpd_registry_ftp_psw}",
-    "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
-    "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
-  },
-  "envs_path": "${envs_path}",
-  "volumes_path": "${volumes_path}",
-  "host_inet_ip": "${host_inet_ip}",
-  "domain": "${domain}",
-  "dns_type": "${dns_type}",
-  "ca": {
-    "country": "${ca_country}",
-    "state": "${ca_state}",
-    "locality": "${ca_locality}",
-    "organization": "${ca_org}",
-    "organizational_unit": "${ca_org_unit}",
-    "common_name": "${ca_cn}",
-    "email": "${ca_email}",
-    "passphrase": "${ca_passphrase}"
-  },
-  "cert": {
-    "country": "${cert_country}",
-    "state": "${cert_state}",
-    "locality": "${cert_locality}",
-    "organization": "${cert_org}",
-    "organizational_unit": "${cert_org_unit}",
-    "common_name": "${cert_cn}",
-    "email": "${cert_email}",
-    "subject_alternative_names": []
-  },
-  "staging_area": {
-    "volumes_path": "${staging_area_volumes_path}",
-    "images_path": "${staging_area_images_path}"
-  },
-  "env_templates": [
-    {
-      "tag": "default",
-      "factory": "docker-compose",
-      "service_templates": [
-        {
-          "template": "default",
-          "tag": "service-default"
-        }
-      ],
-      "networks": [
-        {
-          "tag": "shpdnet",
-          "name": "envnet",
-          "external": true,
-          "driver": null,
-          "attachable": null,
-          "enable_ipv6": null,
-          "driver_opts": null,
-          "ipam": null
-        }
-      ],
-      "volumes": [
-        {
-          "tag": "app_data",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "${volumes_path}/srv/data"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ]
-    }
-  ],
-  "service_templates": [
-    {
-      "tag": "oracle",
-      "factory": "docker",
-      "image": "${ora_image}",
-      "hostname": "${ora_hostname}",
-      "container_name": "${ora_container_name}",
-      "labels": [],
-      "workdir": null,
-      "volumes": [
-        "app_data:/mnt/test"
-      ],
-      "ingress": false,
-      "empty_env": "${ora_empty_env}",
-      "environment": [],
-      "ports": [
-        "1521:${ora_listener_port}"
-      ],
-      "properties": {
-        "pump_dir_name": "${ora_pump_dir}",
-        "root_db_name": "${ora_root_db_name}",
-        "plug_db_name": "${ora_plug_db_name}",
-        "sys_user": "${db_sys_usr}",
-        "sys_psw": "${db_sys_psw}",
-        "user": "${db_usr}",
-        "psw": "${db_psw}"
-      },
-      "networks": [],
-      "extra_hosts": [],
-      "subject_alternative_name": null
-    },
-    {
-      "tag": "postgres",
-      "factory": "docker",
-      "image": "${pg_image}",
-      "hostname": null,
-      "container_name": null,
-      "labels": [],
-      "workdir": null,
-      "volumes": [],
-      "ingress": false,
-      "empty_env": "${pg_empty_env}",
-      "environment": [],
-      "ports": [
-        "5432:${pg_listener_port}"
-      ],
-      "properties": {
-        "sys_user": "${db_sys_usr}",
-        "sys_psw": "${db_sys_psw}",
-        "user": "${db_usr}",
-        "psw": "${db_psw}"
-      },
-      "networks": [],
-      "extra_hosts": [],
-      "subject_alternative_name": null
-    }
-  ],
-  "envs": [
-    {
-      "template": "default",
-      "factory": "docker-compose",
-      "tag": "sample-1",
-      "services": [
-        {
-          "template": "postgres",
-          "factory": "docker",
-          "tag": "pg-1",
-          "service_class": null,
-          "image": "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5",
-          "hostname": null,
-          "container_name": null,
-          "labels": [],
-          "workdir": null,
-          "volumes": [],
-          "ingress": null,
-          "empty_env": null,
-          "environment": null,
-          "ports": [],
-          "properties": {
-            "sys_user": "syspg1",
-            "sys_psw": "syspg1",
-            "user": "pg1",
-            "psw": "pg1"
-          },
-          "networks": [],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [
-            {
-              "type": "postgres",
-              "tag": "upstream-1",
-              "enabled": true,
-              "properties": {
-                "user": "pg1up",
-                "psw": "pg1up",
-                "host": "localhost",
-                "port": "5432",
-                "database": "d_pg1",
-                "unix_user": "postgres",
-                "dump_dir": "/dumps"
-              }
-            },
-            {
-              "type": "postgres",
-              "tag": "upstream-2",
-              "enabled": false,
-              "properties": {
-                "user": "pg2up",
-                "psw": "pg2up",
-                "host": "moon",
-                "port": "5432",
-                "database": "d_pg2",
-                "unix_user": "postgres",
-                "dump_dir": "/dumps/2"
-              }
-            }
-          ],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "traefik",
-          "factory": "docker",
-          "tag": "traefik-1",
-          "service_class": null,
-          "image": "",
-          "hostname": null,
-          "container_name": null,
-          "labels": [],
-          "workdir": null,
-          "volumes": [],
-          "ingress": true,
-          "empty_env": null,
-          "environment": null,
-          "ports": [],
-          "properties": {},
-          "networks": [],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "custom-1",
-          "factory": "docker",
-          "tag": "primary",
-          "service_class": null,
-          "image": "",
-          "hostname": null,
-          "container_name": null,
-          "labels": [],
-          "workdir": null,
-          "volumes": [],
-          "ingress": true,
-          "empty_env": null,
-          "environment": null,
-          "ports": null,
-          "properties": {
-            "instance.name": "primary",
-            "instance.id": 1
-          },
-          "networks": [],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "nodejs",
-          "factory": "docker",
-          "tag": "poke",
-          "service_class": null,
-          "image": "",
-          "hostname": null,
-          "container_name": null,
-          "labels": [],
-          "workdir": null,
-          "volumes": [],
-          "ingress": null,
-          "empty_env": null,
-          "environment": [
-            "USER=user",
-            "PSW=psw"
-          ],
-          "ports": [
-            "3000:3000"
-          ],
-          "properties": {},
-          "networks": [],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        }
-      ],
-      "networks": [
-        {
-          "tag": "shpdnet",
-          "name": "envnet",
-          "external": true,
-          "driver": null,
-          "attachable": null,
-          "enable_ipv6": null,
-          "driver_opts": null,
-          "ipam": null
-        }
-      ],
-      "volumes": [
-        {
-          "tag": "app_data",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "/srv/data"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ],
-      "status": {
-        "active": true,
-        "archived": false,
-        "triggered_config": null
-      }
-    }
-  ]
-}"""
+config_yaml = """
+logging:
+  file: ${log_file}
+  level: ${log_level}
+  stdout: ${log_stdout}
+  format: ${log_format}
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates:
+  - tag: default
+    factory: docker-compose
+    service_templates:
+      - template: default
+        tag: service-default
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+        driver: null
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: app_data
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: ${volumes_path}/srv/data
+        labels:
+          env: production
+service_templates:
+  - tag: oracle
+    factory: docker
+    image: ${ora_image}
+    hostname: ${ora_hostname}
+    container_name: ${ora_container_name}
+    labels: []
+    workdir: null
+    volumes:
+      - app_data:/mnt/test
+    ingress: false
+    empty_env: ${ora_empty_env}
+    environment: []
+    ports:
+      - 1521:${ora_listener_port}
+    properties:
+      pump_dir_name: ${ora_pump_dir}
+      root_db_name: ${ora_root_db_name}
+      plug_db_name: ${ora_plug_db_name}
+      sys_user: ${db_sys_usr}
+      sys_psw: ${db_sys_psw}
+      user: ${db_usr}
+      psw: ${db_psw}
+    networks: []
+    extra_hosts: []
+    subject_alternative_name: null
+  - tag: postgres
+    factory: docker
+    image: ${pg_image}
+    hostname: null
+    container_name: null
+    labels: []
+    workdir: null
+    volumes: []
+    ingress: false
+    empty_env: ${pg_empty_env}
+    environment: []
+    ports:
+      - 5432:${pg_listener_port}
+    properties:
+      sys_user: ${db_sys_usr}
+      sys_psw: ${db_sys_psw}
+      user: ${db_usr}
+      psw: ${db_psw}
+    networks: []
+    extra_hosts: []
+    subject_alternative_name: null
+envs:
+  - template: default
+    factory: docker-compose
+    tag: sample-1
+    services:
+      - template: postgres
+        factory: docker
+        tag: pg-1
+        service_class: null
+        image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
+        hostname: null
+        container_name: null
+        labels: []
+        workdir: null
+        volumes: []
+        ingress: null
+        empty_env: null
+        environment: null
+        ports: []
+        properties:
+          sys_user: syspg1
+          sys_psw: syspg1
+          user: pg1
+          psw: pg1
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams:
+          - type: postgres
+            tag: upstream-1
+            enabled: true
+            properties:
+              user: pg1up
+              psw: pg1up
+              host: localhost
+              port: '5432'
+              database: d_pg1
+              unix_user: postgres
+              dump_dir: /dumps
+          - type: postgres
+            tag: upstream-2
+            enabled: false
+            properties:
+              user: pg2up
+              psw: pg2up
+              host: moon
+              port: '5432'
+              database: d_pg2
+              unix_user: postgres
+              dump_dir: /dumps/2
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: traefik
+        factory: docker
+        tag: traefik-1
+        service_class: null
+        image: ''
+        hostname: null
+        container_name: null
+        labels: []
+        workdir: null
+        volumes: []
+        ingress: true
+        empty_env: null
+        environment: null
+        ports: []
+        properties: {}
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: custom-1
+        factory: docker
+        tag: primary
+        service_class: null
+        image: ''
+        hostname: null
+        container_name: null
+        labels: []
+        workdir: null
+        volumes: []
+        ingress: true
+        empty_env: null
+        environment: null
+        ports: null
+        properties:
+          instance.name: primary
+          instance.id: 1
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: nodejs
+        factory: docker
+        tag: poke
+        service_class: null
+        image: ''
+        hostname: null
+        container_name: null
+        labels: []
+        workdir: null
+        volumes: []
+        ingress: null
+        empty_env: null
+        environment:
+          - USER=user
+          - PSW=psw
+        ports:
+          - 3000:3000
+        properties: {}
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+        driver: null
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: app_data
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: /srv/data
+        labels:
+          env: production
+    status:
+      active: true
+      archived: false
+      triggered_config: null
+"""
 
 
-config_json_with_refs: str = """{
-  "logging": {
-    "file": "${log_file}",
-    "level": "${log_level}",
-    "stdout": "${log_stdout}",
-    "format": "${log_format}"
-  },
-  "shpd_registry": {
-    "ftp_server": "${shpd_registry}",
-    "ftp_user": "${shpd_registry_ftp_usr}",
-    "ftp_psw": "${shpd_registry_ftp_psw}",
-    "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
-    "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
-  },
-  "envs_path": "${envs_path}",
-  "volumes_path": "${volumes_path}",
-  "host_inet_ip": "${host_inet_ip}",
-  "domain": "${domain}",
-  "dns_type": "${dns_type}",
-  "ca": {
-    "country": "${ca_country}",
-    "state": "${ca_state}",
-    "locality": "${ca_locality}",
-    "organization": "${ca_org}",
-    "organizational_unit": "${ca_org_unit}",
-    "common_name": "${ca_cn}",
-    "email": "${ca_email}",
-    "passphrase": "${ca_passphrase}"
-  },
-  "cert": {
-    "country": "${cert_country}",
-    "state": "${cert_state}",
-    "locality": "${cert_locality}",
-    "organization": "${cert_org}",
-    "organizational_unit": "${cert_org_unit}",
-    "common_name": "${cert_cn}",
-    "email": "${cert_email}",
-    "subject_alternative_names": []
-  },
-  "staging_area": {
-    "volumes_path": "${staging_area_volumes_path}",
-    "images_path": "${staging_area_images_path}"
-  },
-  "env_templates": [
-    {
-      "tag": "nginx-postgres",
-      "factory": "docker-compose",
-      "service_templates": [
-        {
-          "template": "nginx",
-          "tag": "web"
-        },
-        {
-          "template": "postgres",
-          "tag": "db"
-        }
-      ],
-      "networks": [
-        {
-          "tag": "#{env.tag}",
-          "name": "#{net.tag}",
-          "external": false,
-          "driver": "bridge",
-          "attachable": null,
-          "enable_ipv6": null,
-          "driver_opts": null,
-          "ipam": null
-        }
-      ],
-      "volumes": [
-        {
-          "tag": "nginx",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
-          },
-          "labels": {
-            "env": "production"
-          }
-        },
-        {
-          "tag": "postgres",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ]
-    }
-  ],
-  "service_templates": [
-    {
-      "tag": "nginx",
-      "factory": "docker",
-      "image": "nginx:latest",
-      "hostname": "web-instance",
-      "container_name": "web-instance",
-      "labels": [
-        "com.example.type=web"
-      ],
-      "workdir": "/usr/share/nginx/html",
-      "volumes": [
-        "nginx:/usr/share/nginx/html"
-      ],
-      "ingress": true,
-      "empty_env": "",
-      "environment": [
-        "NGINX_PORT=80"
-      ],
-      "ports": [
-        "8080:80"
-      ],
-      "properties": {},
-      "networks": [
-        "#{env.tag}"
-      ],
-      "extra_hosts": [],
-      "subject_alternative_name": null
-    },
-    {
-      "tag": "postgres",
-      "factory": "docker",
-      "image": "postgres:14",
-      "hostname": "db-instance",
-      "container_name": "db-instance",
-      "labels": [
-        "com.example.type=db"
-      ],
-      "workdir": "/var/lib/postgresql/data",
-      "volumes": [
-        "postgres:/var/lib/postgresql/data"
-      ],
-      "ingress": false,
-      "empty_env": "",
-      "environment": [
-        "POSTGRES_PASSWORD=secret"
-      ],
-      "ports": [
-        "5432:5432"
-      ],
-      "properties": {},
-      "networks": [
-        "#{env.tag}"
-      ],
-      "extra_hosts": [],
-      "subject_alternative_name": null
-    }
-  ],
-  "envs": [
-    {
-      "template": "nginx-postgres",
-      "factory": "docker-compose",
-      "tag": "foo",
-      "services": [
-        {
-          "template": "nginx",
-          "factory": "docker",
-          "tag": "web",
-          "service_class": null,
-          "image": "nginx:latest",
-          "hostname": "web-instance",
-          "container_name": "web-instance",
-          "labels": [
-            "com.example.type=web"
-          ],
-          "workdir": "/usr/share/nginx/html",
-          "volumes": [
-            "nginx:/usr/share/nginx/html"
-          ],
-          "ingress": true,
-          "empty_env": "",
-          "environment": [
-            "NGINX_PORT=80"
-          ],
-          "ports": [
-            "8080:80"
-          ],
-          "properties": {
-            "com.example.type": "#{svc.tag}"
-          },
-          "networks": [
-            "#{env.tag}"
-          ],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        },
-        {
-          "template": "postgres",
-          "factory": "docker",
-          "tag": "db",
-          "service_class": "#{not.exist}",
-          "image": "postgres:14",
-          "hostname": "db-instance",
-          "container_name": "db-instance",
-          "labels": [
-            "com.example.type=db"
-          ],
-          "workdir": "/var/lib/postgresql/data",
-          "volumes": [
-            "postgres:/var/lib/postgresql/data"
-          ],
-          "ingress": false,
-          "empty_env": "",
-          "environment": [
-            "POSTGRES_PASSWORD=secret"
-          ],
-          "ports": [
-            "5432:5432"
-          ],
-          "properties": {
-            "com.example.type": "#{svc.tag}"
-          },
-          "networks": [
-            "#{env.tag}"
-          ],
-          "extra_hosts": [],
-          "subject_alternative_name": null,
-          "upstreams": [],
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        }
-      ],
-      "networks": [
-        {
-          "tag": "#{env.tag}",
-          "name": "#{net.tag}",
-          "external": false,
-          "driver": "bridge",
-          "attachable": null,
-          "enable_ipv6": null,
-          "driver_opts": null,
-          "ipam": null
-        }
-      ],
-      "volumes": [
-        {
-          "tag": "nginx",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
-          },
-          "labels": {
-            "env": "production"
-          }
-        },
-        {
-          "tag": "postgres",
-          "external": false,
-          "name": null,
-          "driver": "local",
-          "driver_opts": {
-            "type": "none",
-            "o": "bind",
-            "device": "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
-          },
-          "labels": {
-            "env": "production"
-          }
-        }
-      ],
-      "status": {
-        "active": true,
-        "archived": false,
-        "triggered_config": null
-      }
-    }
-  ]
-}"""
+config_yaml_with_refs: str = """
+logging:
+  file: ${log_file}
+  level: ${log_level}
+  stdout: ${log_stdout}
+  format: ${log_format}
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates:
+  - tag: nginx-postgres
+    factory: docker-compose
+    service_templates:
+      - template: nginx
+        tag: web
+      - template: postgres
+        tag: db
+    networks:
+      - tag: '#{env.tag}'
+        name: '#{net.tag}'
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: nginx
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
+        labels:
+          env: production
+      - tag: postgres
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
+        labels:
+          env: production
+service_templates:
+  - tag: nginx
+    factory: docker
+    image: nginx:latest
+    hostname: web-instance
+    container_name: web-instance
+    labels:
+      - com.example.type=web
+    workdir: /usr/share/nginx/html
+    volumes:
+      - nginx:/usr/share/nginx/html
+    ingress: true
+    empty_env: ''
+    environment:
+      - NGINX_PORT=80
+    ports:
+      - 8080:80
+    properties: {}
+    networks:
+      - '#{env.tag}'
+    extra_hosts: []
+    subject_alternative_name: null
+  - tag: postgres
+    factory: docker
+    image: postgres:14
+    hostname: db-instance
+    container_name: db-instance
+    labels:
+      - com.example.type=db
+    workdir: /var/lib/postgresql/data
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    ingress: false
+    empty_env: ''
+    environment:
+      - POSTGRES_PASSWORD=secret
+    ports:
+      - 5432:5432
+    properties: {}
+    networks:
+      - '#{env.tag}'
+    extra_hosts: []
+    subject_alternative_name: null
+envs:
+  - template: nginx-postgres
+    factory: docker-compose
+    tag: foo
+    services:
+      - template: nginx
+        factory: docker
+        tag: web
+        service_class: null
+        image: nginx:latest
+        hostname: web-instance
+        container_name: web-instance
+        labels:
+          - com.example.type=web
+        workdir: /usr/share/nginx/html
+        volumes:
+          - nginx:/usr/share/nginx/html
+        ingress: true
+        empty_env: ''
+        environment:
+          - NGINX_PORT=80
+        ports:
+          - 8080:80
+        properties:
+          com.example.type: '#{svc.tag}'
+        networks:
+          - '#{env.tag}'
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: postgres
+        factory: docker
+        tag: db
+        service_class: '#{not.exist}'
+        image: postgres:14
+        hostname: db-instance
+        container_name: db-instance
+        labels:
+          - com.example.type=db
+        workdir: /var/lib/postgresql/data
+        volumes:
+          - postgres:/var/lib/postgresql/data
+        ingress: false
+        empty_env: ''
+        environment:
+          - POSTGRES_PASSWORD=secret
+        ports:
+          - 5432:5432
+        properties:
+          com.example.type: '#{svc.tag}'
+        networks:
+          - '#{env.tag}'
+        extra_hosts: []
+        subject_alternative_name: null
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    networks:
+      - tag: '#{env.tag}'
+        name: '#{net.tag}'
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: nginx
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
+        labels:
+          env: production
+      - tag: postgres
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
+        labels:
+          env: production
+    status:
+      active: true
+      archived: false
+      triggered_config: null
+"""
 
 
 @pytest.mark.cfg
@@ -664,7 +525,7 @@ def test_load_config(mocker: MockerFixture):
     )
 
     mock_open1 = mock_open(read_data=values)
-    mock_open2 = mock_open(read_data=config_json)
+    mock_open2 = mock_open(read_data=config_yaml)
 
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch(
@@ -876,22 +737,24 @@ def test_store_config_with_real_files():
 
     try:
         with (
-            open(".shpd.json", "w") as config_file,
+            open(".shpd.yaml", "w") as config_file,
             open(".shpd.conf", "w") as values_file,
         ):
-            config_file.write(config_json)
+            config_file.write(config_yaml)
             values_file.write(values.replace("${test_path}", "."))
 
         cMng = ConfigMng(values_file.name)
         config: Config = cMng.load_config()
         cMng.store_config(config)
 
-        with open(".shpd.json", "r") as output_file:
+        with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
-            assert content == config_json
+            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=False)
+            y2: str = yaml.dump(yaml.safe_load(config_yaml), sort_keys=False)
+            assert y1 == y2
 
     finally:
-        for file_path in (".shpd.json", ".shpd.conf"):
+        for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
 
@@ -901,7 +764,7 @@ def test_copy_config(mocker: MockerFixture):
     """Test copying config with mock"""
 
     mock_open1 = mock_open(read_data=values)
-    mock_open2 = mock_open(read_data=config_json)
+    mock_open2 = mock_open(read_data=config_yaml)
 
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch(
@@ -936,7 +799,7 @@ def test_load_config_with_refs(mocker: MockerFixture):
     """Test loading config with references"""
 
     mock_open1 = mock_open(read_data=values.replace("${test_path}", "."))
-    mock_open2 = mock_open(read_data=config_json_with_refs)
+    mock_open2 = mock_open(read_data=config_yaml_with_refs)
 
     mocker.patch("os.path.exists", return_value=True)
     mocker.patch(
@@ -990,21 +853,25 @@ def test_store_config_with_refs_with_real_files():
 
     try:
         with (
-            open(".shpd.json", "w") as config_file,
+            open(".shpd.yaml", "w") as config_file,
             open(".shpd.conf", "w") as values_file,
         ):
-            config_file.write(config_json_with_refs)
+            config_file.write(config_yaml_with_refs)
             values_file.write(values.replace("${test_path}", "."))
 
         cMng = ConfigMng(values_file.name)
         config: Config = cMng.load_config()
         cMng.store_config(config)
 
-        with open(".shpd.json", "r") as output_file:
+        with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
-            assert content == config_json_with_refs
+            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=False)
+            y2: str = yaml.dump(
+                yaml.safe_load(config_yaml_with_refs), sort_keys=False
+            )
+            assert y1 == y2
 
     finally:
-        for file_path in (".shpd.json", ".shpd.conf"):
+        for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
