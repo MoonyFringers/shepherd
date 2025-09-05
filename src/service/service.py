@@ -48,9 +48,9 @@ class Service(ABC):
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
 
     @abstractmethod
-    def render(self) -> str:
+    def get_target_cfg(self) -> str:
         """
-        Render the service configuration.
+        Get the service target configuration.
         """
         pass
 
@@ -152,11 +152,13 @@ class ServiceMng:
         if service:
             service.reload()
 
-    def render_svc(self, envCfg: EnvironmentCfg, svc_tag: str) -> Optional[str]:
-        """Render a service configuration."""
+    def get_svc_target_cfg(
+        self, envCfg: EnvironmentCfg, svc_tag: str
+    ) -> Optional[str]:
+        """Get a service target configuration."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            return service.render()
+            return service.get_target_cfg()
         return None
 
     def stdout_svc(self, envCfg: EnvironmentCfg, svc_tag: str):

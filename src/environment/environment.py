@@ -70,9 +70,9 @@ class Environment(ABC):
         pass
 
     @abstractmethod
-    def render(self) -> str:
+    def get_target_cfg(self) -> str:
         """
-        Render the environment configuration.
+        Get the environment target configuration.
         """
         pass
 
@@ -317,7 +317,7 @@ class EnvironmentMng:
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        env.envCfg.status.triggered_config = env.render()
+        env.envCfg.status.triggered_config = env.get_target_cfg()
         env.sync_config()
         env.start()
         Util.print(f"Started environment: {env.envCfg.tag}")
@@ -341,11 +341,11 @@ class EnvironmentMng:
         env.reload()
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
-    def render_env(self, env_tag: str) -> Optional[str]:
-        """Render an environment configuration."""
+    def get_env_target_cfg(self, env_tag: str) -> Optional[str]:
+        """Get an environment target configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
-            return env.render()
+            return env.get_target_cfg()
         return None
 
     def status_env(self, envCfg: EnvironmentCfg):

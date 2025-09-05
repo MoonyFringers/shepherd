@@ -38,7 +38,7 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def render(self) -> str:
+    def get_target_cfg(self) -> str:
         """
         Render the docker-compose service configuration for this service.
         """

@@ -206,7 +206,7 @@ def test_svc_render_compose_service(
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "render", "test"])
+    result = runner.invoke(cli, ["svc", "get", "test"])
     assert result.exit_code == 0
 
     assert result.output == (

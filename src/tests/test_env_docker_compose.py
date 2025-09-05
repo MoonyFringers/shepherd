@@ -398,7 +398,7 @@ def test_env_render_compose_env_ext_net(
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "render", "test-1"])
+    result = runner.invoke(cli, ["env", "get", "test-1"])
     assert result.exit_code == 0
 
     assert result.output == (
@@ -462,7 +462,7 @@ def test_env_render_compose_env_int_net(
     shpd_json = shpd_path / ".shpd.json"
     shpd_json.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "render", "test-2"])
+    result = runner.invoke(cli, ["env", "get", "test-2"])
     assert result.exit_code == 0
 
     assert result.output == (
