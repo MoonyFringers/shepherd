@@ -38,18 +38,6 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def clone(self, dst_svc_tag: str) -> DockerComposeSvc:
-        """Clone a service."""
-        clonedCfg = self.configMng.svc_cfg_from_other(self.to_config())
-        clonedCfg.tag = dst_svc_tag
-        clonedSvc = DockerComposeSvc(
-            self.configMng,
-            self.envCfg,
-            clonedCfg,
-        )
-        return clonedSvc
-
-    @override
     def render(self) -> str:
         """
         Render the docker-compose service configuration for this service.

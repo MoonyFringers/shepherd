@@ -1318,33 +1318,6 @@ class ConfigMng:
             upstreams=[],
         )
 
-    def svc_cfg_from_other(self, other: ServiceCfg):
-        """
-        Creates a copy of an existing ServiceCfg object.
-        """
-        return ServiceCfg(
-            template=other.template,
-            factory=other.factory,
-            tag=other.tag,
-            service_class=other.service_class,
-            image=other.image,
-            hostname=other.hostname,
-            container_name=other.container_name,
-            labels=deepcopy(other.labels),
-            workdir=other.workdir,
-            volumes=deepcopy(other.volumes),
-            ingress=other.ingress,
-            empty_env=other.empty_env,
-            environment=deepcopy(other.environment),
-            ports=deepcopy(other.ports),
-            properties=deepcopy(other.properties),
-            networks=deepcopy(other.networks),
-            extra_hosts=deepcopy(other.extra_hosts),
-            subject_alternative_name=other.subject_alternative_name,
-            upstreams=deepcopy(other.upstreams),
-            status=deepcopy(other.status),
-        )
-
     def svc_cfg_from_service_template(
         self,
         service_template: ServiceTemplateCfg,

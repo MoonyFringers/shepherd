@@ -48,11 +48,6 @@ class Service(ABC):
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
 
     @abstractmethod
-    def clone(self, dst_svc_tag: str) -> Service:
-        """Clone a service."""
-        pass
-
-    @abstractmethod
     def render(self) -> str:
         """
         Render the service configuration.
