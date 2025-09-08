@@ -16,13 +16,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import json
 import os
 import re
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, Match, Optional, cast
 
+import yaml
 from glom import glom  # type: ignore[import]
 
 from util import Constants, Util
@@ -31,7 +31,7 @@ from util import Constants, Util
 # es: ${VAR_NAME}
 VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
-# Regular expression for references inside .shpd.json
+# Regular expression for references inside .shpd.yaml
 # es: #{REF_NAME}
 REF_RE = re.compile(r"#\{([^}]+)\}")
 
@@ -347,6 +347,25 @@ class Resolvable:
 
 
 @dataclass
+class EntityStatus(Resolvable):
+    """
+    Represents the status of an entity.
+
+    - `active`: Whether this entity should be considered in
+      start/stop commands.
+      (Note: this is *not* the runtime state, which is queried dynamically.)
+    - `archived`: Marks the entity as archived (e.g., not used anymore).
+    - `triggered_config`: The rendered configuration for the target engine
+      (e.g., Docker Compose). This field is populated on `start` and
+      cleared on `stop`.
+    """
+
+    active: bool = False
+    archived: bool = False
+    triggered_config: Optional[str] = None
+
+
+@dataclass
 class LoggingCfg(Resolvable):
     """
     Represents the logging configuration.
@@ -486,6 +505,9 @@ class ServiceCfg(Resolvable):
     extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
     upstreams: Optional[list[UpstreamCfg]] = None
+    status: EntityStatus = field(
+        default_factory=lambda: EntityStatus(active=True)
+    )
 
     def is_ingress(self) -> bool:
         return str_to_bool(
@@ -518,8 +540,7 @@ class EnvironmentCfg(Resolvable):
     services: Optional[list[ServiceCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
-    archived: bool
-    active: bool
+    status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -612,12 +633,19 @@ class Config(Resolvable):
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
 
-def parse_config(json_str: str) -> Config:
+def parse_config(yaml_str: str) -> Config:
     """
-    Parses a JSON string into a `Config` object.
+    Parses a YAML string into a `Config` object.
     """
 
-    data = json.loads(json_str)
+    data = yaml.safe_load(yaml_str)
+
+    def parse_status(item: Any) -> EntityStatus:
+        return EntityStatus(
+            active=item["active"],
+            archived=item["archived"],
+            triggered_config=item.get("triggered_config"),
+        )
 
     def parse_logging(item: Any) -> LoggingCfg:
         return LoggingCfg(
@@ -695,6 +723,7 @@ def parse_config(json_str: str) -> Config:
                 parse_upstream(upstream)
                 for upstream in item.get("upstreams", [])
             ],
+            status=parse_status(item["status"]),
         )
 
     def parse_network(item: Any) -> NetworkCfg:
@@ -774,8 +803,7 @@ def parse_config(json_str: str) -> Config:
             volumes=[
                 parse_volume(volume) for volume in item.get("volumes", [])
             ],
-            archived=item["archived"],
-            active=item["active"],
+            status=parse_status(item["status"]),
         )
 
     def parse_shpd_registry(item: Any) -> ShpdRegistryCfg:
@@ -840,7 +868,7 @@ class ConfigMng:
 
     This class handles:
     - Reading user-defined key-value pairs from a configuration values file.
-    - Loading a JSON configuration file.
+    - Loading a YAML configuration file.
     - Storing the configuration back to file.
     """
 
@@ -942,15 +970,15 @@ class ConfigMng:
     def load_config(self) -> Config:
         """
         Loads and processes the configuration file.
-        Reads the JSON configuration file.
+        Reads the YAML configuration file.
 
         :raises FileNotFoundError: If the configuration file is missing.
         :raises ValueError: If the configuration file is malformed.
         """
         with open(self.constants.SHPD_CONFIG_FILE, "r", encoding="utf-8") as f:
-            config_data = json.load(f)
+            config_data = yaml.safe_load(f)
 
-        config = parse_config(json.dumps(config_data))
+        config = parse_config(yaml.dump(config_data, sort_keys=False))
         config.set_resolver(self.user_values)
         return config
 
@@ -963,7 +991,7 @@ class ConfigMng:
     def store_config(self, config: Config):
         """
         Stores the configuration.
-        Writes the final configuration back to a JSON file.
+        Writes the final configuration back to a YAML file.
 
         :param config: The `Config` object to be saved.
         """
@@ -972,7 +1000,7 @@ class ConfigMng:
         config.set_resolved()
 
         with open(self.constants.SHPD_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config_dict, f, indent=2)
+            yaml.dump(config_dict, f, sort_keys=False)
 
     def store(self):
         """
@@ -1140,7 +1168,7 @@ class ConfigMng:
         :return: The active environment configuration if found, else None.
         """
         for env in self.config.envs:
-            if env.active:
+            if env.status.active:
                 return env
         return None
 
@@ -1152,9 +1180,9 @@ class ConfigMng:
         """
         for env in self.config.envs:
             if env.tag == envTag:
-                env.active = True
+                env.status.active = True
             else:
-                env.active = False
+                env.status.active = False
         self.store()
 
     def get_resource_classes(
@@ -1221,8 +1249,6 @@ class ConfigMng:
             services=services,
             networks=env_tmpl_cfg.networks,
             volumes=env_tmpl_cfg.volumes,
-            archived=False,
-            active=False,
         )
 
     def env_cfg_from_other(self, other: EnvironmentCfg):
@@ -1236,8 +1262,6 @@ class ConfigMng:
             services=deepcopy(other.services),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
-            archived=other.archived,
-            active=other.active,
         )
 
     def svc_tmpl_cfg_from_other(self, other: ServiceTemplateCfg):
@@ -1318,6 +1342,7 @@ class ConfigMng:
             extra_hosts=deepcopy(other.extra_hosts),
             subject_alternative_name=other.subject_alternative_name,
             upstreams=deepcopy(other.upstreams),
+            status=deepcopy(other.status),
         )
 
     def svc_cfg_from_service_template(

@@ -16,16 +16,18 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, List, Union
+from typing import Any, Optional, Union
 
+import yaml
+from rich import box
 from rich.console import Console
+from rich.table import Table
 
 from .constants import Constants
 
@@ -109,6 +111,39 @@ class Util:
         Util.console.print(f"{message}", highlight=False)
 
     @staticmethod
+    def render_table(
+        title: Optional[str],
+        columns: list[dict[str, str]],
+        rows: list[list[str]],
+    ):
+        """
+        Render a table using rich.
+
+        Args:
+            title: Table title (None for no title).
+            columns: list of dicts with keys:
+                     - "header" (required): column name
+                     - "style" (optional): rich style string
+            rows: list of row values (must match number of columns).
+        """
+        table = Table(
+            title=title or "",
+            box=box.SIMPLE,
+            title_justify="left",
+            title_style="bold",
+        )
+
+        for col in columns:
+            table.add_column(
+                col["header"], style=col.get("style", ""), no_wrap=True
+            )
+
+        for row in rows:
+            table.add_row(*row)
+
+        Util.console.print(table)
+
+    @staticmethod
     def ensure_shpd_dirs(constants: Constants):
         dirs = {
             "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
@@ -129,8 +164,8 @@ class Util:
         if os.path.exists(config_file_path):
             try:
                 with open(config_file_path, "r", encoding="utf-8") as f:
-                    json.load(f)
-            except (json.JSONDecodeError, OSError) as e:
+                    yaml.safe_load(f)
+            except (yaml.YAMLError, OSError) as e:
                 Util.print_error_and_die(
                     f"Invalid config file: {config_file_path}\nError: {e}"
                 )
@@ -139,7 +174,7 @@ class Util:
         default_config = constants.DEFAULT_CONFIG
         try:
             with open(config_file_path, "w", encoding="utf-8") as f:
-                json.dump(default_config, f, indent=2)
+                yaml.dump(default_config, f, indent=2, sort_keys=False)
         except OSError as e:
             Util.print_error_and_die(
                 f"Failed to create config file: {config_file_path}\nError: {e}"
@@ -151,7 +186,7 @@ class Util:
 
     @staticmethod
     def run_command(
-        cmd: Union[List[str], str],
+        cmd: Union[list[str], str],
         check: bool = True,
         shell: bool = False,
         capture_output: bool = False,

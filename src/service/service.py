@@ -139,17 +139,23 @@ class ServiceMng:
     def build_image_svc(self, service_template: str):
         pass
 
-    def start_svc(self, envCfg: EnvironmentCfg, service_tag: str):
+    def start_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Start a service."""
-        pass
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.start()
 
-    def halt_svc(self, envCfg: EnvironmentCfg, service_tag: str):
+    def halt_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Halt a service."""
-        pass
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.halt()
 
-    def reload_svc(self, envCfg: EnvironmentCfg, service_tag: str):
+    def reload_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Reload a service."""
-        pass
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.reload()
 
     def render_svc(self, envCfg: EnvironmentCfg, svc_tag: str) -> Optional[str]:
         """Render a service configuration."""
@@ -160,8 +166,12 @@ class ServiceMng:
 
     def stdout_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Get service stdout."""
-        pass
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.show_stdout()
 
     def shell_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Get a shell session for a service."""
-        pass
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.get_shell()

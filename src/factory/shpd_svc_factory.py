@@ -19,7 +19,7 @@
 from typing import override
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
-from docker import DockerSvc
+from docker import DockerComposeSvc
 from service import Service, ServiceFactory
 from util import Constants
 
@@ -42,7 +42,7 @@ class ShpdServiceFactory(ServiceFactory):
         """
         match svcCfg.factory:
             case Constants.SVC_FACTORY_DEFAULT:
-                return DockerSvc(self.configMng, envCfg, svcCfg)
+                return DockerComposeSvc(self.configMng, envCfg, svcCfg)
             case _:
                 raise ValueError(
                     f"""Unknown service type: {svcCfg.template},

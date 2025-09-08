@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any, override
 
 import yaml
@@ -25,6 +26,8 @@ import yaml
 from config import ConfigMng, EnvironmentCfg
 from environment import Environment
 from service import ServiceFactory
+
+from .docker_compose_util import run_compose
 
 
 class DockerComposeEnv(Environment):
@@ -53,17 +56,20 @@ class DockerComposeEnv(Environment):
     @override
     def start(self):
         """Start the environment."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "up", "-d")
 
     @override
     def halt(self):
         """Halt the environment."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "down")
 
     @override
     def reload(self):
         """Reload the environment."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(self.envCfg.status.triggered_config, "restart")
 
     @override
     def render(self) -> str:
@@ -125,6 +131,28 @@ class DockerComposeEnv(Environment):
         return yaml.dump(compose_config, sort_keys=False)
 
     @override
-    def status(self):
-        """Get environment status."""
-        pass
+    def status(self) -> list[dict[str, str]]:
+        """Get environment status (list of services with state)."""
+
+        yaml = (
+            self.envCfg.status.triggered_config
+            if self.envCfg.status.triggered_config
+            else self.render()
+        )
+
+        result = run_compose(yaml, "ps", "--format", "json", capture=True)
+        stdout_str = result.stdout.strip()
+
+        services: list[dict[str, str]] = []
+        for line in stdout_str.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if obj:
+                    services.append(obj)
+            except json.JSONDecodeError:
+                continue
+
+        return services
