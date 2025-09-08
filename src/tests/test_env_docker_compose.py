@@ -15,9 +15,12 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+# flake8: noqa E501
+
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -109,7 +112,7 @@ shpd_config = """
     {
       "tag": "default",
       "factory": "docker",
-      "image": "test-image:latest",
+      "image": "busybox:stable-glibc",
       "labels": [
         "com.example.label1=value1",
         "com.example.label2=value2"
@@ -147,7 +150,7 @@ shpd_config = """
           "template": "default",
           "factory": "docker",
           "tag": "test-1",
-          "image": "test-1-image:latest",
+          "image": "busybox:stable-glibc",
           "labels": [
             "com.example.label1=value1",
             "com.example.label2=value2"
@@ -183,7 +186,7 @@ shpd_config = """
           "template": "default",
           "factory": "docker",
           "tag": "test-2",
-          "image": "test-2-image:latest",
+          "image": "busybox:stable-glibc",
           "labels": [
             "com.example.label1=value1",
             "com.example.label2=value2"
@@ -245,7 +248,7 @@ shpd_config = """
           "template": "default",
           "factory": "docker",
           "tag": "test-1",
-          "image": "test-1-image:latest",
+          "image": "busybox:stable-glibc",
           "labels": [
             "com.example.label1=value1",
             "com.example.label2=value2"
@@ -281,7 +284,7 @@ shpd_config = """
           "template": "default",
           "factory": "docker",
           "tag": "test-2",
-          "image": "test-2-image:latest",
+          "image": "busybox:stable-glibc",
           "labels": [
             "com.example.label1=value1",
             "com.example.label2=value2"
@@ -360,6 +363,11 @@ shpd_config = """
 }
 """
 
+docker_compose_ps_output = """
+{"Command":"\\\"docker-entrypoint.s…\\\"","CreatedAt":"2025-09-08 12:22:01 +0200 CEST","ExitCode":0,"Health":"","ID":"cc1200024a2a","Image":"postgres:14","Labels":"com.docker.compose.oneoff=False","LocalVolumes":"1","Mounts":"beppe_postgres","Name":"db-instance","Names":"db-instance","Networks":"beppe_beppe","Ports":"0.0.0.0:5432-\u003e5432/tcp, [::]:5432-\u003e5432/tcp","Project":"beppe","Publishers":[{"URL":"0.0.0.0","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"},{"URL":"::","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"}],"RunningFor":"About a minute ago","Service":"test-1-test-1","Size":"0B","State":"running","Status":"Up About a minute"}
+{"Command":"\"docker-entrypoint.s…\"","Status":"Wrong JSON"}
+"""
+
 
 @pytest.fixture
 def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
@@ -379,199 +387,279 @@ def runner() -> CliRunner:
     return CliRunner()
 
 
-@pytest.mark.env
-def test_env_init(
+@pytest.mark.docker
+def test_env_render_compose_env_ext_net(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-init-1"])
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "render", "test-1"])
     assert result.exit_code == 0
 
-    sm = ShepherdMng()
-    assert sm.configMng.exists_environment("test-init-1")
-
-    expected_dirs = [os.path.join(sm.configMng.config.envs_path, "test-init-1")]
-
-    for directory in expected_dirs:
-        assert os.path.isdir(
-            directory
-        ), f"Directory {directory} was not created."
-
-
-@pytest.mark.env
-def test_env_clone(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    result = runner.invoke(cli, ["env", "init", "default", "test-clone-1"])
-    assert result.exit_code == 0
-
-    result = runner.invoke(
-        cli, ["env", "clone", "test-clone-1", "test-clone-2"]
+    assert result.output == (
+        "name: test-1\n"
+        "services:\n"
+        "  test-1-test-1:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-1-test-1\n"
+        "    container_name: test-1-test-1\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - default\n"
+        "  test-2-test-1:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-2-test-1\n"
+        "    container_name: test-2-test-1\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - default\n"
+        "networks:\n"
+        "  default:\n"
+        "    name: envnet\n"
+        "    external: true\n"
+        "volumes:\n"
+        "  app_data_ext:\n"
+        "    name: nfs-1\n"
+        "    external: true\n\n"
     )
-    assert result.exit_code == 0
-
-    sm = ShepherdMng()
-    assert sm.configMng.exists_environment("test-clone-1")
-    assert sm.configMng.exists_environment("test-clone-2")
-
-    expected_dirs = [
-        os.path.join(sm.configMng.config.envs_path, "test-clone-1"),
-        os.path.join(sm.configMng.config.envs_path, "test-clone-2"),
-    ]
-
-    for directory in expected_dirs:
-        assert os.path.isdir(
-            directory
-        ), f"Directory {directory} was not created."
 
 
-@pytest.mark.env
-def test_env_rename(
+@pytest.mark.docker
+def test_env_render_compose_env_int_net(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-rename-1"])
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "render", "test-2"])
     assert result.exit_code == 0
 
-    result = runner.invoke(
-        cli, ["env", "rename", "test-rename-1", "test-rename-2"]
+    assert result.output == (
+        "name: test-2\n"
+        "services:\n"
+        "  test-1-test-2:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-1-test-2\n"
+        "    container_name: test-1-test-2\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - internal_net\n"
+        "  test-2-test-2:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-2-test-2\n"
+        "    container_name: test-2-test-2\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - internal_net\n"
+        "networks:\n"
+        "  internal_net:\n"
+        "    driver: bridge\n"
+        "    attachable: true\n"
+        "    enable_ipv6: false\n"
+        "    driver_opts:\n"
+        "      com.docker.network.bridge.name: br-internal\n"
+        "    ipam:\n"
+        "      driver: default\n"
+        "      config:\n"
+        "      - subnet: 172.30.0.0/16\n"
+        "        gateway: 172.30.0.1\n"
+        "volumes:\n"
+        "  app_data:\n"
+        "    driver: local\n"
+        "    driver_opts:\n"
+        "      type: none\n"
+        "      o: bind\n"
+        "      device: /srv/data\n"
+        "    labels:\n"
+        "      env: production\n\n"
     )
-    assert result.exit_code == 0
-
-    sm = ShepherdMng()
-    assert not sm.configMng.exists_environment("test-rename-1")
-    assert sm.configMng.exists_environment("test-rename-2")
-
-    renamed_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-2")
-    old_dir = os.path.join(sm.configMng.config.envs_path, "test-rename-1")
-
-    assert os.path.isdir(
-        renamed_dir
-    ), f"Directory {renamed_dir} was not created."
-    assert not os.path.exists(
-        old_dir
-    ), f"Old directory {old_dir} still exists after rename."
 
 
-@pytest.mark.env
-def test_env_checkout(
+@pytest.mark.docker
+def test_env_start(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
-
-    result = runner.invoke(cli, ["env", "init", "default", "test-2"])
-    assert result.exit_code == 0
-
-    sm = ShepherdMng()
-    env = sm.configMng.get_active_environment()
-    assert env is None
-
-    result = runner.invoke(cli, ["env", "checkout", "test-1"])
-    assert result.exit_code == 0
-
-    sm = ShepherdMng()
-    env = sm.configMng.get_active_environment()
-    assert env is not None
-    assert env.tag == "test-1"
-
-    result = runner.invoke(cli, ["env", "checkout", "test-2"])
-    assert result.exit_code == 0
-
-    sm = ShepherdMng()
-    env = sm.configMng.get_active_environment()
-    assert env is not None
-    assert env.tag == "test-2"
-
-
-@pytest.mark.env
-def test_env_list(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
-    assert result.exit_code == 0
-
-    result = runner.invoke(cli, ["env", "list"])
-    assert result.exit_code == 0
-
-
-@pytest.mark.env
-def test_env_delete_yes(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    mocker.patch("builtins.input", return_value="y")
-
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
-    assert result.exit_code == 0
-
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
-    assert result.exit_code == 0
-
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
-    assert result.exit_code == 0
-
-    mocker.patch("builtins.input", return_value="y")
-
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
-    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
-    assert env is None
-
-    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
-
-    assert not os.path.exists(
-        env_dir
-    ), f"directory {env_dir} still exists after delete."
+    assert env
+    assert env.status.active is True
+    assert env.status.archived is False
+    assert env.status.triggered_config
 
 
-@pytest.mark.env
-def test_env_delete_no(
+@pytest.mark.docker
+def test_env_stop(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    mocker.patch("builtins.input", return_value="n")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
-    assert result.exit_code == 0
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "down"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
 
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    result = runner.invoke(cli, ["env", "halt"])
     assert result.exit_code == 0
+    mock_subproc.assert_called_once()
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
-    assert env is not None
-
-    env_dir = os.path.join(sm.configMng.config.envs_path, "test-1")
-
-    assert os.path.exists(
-        env_dir
-    ), f"directory {env_dir} does not exist after delete-no."
+    assert env
+    assert env.status.active is True
+    assert env.status.archived is False
+    assert env.status.triggered_config is None
 
 
-@pytest.mark.env
-def test_env_add_nonexisting_resource(
+@pytest.mark.docker
+def test_env_restart(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
-    assert result.exit_code == 0
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
-    assert result.exit_code == 0
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "restart"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
 
-    result = runner.invoke(cli, ["env", "add", "foo", "foo-1"])
-    assert result.exit_code == 2
+    result = runner.invoke(cli, ["env", "up"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "restart"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "reload"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env
+    assert env.status.active is True
+    assert env.status.archived is False
+    assert env.status.triggered_config
+
+
+@pytest.mark.docker
+def test_env_status(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_json = shpd_path / ".shpd.json"
+    shpd_json.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "ps", "--format", "json"],
+            returncode=0,
+            stdout=docker_compose_ps_output,
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "status"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()

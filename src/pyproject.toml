@@ -36,4 +36,4 @@ addopts = [
   "--cov-report=html",
   "--cov-config=.coveragerc",
 ]
-markers = ["env", "svc", "cfg", "shpd", "compl"]
+markers = ["env", "svc", "cfg", "shpd", "compl", "docker"]

@@ -331,6 +331,11 @@ class EnvironmentMng:
     def reload_env(self, envCfg: EnvironmentCfg):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
+        if not env.envCfg.status.triggered_config:
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+
         env.reload()
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
