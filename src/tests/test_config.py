@@ -225,7 +225,12 @@ config_json = """{
                 "dump_dir": "/dumps/2"
               }
             }
-          ]
+          ],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "traefik",
@@ -246,7 +251,12 @@ config_json = """{
           "networks": [],
           "extra_hosts": [],
           "subject_alternative_name": null,
-          "upstreams": []
+          "upstreams": [],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "custom-1",
@@ -270,7 +280,12 @@ config_json = """{
           "networks": [],
           "extra_hosts": [],
           "subject_alternative_name": null,
-          "upstreams": []
+          "upstreams": [],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "nodejs",
@@ -296,7 +311,12 @@ config_json = """{
           "networks": [],
           "extra_hosts": [],
           "subject_alternative_name": null,
-          "upstreams": []
+          "upstreams": [],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
       "networks": [
@@ -327,8 +347,11 @@ config_json = """{
           }
         }
       ],
-      "archived": false,
-      "active": false
+      "status": {
+        "active": true,
+        "archived": false,
+        "triggered_config": null
+      }
     }
   ]
 }"""
@@ -530,7 +553,12 @@ config_json_with_refs: str = """{
           ],
           "extra_hosts": [],
           "subject_alternative_name": null,
-          "upstreams": []
+          "upstreams": [],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         },
         {
           "template": "postgres",
@@ -563,7 +591,12 @@ config_json_with_refs: str = """{
           ],
           "extra_hosts": [],
           "subject_alternative_name": null,
-          "upstreams": []
+          "upstreams": [],
+          "status": {
+            "active": true,
+            "archived": false,
+            "triggered_config": null
+          }
         }
       ],
       "networks": [
@@ -608,8 +641,11 @@ config_json_with_refs: str = """{
           }
         }
       ],
-      "archived": false,
-      "active": true
+      "status": {
+        "active": true,
+        "archived": false,
+        "triggered_config": null
+      }
     }
   ]
 }"""
@@ -796,8 +832,9 @@ def test_load_config(mocker: MockerFixture):
     assert config.cert.subject_alternative_names == []
     assert config.staging_area.volumes_path == "${test_path}/sa_volumes"
     assert config.staging_area.images_path == "${test_path}/sa_images"
-    assert config.envs[0].archived is False
-    assert config.envs[0].active is False
+    assert config.envs[0].status.archived is False
+    assert config.envs[0].status.active is True
+    assert config.envs[0].status.triggered_config is None
 
 
 @pytest.mark.cfg
@@ -884,6 +921,8 @@ def test_copy_config(mocker: MockerFixture):
     env = config.envs[0]
     assert env
     env_cloned = cMng.env_cfg_from_other(env)
+    assert env_cloned != env
+    env_cloned.status = env.status
     assert env_cloned == env
 
     services = config.envs[0].services
