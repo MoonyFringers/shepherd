@@ -77,7 +77,7 @@ class Environment(ABC):
         pass
 
     @abstractmethod
-    def status(self):
+    def status(self) -> list[dict[str, str]]:
         """Get environment status."""
         pass
 
@@ -194,7 +194,9 @@ class EnvironmentMng:
         self.envFactory = envFactory
         self.svcFactory = svcFactory
 
-    def get_environment(self, env_tag: Optional[str]) -> Optional[Environment]:
+    def get_environment_from_tag(
+        self, env_tag: Optional[str]
+    ) -> Optional[Environment]:
         if env_tag and env_tag.strip():
             envCfg = self.configMng.get_environment(env_tag)
             if not envCfg:
@@ -211,6 +213,10 @@ class EnvironmentMng:
             return env
         else:
             return None
+
+    def get_environment_from_cfg(self, env_cfg: EnvironmentCfg) -> Environment:
+        env = self.envFactory.new_environment_cfg(env_cfg)
+        return env
 
     def init_env(self, env_template: str, env_tag: str):
         """Initialize an environment."""
@@ -292,34 +298,98 @@ class EnvironmentMng:
         """List all available environments."""
         envs = self.configMng.get_environments()
         if not envs:
-            Util.print("No environments available.")
+            Util.console.print("[yellow]No environments available.[/yellow]")
             return
-        Util.print("Available environments:")
-        for env in envs:
-            Util.print(f" - {env.tag} ({env.template})")
+
+        rows = [[env.tag, env.template] for env in envs]
+
+        Util.render_table(
+            title="Environments",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "Template", "style": "magenta"},
+            ],
+            rows=rows,
+        )
 
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""
-        pass
+        env = self.get_environment_from_cfg(envCfg)
+        env.envCfg.status.triggered_config = env.render()
+        env.sync_config()
+        env.start()
+        Util.print(f"Started environment: {env.envCfg.tag}")
 
     def halt_env(self, envCfg: EnvironmentCfg):
         """Halt an environment."""
-        pass
+        env = self.get_environment_from_cfg(envCfg)
+        env.halt()
+        env.envCfg.status.triggered_config = None
+        env.sync_config()
+        Util.print(f"Halted environment: {env.envCfg.tag}")
 
     def reload_env(self, envCfg: EnvironmentCfg):
         """Reload an environment."""
-        pass
+        env = self.get_environment_from_cfg(envCfg)
+        if not env.envCfg.status.triggered_config:
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+
+        env.reload()
+        Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
     def render_env(self, env_tag: str) -> Optional[str]:
         """Render an environment configuration."""
-        env = self.get_environment(env_tag)
+        env = self.get_environment_from_tag(env_tag)
         if env:
             return env.render()
         return None
 
     def status_env(self, envCfg: EnvironmentCfg):
         """Get environment status."""
-        pass
+        env = self.get_environment_from_cfg(envCfg)
+        env_status = env.status()
+
+        services: list[Service] = env.get_services()
+        status_by_service = {
+            row.get("Service"): row for row in env_status if row.get("Service")
+        }
+
+        rows: list[list[str]] = []
+        for svc in services:
+            svc_name = svc.canonical_name()
+            svc_info = status_by_service.get(svc_name)
+
+            if svc_info:
+                state = svc_info.get("State", "?").lower()
+            else:
+                state = "stopped"
+
+            if state == "running":
+                state_colored = f"[bold green]{state}[/bold green]"
+            elif state == "stopped":
+                state_colored = f"[bold red]{state}[/bold red]"
+            else:
+                state_colored = f"[yellow]{state}[/yellow]"
+
+            rows.append([svc.svcCfg.tag, state_colored])
+
+        if not rows:
+            Util.console.print(
+                f"[yellow]No services found for "
+                f"environment '{envCfg.tag}'[/yellow]"
+            )
+            return
+
+        Util.render_table(
+            title=f"[white]{envCfg.tag}[/white]",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "State"},
+            ],
+            rows=rows,
+        )
 
     def add_service(
         self,
@@ -329,14 +399,14 @@ class EnvironmentMng:
         svc_class: Optional[str],
     ):
         """Add a service to an environment."""
-        env = self.get_environment(env_tag)
+        env = self.get_environment_from_tag(env_tag)
 
         if env:
             envCfg = env.to_config()
             if env.get_service(svc_tag):
                 Util.print_error_and_die(
-                    f"""Service with tag '{svc_tag}' already
-                    exists in environment '{envCfg.tag}'."""
+                    f"Service with tag '{svc_tag}' already "
+                    f"exists in environment '{envCfg.tag}'."
                 )
             svc_type_cfg = self.configMng.get_service_template(
                 svc_template if svc_template else Constants.SVC_TEMPLATE_DEFAULT
