@@ -54,10 +54,9 @@ class Environment(ABC):
         """Clone the environment."""
         pass
 
-    @abstractmethod
     def start(self):
         """Start the environment."""
-        pass
+        self.ensure_resources()
 
     @abstractmethod
     def halt(self):
@@ -94,9 +93,13 @@ class Environment(ABC):
         """Return the directory for the environment with a given tag."""
         return os.path.join(self.configMng.config.envs_path, env_tag)
 
+    def ensure_resources(self):
+        """Ensure the environment resources are available."""
+        pass
+
     def realize(self):
         """Realize the environment."""
-        Util.create_dir(
+        Util.ensure_dir(
             self.get_path(),
             self.envCfg.tag,
         )
