@@ -487,7 +487,7 @@ def test_completion_env_reload(
 
 
 @pytest.mark.compl
-def test_completion_env_render(
+def test_completion_env_render_target_cfg(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -498,11 +498,11 @@ def test_completion_env_render(
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "render"])
+    completions = sm.completionMng.get_completions(["env", "get"])
     assert completions == [
         "test-1",
         "test-2",
-    ], "Expected render completion"
+    ], "Expected get target cfg completion"
 
 
 @pytest.mark.compl
@@ -707,8 +707,11 @@ def test_completion_svc_render(
     shpd_json.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "render"])
-    assert completions == ["red", "white"], "Expected render completion"
+    completions = sm.completionMng.get_completions(["svc", "get"])
+    assert completions == [
+        "red",
+        "white",
+    ], "Expected get target cfg completion."
 
 
 @pytest.mark.compl

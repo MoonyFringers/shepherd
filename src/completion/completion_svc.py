@@ -30,7 +30,7 @@ class CompletionSvcMng(AbstractCompletionMng):
         "halt",
         "stdout",
         "shell",
-        "render",
+        "get",
         "reload",
     ]
 
@@ -65,8 +65,8 @@ class CompletionSvcMng(AbstractCompletionMng):
                 return self.get_stdout_completions(args[1:])
             case "shell":
                 return self.get_shell_completions(args[1:])
-            case "render":
-                return self.get_render_completions(args[1:])
+            case "get":
+                return self.get_render_target_cfg_completions(args[1:])
             case "reload":
                 return self.get_reload_completions(args[1:])
             case _:
@@ -122,7 +122,7 @@ class CompletionSvcMng(AbstractCompletionMng):
             return self.get_svc_tags(args)
         return []
 
-    def get_render_completions(self, args: list[str]) -> list[str]:
+    def get_render_target_cfg_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
         return []

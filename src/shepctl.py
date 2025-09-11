@@ -255,12 +255,12 @@ def env_reload(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
     shepherd.environmentMng.reload_env(envCfg)
 
 
-@env.command(name="render")
+@env.command(name="get")
 @click.argument("env_tag", required=False)
 @click.pass_obj
-def env_render(shepherd: ShepherdMng, env_tag: str):
-    """Render environment configuration."""
-    click.echo(shepherd.environmentMng.render_env(env_tag))
+def env_get_target_cfg(shepherd: ShepherdMng, env_tag: str):
+    """Get an environment target configuration."""
+    click.echo(shepherd.environmentMng.get_env_target_cfg(env_tag))
 
 
 @env.command(name="status")
@@ -342,13 +342,15 @@ def svc_reload(shepherd: ShepherdMng, envCfg: EnvironmentCfg, service_tag: str):
     shepherd.serviceMng.reload_svc(envCfg, service_tag)
 
 
-@svc.command(name="render")
+@svc.command(name="get")
 @click.argument("service_tag", type=str, required=True)
 @click.pass_obj
 @require_active_env
-def svc_render(shepherd: ShepherdMng, envCfg: EnvironmentCfg, service_tag: str):
-    """Render service configuration."""
-    click.echo(shepherd.serviceMng.render_svc(envCfg, service_tag))
+def svc_get_target_cfg(
+    shepherd: ShepherdMng, envCfg: EnvironmentCfg, service_tag: str
+):
+    """Get service target configuration."""
+    click.echo(shepherd.serviceMng.get_svc_target_cfg(envCfg, service_tag))
 
 
 @svc.command(name="stdout")

@@ -57,9 +57,10 @@ class Util:
                 )
 
     @staticmethod
-    def create_dir(dir_path: str, desc: str):
+    def create_dir(dir_path: str, desc: str, mode: int = 0o755):
         try:
             os.makedirs(dir_path, exist_ok=True)
+            os.chmod(dir_path, mode)
         except OSError as e:
             Util.print_error_and_die(
                 f"[{desc}] Failed to create directory: {dir_path}\nError: {e}"
@@ -144,6 +145,16 @@ class Util:
         Util.console.print(table)
 
     @staticmethod
+    def ensure_dir(dir_path: str, desc: str, mode: int = 0o755):
+        if os.path.exists(dir_path):
+            if not os.path.isdir(dir_path):
+                Util.print_error_and_die(
+                    f"[{desc}] Path exists and is not a directory: {dir_path}"
+                )
+        else:
+            Util.create_dir(dir_path, desc, mode)
+
+    @staticmethod
     def ensure_shpd_dirs(constants: Constants):
         dirs = {
             "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
@@ -153,10 +164,7 @@ class Util:
 
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)
-            if not os.path.exists(resolved_path) or not os.path.isdir(
-                resolved_path
-            ):
-                Util.create_dir(resolved_path, desc)
+            Util.ensure_dir(resolved_path, desc)
 
     @staticmethod
     def ensure_config_file(constants: Constants):

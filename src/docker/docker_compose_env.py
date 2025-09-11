@@ -26,6 +26,7 @@ import yaml
 from config import ConfigMng, EnvironmentCfg
 from environment import Environment
 from service import ServiceFactory
+from util.util import Util
 
 from .docker_compose_util import run_compose
 
@@ -42,6 +43,24 @@ class DockerComposeEnv(Environment):
         super().__init__(config, svcFactory, envCfg)
 
     @override
+    def ensure_resources(self):
+        """Ensure the environment resources are available."""
+        super().ensure_resources()
+        if self.envCfg.volumes:
+            for vol in self.envCfg.volumes:
+                # Check if it's a host bind mount,
+                # in case create the host path
+                if (
+                    vol.driver == "local"
+                    and vol.driver_opts
+                    and vol.driver_opts.get("type") == "none"
+                    and vol.driver_opts.get("o") == "bind"
+                ):
+                    device_path = vol.driver_opts.get("device")
+                    if device_path:
+                        Util.ensure_dir(device_path, vol.tag)
+
+    @override
     def clone(self, dst_env_tag: str) -> DockerComposeEnv:
         """Clone the environment."""
         clonedCfg = self.configMng.env_cfg_from_other(self.to_config())
@@ -56,6 +75,7 @@ class DockerComposeEnv(Environment):
     @override
     def start(self):
         """Start the environment."""
+        super().start()
         if self.envCfg.status.triggered_config:
             run_compose(self.envCfg.status.triggered_config, "up", "-d")
 
@@ -72,7 +92,7 @@ class DockerComposeEnv(Environment):
             run_compose(self.envCfg.status.triggered_config, "restart")
 
     @override
-    def render(self) -> str:
+    def get_target_cfg(self) -> str:
         """
         Render the full docker-compose YAML configuration for the environment.
         """
@@ -85,7 +105,7 @@ class DockerComposeEnv(Environment):
         }
 
         for svc in self.services:
-            svc_yaml = yaml.safe_load(svc.render())
+            svc_yaml = yaml.safe_load(svc.get_target_cfg())
             compose_config["services"].update(svc_yaml["services"])
 
         if self.envCfg.networks:
@@ -137,7 +157,7 @@ class DockerComposeEnv(Environment):
         yaml = (
             self.envCfg.status.triggered_config
             if self.envCfg.status.triggered_config
-            else self.render()
+            else self.get_target_cfg()
         )
 
         result = run_compose(yaml, "ps", "--format", "json", capture=True)
