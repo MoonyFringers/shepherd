@@ -28,11 +28,6 @@ from config import Config, ConfigMng
 from util import Constants
 
 config_yaml = """
-logging:
-  file: ${log_file}
-  level: ${log_level}
-  stdout: ${log_stdout}
-  format: ${log_format}
 shpd_registry:
   ftp_server: ${shpd_registry}
   ftp_user: ${shpd_registry_ftp_usr}
@@ -294,11 +289,6 @@ envs:
 
 
 config_yaml_with_refs: str = """
-logging:
-  file: ${log_file}
-  level: ${log_level}
-  stdout: ${log_stdout}
-  format: ${log_format}
 shpd_registry:
   ftp_server: ${shpd_registry}
   ftp_user: ${shpd_registry_ftp_usr}
@@ -535,11 +525,6 @@ def test_load_config(mocker: MockerFixture):
 
     cMng = ConfigMng(".shpd.conf")
     config: Config = cMng.load_config()
-
-    assert config.logging.file == "${test_path}/logs/shepctl.log"
-    assert config.logging.level == "WARNING"
-    assert not config.logging.is_stdout()
-    assert config.logging.format == "%(asctime)s - %(levelname)s - %(message)s"
 
     env_templates = config.env_templates
     assert env_templates and env_templates[0].tag == "default"

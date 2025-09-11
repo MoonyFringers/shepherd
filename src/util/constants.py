@@ -46,6 +46,17 @@ class Constants:
     def SHPD_SSHD_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, ".sshd")
 
+    # Logging configuration
+
+    LOG_FILE: str
+    LOG_LEVEL: str
+    RAW_LOG_STDOUT: str
+    LOG_FORMAT: str
+
+    @property
+    def LOG_STDOUT(self) -> bool:
+        return self.RAW_LOG_STDOUT == "true"
+
     # Application metadata
 
     APP_NAME: str = "shepctl"
@@ -95,12 +106,6 @@ class Constants:
     @property
     def DEFAULT_CONFIG(self) -> dict[Any, Any]:
         return {
-            "logging": {
-                "file": "${log_file}",
-                "level": "${log_level}",
-                "stdout": "${log_stdout}",
-                "format": "${log_format}",
-            },
             "env_templates": [
                 {
                     "tag": self.ENV_TEMPLATE_DEFAULT,
