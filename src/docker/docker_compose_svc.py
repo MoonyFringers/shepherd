@@ -24,27 +24,18 @@ import yaml
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from service import Service
+from util import Util
+
+from .docker_compose_util import run_compose
 
 
-class DockerSvc(Service):
+class DockerComposeSvc(Service):
 
     def __init__(
         self, config: ConfigMng, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
     ):
         """Initialize a Docker service."""
         super().__init__(config, envCfg, svcCfg)
-
-    @override
-    def clone(self, dst_svc_tag: str) -> DockerSvc:
-        """Clone a service."""
-        clonedCfg = self.configMng.svc_cfg_from_other(self.to_config())
-        clonedCfg.tag = dst_svc_tag
-        clonedSvc = DockerSvc(
-            self.configMng,
-            self.envCfg,
-            clonedCfg,
-        )
-        return clonedSvc
 
     @override
     def render(self) -> str:
@@ -81,25 +72,71 @@ class DockerSvc(Service):
 
     @override
     def start(self):
-        """Start the service."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(
+                self.envCfg.status.triggered_config,
+                "up",
+                "-d",
+                self.canonical_name(),
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
 
     @override
     def halt(self):
         """Stop the service."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(
+                self.envCfg.status.triggered_config,
+                "stop",
+                self.canonical_name(),
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
 
     @override
     def reload(self):
         """Reload the service."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(
+                self.envCfg.status.triggered_config,
+                "restart",
+                self.canonical_name(),
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
 
     @override
     def show_stdout(self):
         """Show the service stdout."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(
+                self.envCfg.status.triggered_config,
+                "logs",
+                self.canonical_name(),
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
 
     @override
     def get_shell(self):
         """Get a shell session for the service."""
-        pass
+        if self.envCfg.status.triggered_config:
+            run_compose(
+                self.envCfg.status.triggered_config,
+                "exec",
+                self.canonical_name(),
+                "sh",
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )

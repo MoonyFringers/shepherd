@@ -18,11 +18,11 @@
 
 from config import ConfigMng
 from config.config import EnvironmentCfg
-from docker.docker_svc import DockerSvc
+from docker.docker_compose_svc import DockerComposeSvc
 from service import ServiceMng
 
 
-class DatabaseService(DockerSvc):
+class DatabaseService(DockerComposeSvc):
 
     def get_sql_shell(self):
         """Get a SQL shell session."""
