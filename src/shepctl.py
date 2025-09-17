@@ -25,7 +25,6 @@ import click
 
 from completion import CompletionMng
 from config import ConfigMng, EnvironmentCfg
-from database import DatabaseMng
 from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from service import ServiceMng
@@ -62,7 +61,6 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
-        self.databaseMng = DatabaseMng(self.cli_flags, self.configMng)
 
 
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -155,23 +153,6 @@ def complete(shepherd: ShepherdMng, args: list[str]):
     completions = shepherd.completionMng.get_completions(args)
     for c in completions:
         click.echo(c)
-
-
-@cli.group()
-def db():
-    """Database related operations."""
-    pass
-
-
-@db.command(name="sql-shell")
-@click.argument("service_tag", type=str, required=True)
-@click.pass_obj
-@require_active_env
-def db_sql_shell(
-    shepherd: ShepherdMng, envCfg: EnvironmentCfg, service_tag: str
-):
-    """Get a SQL session for the database service."""
-    shepherd.databaseMng.sql_shell_svc(envCfg, service_tag)
 
 
 # Environment commands

@@ -521,35 +521,6 @@ def test_completion_env_add_4(
 
 
 @pytest.mark.compl
-def test_completion_db_commands(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["db"])
-    assert (
-        completions == sm.completionMng.completionDbMng.COMMANDS_DB
-    ), "Expected db commands only"
-
-
-@pytest.mark.compl
-def test_completion_db_sql_shell(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["db", "sql-shell"])
-    assert completions == ["red", "white"], "Expected sql-shell completion"
-
-
-@pytest.mark.compl
 def test_completion_svc_commands(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,

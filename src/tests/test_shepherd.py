@@ -25,7 +25,6 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import values
 
-from database import DatabaseMng
 from environment import EnvironmentMng
 from service import ServiceMng
 from shepctl import ShepherdMng, cli
@@ -528,24 +527,6 @@ def test_cli_srv_shell(
     result = runner.invoke(cli, ["svc", "shell", "service_tag"])
     assert result.exit_code == 0
     mock_shell.assert_called_once()
-
-
-# database service tests
-
-
-@pytest.mark.shpd
-def test_cli_db_sql_shell(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_sql_shell = mocker.patch.object(DatabaseMng, "sql_shell_svc")
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
-
-    result = runner.invoke(cli, ["db", "sql-shell", "db-tag"])
-    assert result.exit_code == 0
-    mock_sql_shell.assert_called_once()
 
 
 # environment tests
