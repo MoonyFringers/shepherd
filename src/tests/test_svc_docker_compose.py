@@ -31,151 +31,114 @@ from test_util import values
 from shepctl import cli
 
 shpd_config_svc_default = """
-{
-  "logging": {
-    "file": "${log_file}",
-    "level": "${log_level}",
-    "stdout": "${log_stdout}",
-    "format": "${log_format}"
-  },
-  "shpd_registry": {
-    "ftp_server": "${shpd_registry}",
-    "ftp_user": "${shpd_registry_ftp_usr}",
-    "ftp_psw": "${shpd_registry_ftp_psw}",
-    "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
-    "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}"
-  },
-  "envs_path": "${envs_path}",
-  "volumes_path": "${volumes_path}",
-  "host_inet_ip": "${host_inet_ip}",
-  "domain": "${domain}",
-  "dns_type": "${dns_type}",
-  "ca": {
-    "country": "${ca_country}",
-    "state": "${ca_state}",
-    "locality": "${ca_locality}",
-    "organization": "${ca_org}",
-    "organizational_unit": "${ca_org_unit}",
-    "common_name": "${ca_cn}",
-    "email": "${ca_email}",
-    "passphrase": "${ca_passphrase}"
-  },
-  "cert": {
-    "country": "${cert_country}",
-    "state": "${cert_state}",
-    "locality": "${cert_locality}",
-    "organization": "${cert_org}",
-    "organizational_unit": "${cert_org_unit}",
-    "common_name": "${cert_cn}",
-    "email": "${cert_email}",
-    "subject_alternative_names": []
-  },
-  "staging_area": {
-    "volumes_path": "${staging_area_volumes_path}",
-    "images_path": "${staging_area_images_path}"
-  },
-  "env_templates": [
-    {
-      "tag": "default",
-      "factory": "docker-compose",
-      "service_templates": [
-        {
-          "template": "default",
-          "tag": "service-default"
-        }
-      ],
-      "networks": [
-        {
-          "tag": "shpdnet",
-          "name": "envnet",
-          "external": true
-        }
-      ]
-    }
-  ],
-  "service_templates": [
-    {
-      "tag": "default",
-      "factory": "docker",
-      "image": "test-image:latest",
-      "labels": [
-        "com.example.label1=value1",
-        "com.example.label2=value2"
-      ],
-      "workdir": "/test",
-      "volumes": [
-          "/home/test/.ssh:/home/test/.ssh",
-          "/etc/ssh:/etc/ssh"
-      ],
-      "ingress": false,
-      "empty_env": null,
-      "environment": [],
-      "ports": [
-        "80:80",
-        "443:443",
-        "8080:8080"
-      ],
-      "properties": {},
-      "networks": [
-        "default"
-      ],
-      "extra_hosts": [
-        "host.docker.internal:host-gateway"
-      ],
-      "subject_alternative_name": null
-    }
-  ],
-  "envs": [
-    {
-      "template": "default",
-      "factory": "docker-compose",
-      "tag": "test-1",
-      "services": [
-        {
-          "template": "default",
-          "factory": "docker",
-          "tag": "test",
-          "image": "test-image:latest",
-          "labels": [
-            "com.example.label1=value1",
-            "com.example.label2=value2"
-          ],
-          "workdir": "/test",
-          "volumes": [
-              "/home/test/.ssh:/home/test/.ssh",
-              "/etc/ssh:/etc/ssh"
-          ],
-          "ingress": false,
-          "empty_env": null,
-          "environment": [],
-          "ports": [
-            "80:80",
-            "443:443",
-            "8080:8080"
-          ],
-          "properties": {},
-          "networks": [
-            "default"
-          ],
-          "extra_hosts": [
-            "host.docker.internal:host-gateway"
-          ],
-          "subject_alternative_name": null,
-          "status": {
-            "active": true,
-            "archived": false,
-            "triggered_config": null
-          }
-        }
-      ],
-      "status": {
-        "active": true,
-        "archived": false,
-        "triggered_config": null
-      }
-    }
-  ]
-}
+logging:
+  file: ${log_file}
+  level: ${log_level}
+  stdout: ${log_stdout}
+  format: ${log_format}
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates:
+  - tag: default
+    factory: docker-compose
+    service_templates:
+      - template: default
+        tag: service-default
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+service_templates:
+  - tag: default
+    factory: docker
+    image: test-image:latest
+    labels:
+      - com.example.label1=value1
+      - com.example.label2=value2
+    workdir: /test
+    volumes:
+      - /home/test/.ssh:/home/test/.ssh
+      - /etc/ssh:/etc/ssh
+    ingress: false
+    empty_env: null
+    environment: []
+    ports:
+      - 80:80
+      - 443:443
+      - 8080:8080
+    properties: {}
+    networks:
+      - default
+    extra_hosts:
+      - host.docker.internal:host-gateway
+    subject_alternative_name: null
+envs:
+  - template: default
+    factory: docker-compose
+    tag: test-1
+    services:
+      - template: default
+        factory: docker
+        tag: test
+        image: test-image:latest
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    status:
+      active: true
+      archived: false
+      triggered_config: null
 """
 
 
@@ -203,8 +166,8 @@ def test_svc_render_compose_service(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     result = runner.invoke(cli, ["svc", "render", "test"])
     assert result.exit_code == 0
@@ -240,8 +203,8 @@ def test_svc_start(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -278,8 +241,8 @@ def test_svc_stop(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -316,8 +279,8 @@ def test_svc_reload(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -354,8 +317,8 @@ def test_svc_stdout(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -392,8 +355,8 @@ def test_svc_shell(
 ):
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_json = shpd_path / ".shpd.json"
-    shpd_json.write_text(shpd_config_svc_default)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",

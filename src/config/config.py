@@ -16,13 +16,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import json
 import os
 import re
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, fields, is_dataclass
 from typing import Any, Dict, Match, Optional, cast
 
+import yaml
 from glom import glom  # type: ignore[import]
 
 from util import Constants, Util
@@ -31,7 +31,7 @@ from util import Constants, Util
 # es: ${VAR_NAME}
 VAR_RE = re.compile(r"\$\{([^}]+)\}")
 
-# Regular expression for references inside .shpd.json
+# Regular expression for references inside .shpd.yaml
 # es: #{REF_NAME}
 REF_RE = re.compile(r"#\{([^}]+)\}")
 
@@ -633,12 +633,12 @@ class Config(Resolvable):
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
 
-def parse_config(json_str: str) -> Config:
+def parse_config(yaml_str: str) -> Config:
     """
-    Parses a JSON string into a `Config` object.
+    Parses a YAML string into a `Config` object.
     """
 
-    data = json.loads(json_str)
+    data = yaml.safe_load(yaml_str)
 
     def parse_status(item: Any) -> EntityStatus:
         return EntityStatus(
@@ -868,7 +868,7 @@ class ConfigMng:
 
     This class handles:
     - Reading user-defined key-value pairs from a configuration values file.
-    - Loading a JSON configuration file.
+    - Loading a YAML configuration file.
     - Storing the configuration back to file.
     """
 
@@ -970,15 +970,15 @@ class ConfigMng:
     def load_config(self) -> Config:
         """
         Loads and processes the configuration file.
-        Reads the JSON configuration file.
+        Reads the YAML configuration file.
 
         :raises FileNotFoundError: If the configuration file is missing.
         :raises ValueError: If the configuration file is malformed.
         """
         with open(self.constants.SHPD_CONFIG_FILE, "r", encoding="utf-8") as f:
-            config_data = json.load(f)
+            config_data = yaml.safe_load(f)
 
-        config = parse_config(json.dumps(config_data))
+        config = parse_config(yaml.dump(config_data, sort_keys=False))
         config.set_resolver(self.user_values)
         return config
 
@@ -991,7 +991,7 @@ class ConfigMng:
     def store_config(self, config: Config):
         """
         Stores the configuration.
-        Writes the final configuration back to a JSON file.
+        Writes the final configuration back to a YAML file.
 
         :param config: The `Config` object to be saved.
         """
@@ -1000,7 +1000,7 @@ class ConfigMng:
         config.set_resolved()
 
         with open(self.constants.SHPD_CONFIG_FILE, "w", encoding="utf-8") as f:
-            json.dump(config_dict, f, indent=2)
+            yaml.dump(config_dict, f, sort_keys=False)
 
     def store(self):
         """
