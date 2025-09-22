@@ -366,21 +366,6 @@ class EntityStatus(Resolvable):
 
 
 @dataclass
-class LoggingCfg(Resolvable):
-    """
-    Represents the logging configuration.
-    """
-
-    file: str
-    level: str
-    stdout: str = field(default="false", metadata={"boolify": True})
-    format: str = ""
-
-    def is_stdout(self) -> bool:
-        return str_to_bool(self.stdout)
-
-
-@dataclass
 class UpstreamCfg(Resolvable):
     """
     Represents an upstream service configuration.
@@ -618,7 +603,6 @@ class Config(Resolvable):
     Represents the shepherd configuration.
     """
 
-    logging: LoggingCfg
     shpd_registry: ShpdRegistryCfg
     envs_path: str
     volumes_path: str
@@ -645,18 +629,6 @@ def parse_config(yaml_str: str) -> Config:
             active=item["active"],
             archived=item["archived"],
             triggered_config=item.get("triggered_config"),
-        )
-
-    def parse_logging(item: Any) -> LoggingCfg:
-        return LoggingCfg(
-            file=item["file"],
-            level=item["level"],
-            stdout=(
-                bool_to_str(val)
-                if isinstance(val := item["stdout"], bool)
-                else val
-            ),
-            format=item["format"],
         )
 
     def parse_upstream(item: Any) -> UpstreamCfg:
@@ -855,7 +827,6 @@ def parse_config(yaml_str: str) -> Config:
         domain=data["domain"],
         dns_type=data["dns_type"],
         ca=parse_ca_config(data["ca"]),
-        logging=parse_logging(data["logging"]),
         cert=parse_cert_config(data["cert"]),
         staging_area=parse_staging_area(data["staging_area"]),
         envs=[parse_environment(env) for env in data["envs"]],
@@ -888,6 +859,10 @@ class ConfigMng:
         self.constants = Constants(
             SHPD_CONFIG_VALUES_FILE=self.file_values_path,
             SHPD_PATH=os.path.expanduser(self.user_values["shpd_path"]),
+            LOG_FILE=os.path.expanduser(self.user_values["log_file"]),
+            LOG_LEVEL=self.user_values["log_level"],
+            RAW_LOG_STDOUT=self.user_values["log_stdout"],
+            LOG_FORMAT=self.user_values["log_format"],
         )
 
     def ensure_dirs(self):

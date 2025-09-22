@@ -28,11 +28,6 @@ from test_util import values
 from shepctl import ShepherdMng
 
 shpd_config = """
-logging:
-  file: ${log_file}
-  level: ${log_level}
-  stdout: ${log_stdout}
-  format: ${log_format}
 shpd_registry:
   ftp_server: ${shpd_registry}
   ftp_user: ${shpd_registry_ftp_usr}
