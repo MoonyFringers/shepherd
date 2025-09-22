@@ -18,7 +18,6 @@
 
 from typing import Optional, override
 
-from completion.completion_db import CompletionDbMng
 from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
 from completion.completion_svc import CompletionSvcMng
@@ -27,14 +26,13 @@ from config import ConfigMng
 
 class CompletionMng(AbstractCompletionMng):
 
-    CATEGORIES = ["db", "env", "svc"]
+    CATEGORIES = ["env", "svc"]
 
     def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
-        self.completionDbMng = CompletionDbMng(cli_flags, configMng)
 
     def is_category_chosen(self, args: list[str]) -> bool:
         """
@@ -56,8 +54,6 @@ class CompletionMng(AbstractCompletionMng):
             return self.completionEnvMng
         elif category == "svc":
             return self.completionSvcMng
-        elif category == "db":
-            return self.completionDbMng
         else:
             return None
 
