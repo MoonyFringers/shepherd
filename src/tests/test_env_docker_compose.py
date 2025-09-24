@@ -304,7 +304,7 @@ def test_env_render_compose_env_ext_net(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "render", "test-1"])
+    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml"])
     assert result.exit_code == 0
 
     assert result.output == (
@@ -368,7 +368,7 @@ def test_env_render_compose_env_int_net(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["env", "render", "test-2"])
+    result = runner.invoke(cli, ["get", "env", "test-2", "-oyaml"])
     assert result.exit_code == 0
 
     assert result.output == (
@@ -435,7 +435,7 @@ def test_env_render_compose_env_int_net(
 
 
 @pytest.mark.docker
-def test_env_start(
+def test_start_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -455,7 +455,7 @@ def test_env_start(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -468,7 +468,7 @@ def test_env_start(
 
 
 @pytest.mark.docker
-def test_env_stop(
+def test_stop_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -488,7 +488,7 @@ def test_env_stop(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -500,7 +500,7 @@ def test_env_stop(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "halt"])
+    result = runner.invoke(cli, ["halt", "env"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -513,7 +513,7 @@ def test_env_stop(
 
 
 @pytest.mark.docker
-def test_env_restart(
+def test_reload_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -533,7 +533,7 @@ def test_env_restart(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -545,7 +545,7 @@ def test_env_restart(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "reload"])
+    result = runner.invoke(cli, ["reload", "env"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -558,7 +558,7 @@ def test_env_restart(
 
 
 @pytest.mark.docker
-def test_env_status(
+def test_status_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -578,6 +578,6 @@ def test_env_status(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "status"])
+    result = runner.invoke(cli, ["status", "env"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()

@@ -249,25 +249,12 @@ def test_completion_no_args(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions([])
     assert (
-        completions == sm.completionMng.CATEGORIES
-    ), "Expected categories only"
+        completions == sm.completionMng.VERBS
+    ), "Expected Verbs and Shortcuts only"
 
 
 @pytest.mark.compl
-def test_completion_env_commands(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env"])
-    assert (
-        completions == sm.completionMng.completionEnvMng.COMMANDS_ENV
-    ), "Expected env commands only"
-
-
-@pytest.mark.compl
-def test_completion_env_init(
+def test_completion_add(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -278,14 +265,32 @@ def test_completion_env_init(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "init"])
+    completions = sm.completionMng.get_completions(["add"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["add"]
+    ), "Expected add completion"
+
+
+@pytest.mark.compl
+def test_completion_add_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["add", "env"])
     assert (
         completions == sm.configMng.get_environment_template_tags()
-    ), "Expected init completion"
+    ), "Expected add-env completion"
 
 
 @pytest.mark.compl
-def test_completion_env_clone(
+def test_completion_add_svc_1(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -296,12 +301,12 @@ def test_completion_env_clone(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "clone"])
-    assert completions == ["test-1", "test-2"], "Expected clone completion"
+    completions = sm.completionMng.get_completions(["add", "svc"])
+    assert completions == ["t1", "t2"], "Expected add svc -1- completion"
 
 
 @pytest.mark.compl
-def test_completion_env_rename(
+def test_completion_add_svc_2(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -312,198 +317,12 @@ def test_completion_env_rename(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "rename"])
-    assert completions == ["test-1", "test-2"], "Expected rename completion"
+    completions = sm.completionMng.get_completions(["add", "svc", "t1"])
+    assert completions == [], "Expected add svc -2- completion"
 
 
 @pytest.mark.compl
-def test_completion_env_checkout(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "checkout"])
-    assert completions == [
-        "test-2",
-    ], "Expected checkout completion"
-
-
-@pytest.mark.compl
-def test_completion_env_delete(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "delete"])
-    assert completions == [
-        "test-1",
-        "test-2",
-    ], "Expected delete completion"
-
-
-@pytest.mark.compl
-def test_completion_env_list(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "list"])
-    assert completions == [], "Expected list completion"
-
-
-@pytest.mark.compl
-def test_completion_env_up(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "up"])
-    assert completions == [], "Expected up completion"
-
-
-@pytest.mark.compl
-def test_completion_env_halt(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "halt"])
-    assert completions == [], "Expected halt completion"
-
-
-@pytest.mark.compl
-def test_completion_env_reload(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "reload"])
-    assert completions == [], "Expected reload completion"
-
-
-@pytest.mark.compl
-def test_completion_env_render(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "render"])
-    assert completions == [
-        "test-1",
-        "test-2",
-    ], "Expected render completion"
-
-
-@pytest.mark.compl
-def test_completion_env_status(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "status"])
-    assert completions == [], "Expected status completion"
-
-
-@pytest.mark.compl
-def test_completion_env_add_1(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "add"])
-    assert (
-        completions == sm.configMng.constants.RESOURCE_TYPES
-    ), "Expected add-1 completion"
-
-
-@pytest.mark.compl
-def test_completion_env_add_2(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "add", "svc"])
-    assert completions == [], "Expected add-2 completion"
-
-
-@pytest.mark.compl
-def test_completion_env_add_3(
-    shpd_conf: tuple[Path, Path],
-    runner: CliRunner,
-    mocker: MockerFixture,
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config)
-
-    sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["env", "add", "svc", "foo"])
-    assert completions == ["t1", "t2"], "Expected add-3 completion"
-
-
-@pytest.mark.compl
-def test_completion_env_add_4(
+def test_completion_add_svc_3(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -515,26 +334,31 @@ def test_completion_env_add_4(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(
-        ["env", "add", "svc", "foo", "t1"]
+        ["add", "svc", "t1", "svc-tag"]
     )
-    assert completions == ["foo-class"], "Expected add-4 completion"
+    assert completions == ["foo-class"], "Expected add svc -3- completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_commands(
+def test_completion_clone(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc"])
+    completions = sm.completionMng.get_completions(["clone"])
     assert (
-        completions == sm.completionMng.completionSvcMng.COMMANDS_SVC
-    ), "Expected svc commands only"
+        completions == sm.completionMng.VERB_CATEGORIES["clone"]
+    ), "Expected clone completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_build(
+def test_completion_clone_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -545,12 +369,12 @@ def test_completion_svc_build(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "build"])
-    assert completions == ["t1", "t2"], "Expected build completion"
+    completions = sm.completionMng.get_completions(["clone", "env"])
+    assert completions == ["test-1", "test-2"], "Expected env clone completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_up(
+def test_completion_rename(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -561,12 +385,14 @@ def test_completion_svc_up(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "up"])
-    assert completions == ["red", "white"], "Expected up completion"
+    completions = sm.completionMng.get_completions(["rename"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["rename"]
+    ), "Expected rename completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_halt(
+def test_completion_rename_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -577,12 +403,12 @@ def test_completion_svc_halt(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "halt"])
-    assert completions == ["red", "white"], "Expected halt completion"
+    completions = sm.completionMng.get_completions(["rename", "env"])
+    assert completions == ["test-1", "test-2"], "Expected env rename completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_reload(
+def test_completion_checkout_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -593,12 +419,14 @@ def test_completion_svc_reload(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "reload"])
-    assert completions == ["red", "white"], "Expected reload completion"
+    completions = sm.completionMng.get_completions(["checkout"])
+    assert completions == [
+        "test-2",
+    ], "Expected env checkout completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_render(
+def test_completion_delete(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -609,12 +437,14 @@ def test_completion_svc_render(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "render"])
-    assert completions == ["red", "white"], "Expected render completion"
+    completions = sm.completionMng.get_completions(["delete"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["delete"]
+    ), "Expected delete completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_stdout(
+def test_completion_delete_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -625,12 +455,15 @@ def test_completion_svc_stdout(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "stdout"])
-    assert completions == ["red", "white"], "Expected stdout completion"
+    completions = sm.completionMng.get_completions(["delete", "env"])
+    assert completions == [
+        "test-1",
+        "test-2",
+    ], "Expected env delete completion"
 
 
 @pytest.mark.compl
-def test_completion_svc_shell(
+def test_completion_list(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -641,5 +474,291 @@ def test_completion_svc_shell(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["svc", "shell"])
-    assert completions == ["red", "white"], "Expected shell completion"
+    completions = sm.completionMng.get_completions(["list"])
+    assert completions == [], "Expected list completion"
+
+
+@pytest.mark.compl
+def test_completion_start(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["up"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["up"]
+    ), "Expected up completion"
+
+
+@pytest.mark.compl
+def test_completion_start_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["up", "env"])
+    assert completions == [], "Expected env up completion"
+
+
+@pytest.mark.compl
+def test_completion_start_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["up", "svc"])
+    assert completions == ["red", "white"], "Expected up svc completion"
+
+
+@pytest.mark.compl
+def test_completion_stop(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["halt"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["halt"]
+    ), "Expected halt completion"
+
+
+@pytest.mark.compl
+def test_completion_stop_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["halt", "env"])
+    assert completions == [], "Expected env halt completion"
+
+
+@pytest.mark.compl
+def test_completion_stop_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["halt", "svc"])
+    assert completions == ["red", "white"], "Expected halt svc completion"
+
+
+@pytest.mark.compl
+def test_completion_reload(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["reload"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["reload"]
+    ), "Expected reload completion"
+
+
+@pytest.mark.compl
+def test_completion_reload_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["reload", "env"])
+    assert completions == [], "Expected env reload completion"
+
+
+@pytest.mark.compl
+def test_completion_reload_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["reload", "svc"])
+    assert completions == ["red", "white"], "Expected reload svc completion"
+
+
+@pytest.mark.compl
+def test_completion_get(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get"])
+    assert (
+        completions == sm.completionMng.VERB_CATEGORIES["get"]
+    ), "Expected get completion"
+
+
+@pytest.mark.compl
+def test_completion_get_env_oyaml(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "env", "-oyaml"])
+    assert completions == [
+        "test-1",
+        "test-2",
+    ], "Expected get env -oyaml completion"
+
+
+@pytest.mark.compl
+def test_completion_get_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "env"])
+    assert completions == [
+        "test-1",
+        "test-2",
+    ], "Expected get env completion"
+
+
+@pytest.mark.compl
+def test_completion_get_svc_oyaml(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "svc", "-oyaml"])
+    assert completions == ["red", "white"], "Expected get svc -oyaml completion"
+
+
+@pytest.mark.compl
+def test_completion_build_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["build"])
+    assert completions == ["t1", "t2"], "Expected build svc completion"
+
+
+@pytest.mark.compl
+def test_completion_logs_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["logs"])
+    assert completions == ["red", "white"], "Expected logs svc completion"
+
+
+@pytest.mark.compl
+def test_completion_shell_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["shell"])
+    assert completions == ["red", "white"], "Expected shell svc completion"
+
+
+@pytest.mark.compl
+def test_completion_status_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["status", "env"])
+    assert completions == [], "Expected status env completion"

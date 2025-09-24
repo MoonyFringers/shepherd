@@ -444,18 +444,18 @@ def test_cli_complete(
 
 
 @pytest.mark.shpd
-def test_cli_srv_build(
+def test_cli_build_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_build = mocker.patch.object(ServiceMng, "build_image_svc")
 
-    result = runner.invoke(cli, ["svc", "build", "service_template"])
+    result = runner.invoke(cli, ["build", "service_template"])
     assert result.exit_code == 0
     mock_build.assert_called_once_with("service_template")
 
 
 @pytest.mark.shpd
-def test_cli_srv_up(
+def test_cli_start_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_start = mocker.patch.object(ServiceMng, "start_svc")
@@ -464,28 +464,28 @@ def test_cli_srv_up(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "up", "service_tag"])
+    result = runner.invoke(cli, ["up", "svc", "service_tag"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_srv_halt(
+def test_cli_stop_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_halt = mocker.patch.object(ServiceMng, "halt_svc")
+    mock_stop = mocker.patch.object(ServiceMng, "stop_svc")
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "halt", "service_tag"])
+    result = runner.invoke(cli, ["halt", "svc", "service_tag"])
     assert result.exit_code == 0
-    mock_halt.assert_called_once()
+    mock_stop.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_srv_reload(
+def test_cli_reload_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_reload = mocker.patch.object(ServiceMng, "reload_svc")
@@ -494,28 +494,28 @@ def test_cli_srv_reload(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "reload", "service_tag"])
+    result = runner.invoke(cli, ["reload", "svc", "service_tag"])
     assert result.exit_code == 0
     mock_reload.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_srv_stdout(
+def test_cli_logs_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_stdout = mocker.patch.object(ServiceMng, "stdout_svc")
+    mock_logs = mocker.patch.object(ServiceMng, "logs_svc")
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "stdout", "service_tag"])
+    result = runner.invoke(cli, ["logs", "service_tag"])
     assert result.exit_code == 0
-    mock_stdout.assert_called_once()
+    mock_logs.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_srv_shell(
+def test_cli_shell_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_shell = mocker.patch.object(ServiceMng, "shell_svc")
@@ -524,7 +524,7 @@ def test_cli_srv_shell(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "shell", "service_tag"])
+    result = runner.invoke(cli, ["shell", "service_tag"])
     assert result.exit_code == 0
     mock_shell.assert_called_once()
 
@@ -533,51 +533,51 @@ def test_cli_srv_shell(
 
 
 @pytest.mark.shpd
-def test_cli_env_init(
+def test_cli_add_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_init = mocker.patch.object(EnvironmentMng, "init_env")
+    mock_add = mocker.patch.object(EnvironmentMng, "add_env")
 
-    result = runner.invoke(cli, ["env", "init", "docker-compose", "env_tag"])
+    result = runner.invoke(cli, ["add", "env", "docker-compose", "env_tag"])
     assert result.exit_code == 0
-    mock_init.assert_called_once_with("docker-compose", "env_tag")
+    mock_add.assert_called_once_with("docker-compose", "env_tag")
 
 
 @pytest.mark.shpd
-def test_cli_env_clone(
+def test_cli_clone_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_clone = mocker.patch.object(EnvironmentMng, "clone_env")
 
-    result = runner.invoke(cli, ["env", "clone", "src_env_tag", "dst_env_tag"])
+    result = runner.invoke(cli, ["clone", "env", "src_env_tag", "dst_env_tag"])
     assert result.exit_code == 0
     mock_clone.assert_called_once_with("src_env_tag", "dst_env_tag")
 
 
 @pytest.mark.shpd
-def test_cli_env_checkout(
+def test_cli_checkout_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_checkout = mocker.patch.object(EnvironmentMng, "checkout_env")
 
-    result = runner.invoke(cli, ["env", "checkout", "env_tag"])
+    result = runner.invoke(cli, ["checkout", "env_tag"])
     assert result.exit_code == 0
     mock_checkout.assert_called_once_with("env_tag")
 
 
 @pytest.mark.shpd
-def test_cli_env_list(
+def test_cli_list_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_list = mocker.patch.object(EnvironmentMng, "list_envs")
 
-    result = runner.invoke(cli, ["env", "list"])
+    result = runner.invoke(cli, ["list"])
     assert result.exit_code == 0
     mock_list.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_env_up(
+def test_cli_start_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_start = mocker.patch.object(EnvironmentMng, "start_env")
@@ -586,28 +586,28 @@ def test_cli_env_up(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_env_halt(
+def test_cli_stop_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_halt = mocker.patch.object(EnvironmentMng, "halt_env")
+    mock_stop = mocker.patch.object(EnvironmentMng, "stop_env")
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["env", "halt"])
+    result = runner.invoke(cli, ["halt", "env"])
     assert result.exit_code == 0
-    mock_halt.assert_called_once()
+    mock_stop.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_env_reload(
+def test_cli_reload_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_reload = mocker.patch.object(EnvironmentMng, "reload_env")
@@ -616,13 +616,13 @@ def test_cli_env_reload(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["env", "reload"])
+    result = runner.invoke(cli, ["reload", "env"])
     assert result.exit_code == 0
     mock_reload.assert_called_once()
 
 
 @pytest.mark.shpd
-def test_cli_env_status(
+def test_cli_status_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_status = mocker.patch.object(EnvironmentMng, "status_env")
@@ -631,6 +631,6 @@ def test_cli_env_status(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["env", "status"])
+    result = runner.invoke(cli, ["status", "env"])
     assert result.exit_code == 0
     mock_status.assert_called_once()

@@ -85,7 +85,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def halt(self):
+    def stop(self):
         """Stop the service."""
         if self.envCfg.status.triggered_config:
             run_compose(
@@ -113,7 +113,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def show_stdout(self):
+    def get_stdout(self):
         """Show the service stdout."""
         if self.envCfg.status.triggered_config:
             run_compose(
