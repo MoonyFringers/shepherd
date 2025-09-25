@@ -33,7 +33,7 @@ class CompletionMng(AbstractCompletionMng):
         "clone": ["env"],
         "rename": ["env"],
         "checkout": ["auto-env"],
-        "delete": ["env", "svc"],
+        "delete": ["env"],
         "list": ["auto-env"],
         "up": ["env", "svc"],
         "halt": ["env", "svc"],

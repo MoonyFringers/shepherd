@@ -191,18 +191,7 @@ def test_cli_flags_no_flags(
     result = runner.invoke(cli, ["test"])
 
     assert result.exit_code == 0
-    mock_init.assert_called_once_with(
-        {
-            "verbose": False,
-            "yes": False,
-            "all": False,
-            "follow": False,
-            "porcelain": False,
-            "keep": False,
-            "replace": False,
-            "checkout": False,
-        }
-    )
+    mock_init.assert_called_once_with({"verbose": False, "yes": False})
 
 
 @pytest.mark.shpd
@@ -213,16 +202,7 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {
-        "verbose": True,
-        "yes": False,
-        "all": False,
-        "follow": False,
-        "porcelain": False,
-        "keep": False,
-        "replace": False,
-        "checkout": False,
-    }
+    flags = {"verbose": True, "yes": False}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -241,189 +221,12 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {
-        "verbose": False,
-        "yes": True,
-        "all": False,
-        "follow": False,
-        "porcelain": False,
-        "keep": False,
-        "replace": False,
-        "checkout": False,
-    }
+    flags = {"verbose": False, "yes": True}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
 
     result = runner.invoke(cli, ["-y", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_all(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--all", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": True,
-        "follow": False,
-        "porcelain": False,
-        "keep": False,
-        "replace": False,
-        "checkout": False,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-a", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_follow(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--follow", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": False,
-        "follow": True,
-        "porcelain": False,
-        "keep": False,
-        "replace": False,
-        "checkout": False,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-f", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_porcelain(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--porcelain", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": False,
-        "follow": False,
-        "porcelain": True,
-        "keep": False,
-        "replace": False,
-        "checkout": False,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-p", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_keep(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--keep", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": False,
-        "follow": False,
-        "porcelain": False,
-        "keep": True,
-        "replace": False,
-        "checkout": False,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-k", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_replace(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--replace", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": False,
-        "follow": False,
-        "porcelain": False,
-        "keep": False,
-        "replace": True,
-        "checkout": False,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-r", "test"])
-
-    assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
-
-
-@pytest.mark.shpd
-def test_cli_flags_checkout(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
-
-    result = runner.invoke(cli, ["--checkout", "test"])
-
-    flags = {
-        "verbose": False,
-        "yes": False,
-        "all": False,
-        "follow": False,
-        "porcelain": False,
-        "keep": False,
-        "replace": False,
-        "checkout": True,
-    }
-
-    assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
-
-    result = runner.invoke(cli, ["-c", "test"])
 
     assert result.exit_code == 0
     mock_init.assert_called_with(flags)

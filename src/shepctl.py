@@ -84,46 +84,12 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     is_flag=True,
     help="Automatic yes to prompts; run non-interactively.",
 )
-@click.option("-a", "--all", is_flag=True, help="Apply to all.")
-@click.option("-f", "--follow", is_flag=True, help="Follow log output.")
-@click.option(
-    "-p", "--porcelain", is_flag=True, help="Produce machine-readable output."
-)
-@click.option("-k", "--keep", is_flag=True, help="Keep instead of drop.")
-@click.option(
-    "-r", "--replace", is_flag=True, help="Replace when already there."
-)
-@click.option(
-    "-c",
-    "--checkout",
-    is_flag=True,
-    help="Contextually checkout the environment.",
-)
 @click.pass_context
-def cli(
-    ctx: click.Context,
-    verbose: bool,
-    yes: bool,
-    all: bool,
-    follow: bool,
-    porcelain: bool,
-    keep: bool,
-    replace: bool,
-    checkout: bool,
-):
+def cli(ctx: click.Context, verbose: bool, yes: bool):
     """Shepherd CLI:
     A tool to manage your environments, services, and databases.
     """
-    cli_flags = {
-        "verbose": verbose,
-        "yes": yes,
-        "all": all,
-        "follow": follow,
-        "porcelain": porcelain,
-        "keep": keep,
-        "replace": replace,
-        "checkout": checkout,
-    }
+    cli_flags = {"verbose": verbose, "yes": yes}
 
     if ctx.obj is None:
         ctx.obj = ShepherdMng(cli_flags)
