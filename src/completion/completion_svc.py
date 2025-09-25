@@ -24,51 +24,30 @@ from config import ConfigMng
 
 class CompletionSvcMng(AbstractCompletionMng):
 
-    COMMANDS_SVC = [
-        "build",
-        "up",
-        "halt",
-        "stdout",
-        "shell",
-        "render",
-        "reload",
-    ]
-
     def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
 
-    def is_command_chosen(self, args: list[str]) -> bool:
-        """
-        Checks if the second argument is a valid command
-        for the chosen category.
-        """
-        if not args or len(args) < 1:
-            return False
-        command = args[0]
-        return command in self.COMMANDS_SVC
-
     @override
     def get_completions(self, args: list[str]) -> list[str]:
-        if not self.is_command_chosen(args):
-            return self.COMMANDS_SVC
-
         command = args[0]
         match command:
+            case "add":
+                return self.get_add_completions(args[2:])
             case "build":
                 return self.get_build_completions(args[1:])
             case "up":
-                return self.get_up_completions(args[1:])
+                return self.get_start_completions(args[2:])
             case "halt":
-                return self.get_halt_completions(args[1:])
-            case "stdout":
-                return self.get_stdout_completions(args[1:])
+                return self.get_stop_completions(args[2:])
+            case "logs":
+                return self.get_logs_completions(args[1:])
             case "shell":
                 return self.get_shell_completions(args[1:])
-            case "render":
-                return self.get_render_completions(args[1:])
+            case "get":
+                return self.get_render_completions(args[2:])
             case "reload":
-                return self.get_reload_completions(args[1:])
+                return self.get_reload_completions(args[2:])
             case _:
                 return []
 
@@ -102,17 +81,17 @@ class CompletionSvcMng(AbstractCompletionMng):
             return self.configMng.get_service_tags(env)
         return []
 
-    def get_up_completions(self, args: list[str]) -> list[str]:
+    def get_start_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
         return []
 
-    def get_halt_completions(self, args: list[str]) -> list[str]:
+    def get_stop_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
         return []
 
-    def get_stdout_completions(self, args: list[str]) -> list[str]:
+    def get_logs_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
         return []
@@ -130,4 +109,32 @@ class CompletionSvcMng(AbstractCompletionMng):
     def get_reload_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        return []
+
+    def is_svc_class_chosen(self, args: list[str]) -> bool:
+        if len(args) < 3:
+            return False
+        svc_class = args[2]
+        return svc_class in self.get_svc_classes(args)
+
+    def get_svc_classes(self, args: list[str]) -> list[str]:
+        env = self.configMng.get_active_environment()
+        if env:
+            return self.configMng.get_resource_classes(
+                env, self.configMng.constants.RESOURCE_TYPE_SVC
+            )
+        return []
+
+    def is_svc_tag_produced(self, args: list[str]) -> bool:
+        if len(args) < 2:
+            return False
+        return True
+
+    def get_add_completions(self, args: list[str]) -> list[str]:
+        if not self.is_svc_template_chosen(args):
+            return self.get_svc_templates(args)
+        if not self.is_svc_tag_produced(args):
+            return []
+        if not self.is_svc_class_chosen(args):
+            return self.get_svc_classes(args)
         return []

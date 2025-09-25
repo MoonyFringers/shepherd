@@ -223,16 +223,16 @@ def runner() -> CliRunner:
 
 
 @pytest.mark.svc
-def test_svc_add_one_default(
+def test_add_svc_one_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -288,19 +288,19 @@ def test_svc_add_one_default(
 
 
 @pytest.mark.svc
-def test_svc_add_two_default(
+def test_add_svc_two_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "svc", "svc-2"])
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -353,19 +353,19 @@ def test_svc_add_two_default(
 
 
 @pytest.mark.svc
-def test_svc_add_two_same_tag_default(
+def test_add_svc_two_same_tag_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "svc", "svc-1"])
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
     assert result.exit_code == 1
 
     sm = ShepherdMng()
@@ -396,7 +396,7 @@ def test_svc_add_two_same_tag_default(
 
 
 @pytest.mark.svc
-def test_svc_add_one_with_template(
+def test_add_svc_one_with_template(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     shpd_path = shpd_conf[0]
@@ -404,15 +404,13 @@ def test_svc_add_one_with_template(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_pg_template)
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(
-        cli, ["env", "add", "svc", "pg-1", "postgres", "database"]
-    )
+    result = runner.invoke(cli, ["add", "svc", "postgres", "pg-1", "database"])
 
     # no 'postgres' factory, so this should fail
     assert result.exit_code == 1
@@ -428,38 +426,3 @@ def test_svc_add_one_with_template(
     assert (
         env.services[0].tag == "service-default"
     ), "Service tag should be 'service-default'"
-
-
-@pytest.mark.svc
-def test_svc_render_compose_service(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
-
-    result = runner.invoke(cli, ["svc", "render", "test"])
-    assert result.exit_code == 0
-
-    assert result.output == (
-        "services:\n"
-        "  test-test-1:\n"
-        "    image: test-image:latest\n"
-        "    hostname: test-test-1\n"
-        "    container_name: test-test-1\n"
-        "    labels:\n"
-        "    - com.example.label1=value1\n"
-        "    - com.example.label2=value2\n"
-        "    volumes:\n"
-        "    - /home/test/.ssh:/home/test/.ssh\n"
-        "    - /etc/ssh:/etc/ssh\n"
-        "    ports:\n"
-        "    - 80:80\n"
-        "    - 443:443\n"
-        "    - 8080:8080\n"
-        "    extra_hosts:\n"
-        "    - host.docker.internal:host-gateway\n"
-        "    networks:\n"
-        "    - default\n\n"
-    )

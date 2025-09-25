@@ -26,7 +26,23 @@ from config import ConfigMng
 
 class CompletionMng(AbstractCompletionMng):
 
-    CATEGORIES = ["env", "svc"]
+    # Mapping of verbs to valid categories
+    VERB_CATEGORIES = {
+        "get": ["env", "svc"],
+        "add": ["env", "svc"],
+        "clone": ["env"],
+        "rename": ["env"],
+        "checkout": ["auto-env"],
+        "delete": ["env"],
+        "list": ["auto-env"],
+        "up": ["env", "svc"],
+        "halt": ["env", "svc"],
+        "reload": ["env", "svc"],
+        "status": ["env"],
+        "logs": ["auto-svc"],
+        "shell": ["auto-svc"],
+        "build": ["auto-svc"],
+    }
 
     def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
         self.cli_flags = cli_flags
@@ -34,40 +50,61 @@ class CompletionMng(AbstractCompletionMng):
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
 
-    def is_category_chosen(self, args: list[str]) -> bool:
-        """
-        Checks if the first argument is a valid category.
-        """
+    @property
+    def VERBS(self) -> list[str]:
+        """return all verbs from the mapping."""
+        return list(self.VERB_CATEGORIES.keys())
+
+    def is_verb_chosen(self, args: list[str]) -> bool:
         if not args or len(args) < 1:
             return False
-        return args[0] in self.CATEGORIES
+        return args[0] in self.VERBS
 
-    def get_completion_manager(
-        self, args: list[str]
-    ) -> Optional[AbstractCompletionMng]:
-        """
-        Returns the appropriate completion manager based on the category.
-        """
+    def is_category_chosen(self, args: list[str]) -> bool:
+        if not args or len(args) < 2:
+            return False
+        verb = args[0]
+        category = args[1]
+        return category in self.VERB_CATEGORIES.get(verb, [])
 
-        category = args[0]
-        if category == "env":
-            return self.completionEnvMng
-        elif category == "svc":
-            return self.completionSvcMng
+    def get_auto_category(self, args: list[str]) -> Optional[str]:
+        if not args:
+            return None
+        verb = args[0]
+        if self.VERB_CATEGORIES.get(verb, [])[0].startswith("auto-"):
+            return self.VERB_CATEGORIES[verb][0].split("-")[1]
         else:
             return None
 
+    def get_completion_manager(
+        self, args: list[str], auto_category: Optional[str] = None
+    ) -> Optional[AbstractCompletionMng]:
+        # Priority: use auto_category if provided, otherwise try args[1]
+        category = auto_category or (args[1] if len(args) > 1 else None)
+        if not category:
+            return None
+
+        if category == "env":
+            return self.completionEnvMng
+        if category == "svc":
+            return self.completionSvcMng
+
+        return None
+
     @override
     def get_completions(self, args: list[str]) -> list[str]:
-        """
-        Returns a list of completions based on the provided arguments.
-        """
+        if not self.is_verb_chosen(args):
+            return self.VERBS
 
-        if not self.is_category_chosen(args):
-            return self.CATEGORIES
+        auto_category = self.get_auto_category(args)
 
-        completion_manager = self.get_completion_manager(args)
+        if not auto_category and not self.is_category_chosen(args):
+            # suggest only valid categories for this verb
+            verb = args[0]
+            return self.VERB_CATEGORIES.get(verb, [])
+
+        completion_manager = self.get_completion_manager(args, auto_category)
         if completion_manager:
-            return completion_manager.get_completions(args[1:])
+            return completion_manager.get_completions(args)
 
         return []

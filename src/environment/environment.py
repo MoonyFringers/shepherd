@@ -59,7 +59,7 @@ class Environment(ABC):
         self.ensure_resources()
 
     @abstractmethod
-    def halt(self):
+    def stop(self):
         """Halt the environment."""
         pass
 
@@ -221,7 +221,7 @@ class EnvironmentMng:
         env = self.envFactory.new_environment_cfg(env_cfg)
         return env
 
-    def init_env(self, env_template: str, env_tag: str):
+    def add_env(self, env_template: str, env_tag: str):
         """Initialize an environment."""
         if self.configMng.get_environment(env_tag):
             Util.print_error_and_die(
@@ -325,10 +325,10 @@ class EnvironmentMng:
         env.start()
         Util.print(f"Started environment: {env.envCfg.tag}")
 
-    def halt_env(self, envCfg: EnvironmentCfg):
+    def stop_env(self, envCfg: EnvironmentCfg):
         """Halt an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        env.halt()
+        env.stop()
         env.envCfg.status.triggered_config = None
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")

@@ -80,7 +80,7 @@ class DockerComposeEnv(Environment):
             run_compose(self.envCfg.status.triggered_config, "up", "-d")
 
     @override
-    def halt(self):
+    def stop(self):
         """Halt the environment."""
         if self.envCfg.status.triggered_config:
             run_compose(self.envCfg.status.triggered_config, "down")

@@ -65,7 +65,7 @@ class Service(ABC):
         pass
 
     @abstractmethod
-    def halt(self):
+    def stop(self):
         """Stop the service."""
         pass
 
@@ -75,7 +75,7 @@ class Service(ABC):
         pass
 
     @abstractmethod
-    def show_stdout(self):
+    def get_stdout(self):
         """Show the service stdout."""
         pass
 
@@ -140,11 +140,11 @@ class ServiceMng:
         if service:
             service.start()
 
-    def halt_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def stop_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Halt a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.halt()
+            service.stop()
 
     def reload_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Reload a service."""
@@ -159,11 +159,11 @@ class ServiceMng:
             return service.render()
         return None
 
-    def stdout_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def logs_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Get service stdout."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.show_stdout()
+            service.get_stdout()
 
     def shell_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Get a shell session for a service."""

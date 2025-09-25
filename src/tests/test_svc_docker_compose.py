@@ -164,7 +164,7 @@ def test_svc_render_compose_service(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["svc", "render", "test"])
+    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml"])
     assert result.exit_code == 0
 
     assert result.output == (
@@ -191,7 +191,7 @@ def test_svc_render_compose_service(
 
 
 @pytest.mark.docker
-def test_svc_start(
+def test_start_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -211,7 +211,7 @@ def test_svc_start(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -223,13 +223,13 @@ def test_svc_start(
         ),
     )
 
-    result = runner.invoke(cli, ["svc", "up", "test"])
+    result = runner.invoke(cli, ["up", "svc", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
 
 @pytest.mark.docker
-def test_svc_stop(
+def test_stop_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -249,7 +249,7 @@ def test_svc_stop(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -261,13 +261,13 @@ def test_svc_stop(
         ),
     )
 
-    result = runner.invoke(cli, ["svc", "halt", "test"])
+    result = runner.invoke(cli, ["halt", "svc", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
 
 @pytest.mark.docker
-def test_svc_reload(
+def test_reload_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -287,7 +287,7 @@ def test_svc_reload(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -299,13 +299,13 @@ def test_svc_reload(
         ),
     )
 
-    result = runner.invoke(cli, ["svc", "reload", "test"])
+    result = runner.invoke(cli, ["reload", "svc", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
 
 @pytest.mark.docker
-def test_svc_stdout(
+def test_logs_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -325,7 +325,7 @@ def test_svc_stdout(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -337,13 +337,13 @@ def test_svc_stdout(
         ),
     )
 
-    result = runner.invoke(cli, ["svc", "stdout", "test"])
+    result = runner.invoke(cli, ["logs", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
 
 @pytest.mark.docker
-def test_svc_shell(
+def test_shell_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
@@ -363,7 +363,7 @@ def test_svc_shell(
         ),
     )
 
-    result = runner.invoke(cli, ["env", "up"])
+    result = runner.invoke(cli, ["up", "env"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -375,6 +375,6 @@ def test_svc_shell(
         ),
     )
 
-    result = runner.invoke(cli, ["svc", "shell", "test"])
+    result = runner.invoke(cli, ["shell", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
