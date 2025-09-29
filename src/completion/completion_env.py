@@ -24,66 +24,36 @@ from config import ConfigMng
 
 class CompletionEnvMng(AbstractCompletionMng):
 
-    COMMANDS_ENV = [
-        "init",
-        "clone",
-        "rename",
-        "checkout",
-        "delete",
-        "list",
-        "up",
-        "halt",
-        "render",
-        "reload",
-        "status",
-        "add",
-    ]
-
     def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
 
-    def is_command_chosen(self, args: list[str]) -> bool:
-        """
-        Checks if the second argument is a valid command
-        for the chosen category.
-        """
-        if not args or len(args) < 1:
-            return False
-        command = args[0]
-        return command in self.COMMANDS_ENV
-
     @override
     def get_completions(self, args: list[str]) -> list[str]:
-        if not self.is_command_chosen(args):
-            return self.COMMANDS_ENV
-
         command = args[0]
         match command:
-            case "init":
-                return self.get_init_completions(args[1:])
+            case "add":
+                return self.get_add_completions(args[2:])
             case "clone":
-                return self.get_clone_completions(args[1:])
+                return self.get_clone_completions(args[2:])
             case "rename":
-                return self.get_rename_completions(args[1:])
+                return self.get_rename_completions(args[2:])
             case "checkout":
                 return self.get_checkout_completions(args[1:])
             case "delete":
-                return self.get_delete_completions(args[1:])
+                return self.get_delete_completions(args[2:])
             case "list":
                 return self.get_list_completions(args[1:])
             case "up":
-                return self.get_up_completions(args[1:])
+                return self.get_start_completions(args[2:])
             case "halt":
-                return self.get_halt_completions(args[1:])
-            case "render":
-                return self.get_render_completions(args[1:])
+                return self.get_stop_completions(args[2:])
+            case "get":
+                return self.get_render_completions(args[2:])
             case "reload":
-                return self.get_reload_completions(args[1:])
+                return self.get_reload_completions(args[2:])
             case "status":
-                return self.get_status_completions(args[1:])
-            case "add":
-                return self.get_add_resource_completions(args[1:])
+                return self.get_status_completions(args[2:])
             case _:
                 return []
 
@@ -101,7 +71,7 @@ class CompletionEnvMng(AbstractCompletionMng):
             env.tag == src_env_tag for env in self.configMng.get_environments()
         )
 
-    def get_init_completions(self, args: list[str]) -> list[str]:
+    def get_add_completions(self, args: list[str]) -> list[str]:
         if not self.is_env_template_chosen(args):
             return self.configMng.get_environment_template_tags()
         return []
@@ -133,10 +103,10 @@ class CompletionEnvMng(AbstractCompletionMng):
     def get_list_completions(self, args: list[str]) -> list[str]:
         return []
 
-    def get_up_completions(self, args: list[str]) -> list[str]:
+    def get_start_completions(self, args: list[str]) -> list[str]:
         return []
 
-    def get_halt_completions(self, args: list[str]) -> list[str]:
+    def get_stop_completions(self, args: list[str]) -> list[str]:
         return []
 
     def get_render_completions(self, args: list[str]) -> list[str]:
@@ -148,49 +118,4 @@ class CompletionEnvMng(AbstractCompletionMng):
         return []
 
     def get_status_completions(self, args: list[str]) -> list[str]:
-        return []
-
-    def is_resource_type_chosen(self, args: list[str]) -> bool:
-        if not args or len(args) < 1:
-            return False
-        resource_type = args[0]
-        return resource_type in self.configMng.constants.RESOURCE_TYPES
-
-    def is_resource_tag_chosen(self, args: list[str]) -> bool:
-        if len(args) < 2:
-            return False
-        return True
-
-    def is_resource_template_chosen(self, args: list[str]) -> bool:
-        if len(args) < 3:
-            return False
-        resource_template = args[2]
-        return resource_template in self.configMng.get_resource_templates(
-            args[0]
-        )
-
-    def get_resource_templates(self, args: list[str]) -> list[str]:
-        return self.configMng.get_resource_templates(args[0])
-
-    def is_resource_class_chosen(self, args: list[str]) -> bool:
-        if len(args) < 4:
-            return False
-        resource_class = args[3]
-        return resource_class in self.get_resource_classes(args)
-
-    def get_resource_classes(self, args: list[str]) -> list[str]:
-        env = self.configMng.get_active_environment()
-        if env:
-            return self.configMng.get_resource_classes(env, args[0])
-        return []
-
-    def get_add_resource_completions(self, args: list[str]) -> list[str]:
-        if not self.is_resource_type_chosen(args):
-            return self.configMng.constants.RESOURCE_TYPES
-        if not self.is_resource_tag_chosen(args):
-            return []
-        if not self.is_resource_template_chosen(args):
-            return self.get_resource_templates(args)
-        if not self.is_resource_class_chosen(args):
-            return self.get_resource_classes(args)
         return []

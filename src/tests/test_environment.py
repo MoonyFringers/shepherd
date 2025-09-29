@@ -286,12 +286,12 @@ def runner() -> CliRunner:
 
 
 @pytest.mark.env
-def test_env_init(
+def test_add_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-init-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-init-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -306,16 +306,16 @@ def test_env_init(
 
 
 @pytest.mark.env
-def test_env_clone(
+def test_clone_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-clone-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-clone-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
-        cli, ["env", "clone", "test-clone-1", "test-clone-2"]
+        cli, ["clone", "env", "test-clone-1", "test-clone-2"]
     )
     assert result.exit_code == 0
 
@@ -335,16 +335,16 @@ def test_env_clone(
 
 
 @pytest.mark.env
-def test_env_rename(
+def test_rename_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-rename-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-rename-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
-        cli, ["env", "rename", "test-rename-1", "test-rename-2"]
+        cli, ["rename", "env", "test-rename-1", "test-rename-2"]
     )
     assert result.exit_code == 0
 
@@ -364,22 +364,22 @@ def test_env_rename(
 
 
 @pytest.mark.env
-def test_env_checkout(
+def test_checkout_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-2"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
     env = sm.configMng.get_active_environment()
     assert env is None
 
-    result = runner.invoke(cli, ["env", "checkout", "test-1"])
+    result = runner.invoke(cli, ["checkout", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -387,7 +387,7 @@ def test_env_checkout(
     assert env is not None
     assert env.tag == "test-1"
 
-    result = runner.invoke(cli, ["env", "checkout", "test-2"])
+    result = runner.invoke(cli, ["checkout", "test-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -397,38 +397,38 @@ def test_env_checkout(
 
 
 @pytest.mark.env
-def test_env_list(
+def test_list_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "list"])
+    result = runner.invoke(cli, ["list"])
     assert result.exit_code == 0
 
 
 @pytest.mark.env
-def test_env_delete_yes(
+def test_delete_env_yes(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
     mocker.patch("builtins.input", return_value="y")
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    result = runner.invoke(cli, ["delete", "env", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
     assert result.exit_code == 0
 
     mocker.patch("builtins.input", return_value="y")
 
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    result = runner.invoke(cli, ["delete", "env", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -443,17 +443,17 @@ def test_env_delete_yes(
 
 
 @pytest.mark.env
-def test_env_delete_no(
+def test_delete_env_no(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
     mocker.patch("builtins.input", return_value="n")
 
-    result = runner.invoke(cli, ["env", "init", "default", "test-1"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "delete", "test-1"])
+    result = runner.invoke(cli, ["delete", "env", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -468,16 +468,16 @@ def test_env_delete_no(
 
 
 @pytest.mark.env
-def test_env_add_nonexisting_resource(
+def test_add_nonexisting_service(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["env", "init", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["env", "add", "foo", "foo-1"])
-    assert result.exit_code == 2
+    result = runner.invoke(cli, ["add", "svc", "foo", "foo-1"])
+    assert result.exit_code == 1
