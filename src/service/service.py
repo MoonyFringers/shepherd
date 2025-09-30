@@ -47,10 +47,14 @@ class Service(ABC):
         """
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
 
-    @abstractmethod
     def render(self) -> str:
+        """Render the service configuration."""
+        return self.svcCfg.get_yaml()
+
+    @abstractmethod
+    def render_target(self) -> str:
         """
-        Render the service configuration.
+        Render the service configuration in the target system.
         """
         pass
 
@@ -152,10 +156,14 @@ class ServiceMng:
         if service:
             service.reload()
 
-    def render_svc(self, envCfg: EnvironmentCfg, svc_tag: str) -> Optional[str]:
+    def render_svc(
+        self, envCfg: EnvironmentCfg, svc_tag: str, target: bool
+    ) -> Optional[str]:
         """Render a service configuration."""
         service = self.get_service(envCfg, svc_tag)
         if service:
+            if target:
+                return service.render_target()
             return service.render()
         return None
 

@@ -92,7 +92,7 @@ class DockerComposeEnv(Environment):
             run_compose(self.envCfg.status.triggered_config, "restart")
 
     @override
-    def render(self) -> str:
+    def render_target(self) -> str:
         """
         Render the full docker-compose YAML configuration for the environment.
         """
@@ -105,8 +105,8 @@ class DockerComposeEnv(Environment):
         }
 
         for svc in self.services:
-            svc_yaml = yaml.safe_load(svc.render())
-            compose_config["services"].update(svc_yaml["services"])
+            svc_yaml = yaml.safe_load(svc.render_target())
+            compose_config["services"].update(svc_yaml)
 
         if self.envCfg.networks:
             for net in self.envCfg.networks:
@@ -157,7 +157,7 @@ class DockerComposeEnv(Environment):
         yaml = (
             self.envCfg.status.triggered_config
             if self.envCfg.status.triggered_config
-            else self.render()
+            else self.render_target()
         )
 
         result = run_compose(yaml, "ps", "--format", "json", capture=True)

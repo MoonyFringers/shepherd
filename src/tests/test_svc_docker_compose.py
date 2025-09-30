@@ -156,7 +156,7 @@ def runner() -> CliRunner:
 
 
 @pytest.mark.docker
-def test_svc_render_compose_service(
+def test_svc_render_default_compose_service(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     shpd_path = shpd_conf[0]
@@ -168,25 +168,72 @@ def test_svc_render_compose_service(
     assert result.exit_code == 0
 
     assert result.output == (
-        "services:\n"
-        "  test-test-1:\n"
-        "    image: test-image:latest\n"
-        "    hostname: test-test-1\n"
-        "    container_name: test-test-1\n"
-        "    labels:\n"
-        "    - com.example.label1=value1\n"
-        "    - com.example.label2=value2\n"
-        "    volumes:\n"
-        "    - /home/test/.ssh:/home/test/.ssh\n"
-        "    - /etc/ssh:/etc/ssh\n"
-        "    ports:\n"
-        "    - 80:80\n"
-        "    - 443:443\n"
-        "    - 8080:8080\n"
-        "    extra_hosts:\n"
-        "    - host.docker.internal:host-gateway\n"
-        "    networks:\n"
-        "    - default\n\n"
+        "template: default\n"
+        "factory: docker\n"
+        "tag: test\n"
+        "service_class: null\n"
+        "image: test-image:latest\n"
+        "hostname: null\n"
+        "container_name: null\n"
+        "labels:\n"
+        "- com.example.label1=value1\n"
+        "- com.example.label2=value2\n"
+        "workdir: /test\n"
+        "volumes:\n"
+        "- /home/test/.ssh:/home/test/.ssh\n"
+        "- /etc/ssh:/etc/ssh\n"
+        "ingress: false\n"
+        "empty_env: null\n"
+        "environment: []\n"
+        "ports:\n"
+        "- 80:80\n"
+        "- 443:443\n"
+        "- 8080:8080\n"
+        "properties: {}\n"
+        "networks:\n"
+        "- default\n"
+        "extra_hosts:\n"
+        "- host.docker.internal:host-gateway\n"
+        "subject_alternative_name: null\n"
+        "upstreams: []\n"
+        "status:\n"
+        "  active: true\n"
+        "  archived: false\n"
+        "  triggered_config: null\n\n"
+    )
+
+
+@pytest.mark.docker
+def test_svc_render_target_compose_service(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-t"])
+    assert result.exit_code == 0
+
+    assert result.output == (
+        "test-test-1:\n"
+        "  image: test-image:latest\n"
+        "  hostname: test-test-1\n"
+        "  container_name: test-test-1\n"
+        "  labels:\n"
+        "  - com.example.label1=value1\n"
+        "  - com.example.label2=value2\n"
+        "  volumes:\n"
+        "  - /home/test/.ssh:/home/test/.ssh\n"
+        "  - /etc/ssh:/etc/ssh\n"
+        "  ports:\n"
+        "  - 80:80\n"
+        "  - 443:443\n"
+        "  - 8080:8080\n"
+        "  extra_hosts:\n"
+        "  - host.docker.internal:host-gateway\n"
+        "  networks:\n"
+        "  - default\n\n"
     )
 
 
