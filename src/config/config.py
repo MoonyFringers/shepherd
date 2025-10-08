@@ -499,6 +499,15 @@ class ServiceCfg(Resolvable):
             self.ingress if self.ingress is not None else "false"
         )
 
+    def get_yaml(self) -> str:
+        """
+        Returns the YAML representation of the service configuration.
+        """
+        self.set_unresolved()
+        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
+        self.set_resolved()
+        return yml
+
 
 @dataclass
 class EnvironmentTemplateCfg(Resolvable):
@@ -540,6 +549,15 @@ class EnvironmentCfg(Resolvable):
             if svc.tag == svcTag:
                 return svc
         return None
+
+    def get_yaml(self) -> str:
+        """
+        Returns the YAML representation of the environment configuration.
+        """
+        self.set_unresolved()
+        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
+        self.set_resolved()
+        return yml
 
 
 @dataclass

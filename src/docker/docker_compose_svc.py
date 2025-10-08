@@ -38,7 +38,7 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def render(self) -> str:
+    def render_target(self) -> str:
         """
         Render the docker-compose service configuration for this service.
         """
@@ -61,9 +61,7 @@ class DockerComposeSvc(Service):
         if self.svcCfg.networks:
             service_def["networks"] = self.svcCfg.networks
 
-        return yaml.dump(
-            {"services": {self.name: service_def}}, sort_keys=False
-        )
+        return yaml.dump({self.name: service_def}, sort_keys=False)
 
     @override
     def build(self):
