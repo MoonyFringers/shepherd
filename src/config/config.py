@@ -242,7 +242,7 @@ class Resolvable:
     def set_resolver(self, mapping: dict[str, str] | None):
         self._walk_and_set(mapping, True)
 
-    def _is_resolved(self) -> bool:
+    def is_resolved(self) -> bool:
         return getattr(self, "_resolved", False)
 
     def _resolve_str(self, s: str) -> str:
@@ -286,11 +286,12 @@ class Resolvable:
             name.startswith("_")
             or name
             in (
+                "is_resolved",
                 "set_resolver",
                 "set_resolved",
                 "set_unresolved",
             )
-            or not self._is_resolved()
+            or not self.is_resolved()
         ):
             return object.__getattribute__(self, name)
 
@@ -499,14 +500,31 @@ class ServiceCfg(Resolvable):
             self.ingress if self.ingress is not None else "false"
         )
 
-    def get_yaml(self) -> str:
+    def get_yaml(self, resolved: bool = False) -> str:
         """
         Returns the YAML representation of the service configuration.
+
+        Args:
+        resolved: If True, ensure placeholders are resolved before dumping.
         """
-        self.set_unresolved()
-        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
-        self.set_resolved()
-        return yml
+        was_resolved = self.is_resolved()
+        changed_state = False
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+                changed_state = True
+
+            return yaml.dump(cfg_asdict(self), sort_keys=False)
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.set_resolved()
+                else:
+                    self.set_unresolved()
 
 
 @dataclass
@@ -550,14 +568,27 @@ class EnvironmentCfg(Resolvable):
                 return svc
         return None
 
-    def get_yaml(self) -> str:
+    def get_yaml(self, resolved: bool = False) -> str:
         """
-        Returns the YAML representation of the environment configuration.
+        Return the YAML representation of the environment configuration.
+
+        Args:
+            resolved: If True, ensure placeholders are resolved before dumping.
         """
-        self.set_unresolved()
-        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
-        self.set_resolved()
-        return yml
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            return yaml.dump(cfg_asdict(self), sort_keys=False)
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
 
 
 @dataclass

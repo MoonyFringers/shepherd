@@ -38,30 +38,51 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def render_target(self) -> str:
+    def render_target(self, resolved: bool) -> str:
         """
         Render the docker-compose service configuration for this service.
+
+        Args:
+            resolved: If True, ensure placeholders in svcCfg are resolved
+            before rendering.
         """
-        service_def: dict[str, Any] = {
-            "image": self.svcCfg.image,
-            "hostname": self.hostname,
-            "container_name": self.container_name,
-        }
+        was_resolved = self.svcCfg.is_resolved()
+        changed_state = False
 
-        if self.svcCfg.labels:
-            service_def["labels"] = self.svcCfg.labels
-        if self.svcCfg.environment:
-            service_def["environment"] = self.svcCfg.environment
-        if self.svcCfg.volumes:
-            service_def["volumes"] = self.svcCfg.volumes
-        if self.svcCfg.ports:
-            service_def["ports"] = self.svcCfg.ports
-        if self.svcCfg.extra_hosts:
-            service_def["extra_hosts"] = self.svcCfg.extra_hosts
-        if self.svcCfg.networks:
-            service_def["networks"] = self.svcCfg.networks
+        try:
+            if resolved and not was_resolved:
+                self.envCfg.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.envCfg.set_unresolved()
+                changed_state = True
 
-        return yaml.dump({self.name: service_def}, sort_keys=False)
+            service_def: dict[str, Any] = {
+                "image": self.svcCfg.image,
+                "hostname": self.hostname,
+                "container_name": self.container_name,
+            }
+
+            if self.svcCfg.labels:
+                service_def["labels"] = self.svcCfg.labels
+            if self.svcCfg.environment:
+                service_def["environment"] = self.svcCfg.environment
+            if self.svcCfg.volumes:
+                service_def["volumes"] = self.svcCfg.volumes
+            if self.svcCfg.ports:
+                service_def["ports"] = self.svcCfg.ports
+            if self.svcCfg.extra_hosts:
+                service_def["extra_hosts"] = self.svcCfg.extra_hosts
+            if self.svcCfg.networks:
+                service_def["networks"] = self.svcCfg.networks
+
+            return yaml.dump({self.name: service_def}, sort_keys=False)
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.envCfg.set_resolved()
+                else:
+                    self.envCfg.set_unresolved()
 
     @override
     def build(self):

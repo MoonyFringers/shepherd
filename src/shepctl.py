@@ -133,27 +133,37 @@ def get():
 @get.command(name="env")
 @click.argument("tag", required=False)
 @click.option(
-    "-o", "--output", type=click.Choice(["yaml", "json"]), default=None
+    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
 )
 @click.option(
     "-t", "--target", is_flag=True, help="Get the target configuration."
 )
+@click.option(
+    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
+)
 @click.pass_obj
 def get_env(
-    shepherd: ShepherdMng, tag: str, output: Optional[str], target: bool
+    shepherd: ShepherdMng,
+    tag: str,
+    output: Optional[str],
+    target: bool,
+    resolved: bool,
 ):
     """Get environment details or config."""
     if output:
-        click.echo(shepherd.environmentMng.render_env(tag, target))
+        click.echo(shepherd.environmentMng.render_env(tag, target, resolved))
 
 
 @get.command(name="svc")
 @click.argument("tag", required=True)
 @click.option(
-    "-o", "--output", type=click.Choice(["yaml", "json"]), default=None
+    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
 )
 @click.option(
     "-t", "--target", is_flag=True, help="Get the target configuration."
+)
+@click.option(
+    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
 )
 @click.pass_obj
 @require_active_env
@@ -163,10 +173,13 @@ def get_svc(
     tag: str,
     output: Optional[str],
     target: bool,
+    resolved: bool,
 ):
     """Get service details or config."""
     if output:
-        click.echo(shepherd.serviceMng.render_svc(envCfg, tag, target))
+        click.echo(
+            shepherd.serviceMng.render_svc(envCfg, tag, target, resolved)
+        )
 
 
 # =====================================================
