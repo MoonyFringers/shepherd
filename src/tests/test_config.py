@@ -90,6 +90,7 @@ service_templates:
   - tag: oracle
     factory: docker
     image: ${ora_image}
+    build: null
     hostname: ${ora_hostname}
     container_name: ${ora_container_name}
     labels: []
@@ -115,6 +116,9 @@ service_templates:
   - tag: postgres
     factory: docker
     image: ${pg_image}
+    build:
+      context_path: #{cfg.envs_path}/#{env.tag}/build
+      dockerfile_path: #{env.build.context_path}/Dockerfile
     hostname: null
     container_name: null
     labels: []
@@ -143,6 +147,9 @@ envs:
         tag: pg-1
         service_class: null
         image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
+        build:
+          context_path: #{cfg.envs_path}/#{env.tag}/build
+          dockerfile_path: #{env.build.context_path}/Dockerfile
         hostname: null
         container_name: null
         labels: []
@@ -192,6 +199,7 @@ envs:
         tag: traefik-1
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -215,6 +223,7 @@ envs:
         tag: primary
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -240,6 +249,7 @@ envs:
         tag: poke
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -363,6 +373,7 @@ service_templates:
   - tag: nginx
     factory: docker
     image: nginx:latest
+    build: null
     hostname: web-instance
     container_name: web-instance
     labels:
@@ -384,6 +395,7 @@ service_templates:
   - tag: postgres
     factory: docker
     image: postgres:14
+    build: null
     hostname: db-instance
     container_name: db-instance
     labels:
@@ -412,6 +424,7 @@ envs:
         tag: web
         service_class: null
         image: nginx:latest
+        build: null
         hostname: web-instance
         container_name: web-instance
         labels:
@@ -441,6 +454,7 @@ envs:
         tag: db
         service_class: '#{not.exist}'
         image: postgres:14
+        build: null
         hostname: db-instance
         container_name: db-instance
         labels:

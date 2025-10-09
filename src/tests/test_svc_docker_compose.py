@@ -173,6 +173,7 @@ def test_svc_render_default_compose_service(
         "tag: test\n"
         "service_class: null\n"
         "image: test-image:latest\n"
+        "build: null\n"
         "hostname: null\n"
         "container_name: null\n"
         "labels:\n"

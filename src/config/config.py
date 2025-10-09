@@ -428,6 +428,16 @@ class VolumeCfg(Resolvable):
 
 
 @dataclass
+class BuildCfg(Resolvable):
+    """
+    Represents a build configuration.
+    """
+
+    context_path: Optional[str] = None
+    dockerfile_path: Optional[str] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -436,6 +446,7 @@ class ServiceTemplateCfg(Resolvable):
     tag: str
     factory: str
     image: str
+    build: Optional[BuildCfg] = None
     hostname: Optional[str] = None
     container_name: Optional[str] = None
     labels: Optional[list[str]] = None
@@ -477,6 +488,7 @@ class ServiceCfg(Resolvable):
     tag: str
     service_class: Optional[str] = None
     image: str = ""
+    build: Optional[BuildCfg] = None
     hostname: Optional[str] = None
     container_name: Optional[str] = None
     labels: Optional[list[str]] = None
@@ -692,11 +704,18 @@ def parse_config(yaml_str: str) -> Config:
             ),
         )
 
+    def parse_build(item: Any) -> BuildCfg:
+        return BuildCfg(
+            context_path=item.get("context_path"),
+            dockerfile_path=item.get("dockerfile_path"),
+        )
+
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
             tag=item["tag"],
             factory=item["factory"],
             image=item["image"],
+            build=parse_build(item["build"]) if item.get("build") else None,
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
             labels=item.get("labels", []),
@@ -723,6 +742,7 @@ def parse_config(yaml_str: str) -> Config:
             tag=item["tag"],
             service_class=item.get("service_class"),
             image=item["image"],
+            build=parse_build(item["build"]) if item.get("build") else None,
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
             labels=item.get("labels", []),
@@ -1296,6 +1316,7 @@ class ConfigMng:
             tag=other.tag,
             factory=other.factory,
             image=other.image,
+            build=deepcopy(other.build),
             hostname=other.hostname,
             container_name=other.container_name,
             labels=deepcopy(other.labels),
@@ -1326,6 +1347,7 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             image="",
+            build=None,
             hostname=None,
             container_name=None,
             labels=[],
@@ -1357,6 +1379,7 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             image=service_template.image,
+            build=deepcopy(service_template.build),
             hostname=service_template.hostname,
             container_name=service_template.container_name,
             labels=deepcopy(service_template.labels),
