@@ -28,6 +28,7 @@ from test_util import values
 from environment import EnvironmentMng
 from service import ServiceMng
 from shepctl import ShepherdMng, cli
+from util.constants import Constants
 
 shpd_config_svc_default = """
 shpd_registry:
@@ -36,6 +37,7 @@ shpd_registry:
   ftp_psw: ${shpd_registry_ftp_psw}
   ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
   ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
 host_inet_ip: ${host_inet_ip}
@@ -157,6 +159,9 @@ def test_shepherdmng_creates_dirs(
     sm = ShepherdMng()
 
     expected_dirs = [
+        sm.configMng.config.templates_path,
+        sm.configMng.config.templates_path + "/" + Constants.ENV_TEMPLATES_DIR,
+        sm.configMng.config.templates_path + "/" + Constants.SVC_TEMPLATES_DIR,
         sm.configMng.config.envs_path,
         sm.configMng.config.volumes_path,
         sm.configMng.constants.SHPD_CERTS_DIR,
@@ -165,6 +170,24 @@ def test_shepherdmng_creates_dirs(
         sm.configMng.config.staging_area.volumes_path,
         sm.configMng.config.staging_area.images_path,
     ]
+
+    for template in sm.configMng.get_environment_templates() or []:
+        expected_dirs.append(
+            sm.configMng.config.templates_path
+            + "/"
+            + Constants.ENV_TEMPLATES_DIR
+            + "/"
+            + template.tag
+        )
+
+    for template in sm.configMng.get_service_templates() or []:
+        expected_dirs.append(
+            sm.configMng.config.templates_path
+            + "/"
+            + Constants.SVC_TEMPLATES_DIR
+            + "/"
+            + template.tag
+        )
 
     for directory in expected_dirs:
         assert os.path.isdir(

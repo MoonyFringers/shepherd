@@ -37,6 +37,7 @@ shpd_registry:
   ftp_psw: ${shpd_registry_ftp_psw}
   ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
   ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
 host_inet_ip: ${host_inet_ip}

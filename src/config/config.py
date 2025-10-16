@@ -665,6 +665,7 @@ class Config(Resolvable):
     """
 
     shpd_registry: ShpdRegistryCfg
+    templates_path: str
     envs_path: str
     volumes_path: str
     host_inet_ip: str
@@ -890,6 +891,7 @@ def parse_config(yaml_str: str) -> Config:
             for service_template in data.get("service_templates", [])
         ],
         shpd_registry=parse_shpd_registry(data["shpd_registry"]),
+        templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
         host_inet_ip=data["host_inet_ip"],
@@ -936,11 +938,33 @@ class ConfigMng:
 
     def ensure_dirs(self):
         dirs = {
+            "TEMPLATES": self.config.templates_path,
+            "TEMPLATES_ENV": os.path.join(
+                self.config.templates_path, Constants.ENV_TEMPLATES_DIR
+            ),
+            "TEMPLATES_SVC": os.path.join(
+                self.config.templates_path, Constants.SVC_TEMPLATES_DIR
+            ),
             "ENVS": self.config.envs_path,
             "VOLUMES": self.config.volumes_path,
             "VOLUMES_SA": self.config.staging_area.volumes_path,
             "IMAGES_SA": self.config.staging_area.images_path,
         }
+
+        for template in self.get_environment_templates() or []:
+            dirs[f"TEMPLATE_ENV_{template.tag}"] = os.path.join(
+                self.config.templates_path,
+                Constants.ENV_TEMPLATES_DIR,
+                template.tag,
+            )
+
+        for template in self.get_service_templates() or []:
+            dirs[f"TEMPLATE_SVC_{template.tag}"] = os.path.join(
+                self.config.templates_path,
+                Constants.SVC_TEMPLATES_DIR,
+                template.tag,
+            )
+
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)
             if not os.path.exists(resolved_path) or not os.path.isdir(
