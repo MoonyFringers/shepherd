@@ -120,6 +120,7 @@ envs:
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
+          - domain=${domain}
         workdir: /test
         volumes:
           - /home/test/.ssh:/home/test/.ssh
@@ -324,6 +325,116 @@ def test_env_render_compose_env_ext_net(
         "  labels:\n"
         "  - com.example.label1=value1\n"
         "  - com.example.label2=value2\n"
+        "  - domain=${domain}\n"
+        "  workdir: /test\n"
+        "  volumes:\n"
+        "  - /home/test/.ssh:/home/test/.ssh\n"
+        "  - /etc/ssh:/etc/ssh\n"
+        "  ingress: false\n"
+        "  empty_env: null\n"
+        "  environment: []\n"
+        "  ports:\n"
+        "  - 80:80\n"
+        "  - 443:443\n"
+        "  - 8080:8080\n"
+        "  properties: {}\n"
+        "  networks:\n"
+        "  - default\n"
+        "  extra_hosts:\n"
+        "  - host.docker.internal:host-gateway\n"
+        "  subject_alternative_name: null\n"
+        "  upstreams: []\n"
+        "  status:\n"
+        "    active: true\n"
+        "    archived: false\n"
+        "    triggered_config: null\n"
+        "- template: default\n"
+        "  factory: docker\n"
+        "  tag: test-2\n"
+        "  service_class: null\n"
+        "  image: busybox:stable-glibc\n"
+        "  build: null\n"
+        "  hostname: null\n"
+        "  container_name: null\n"
+        "  labels:\n"
+        "  - com.example.label1=value1\n"
+        "  - com.example.label2=value2\n"
+        "  workdir: /test\n"
+        "  volumes:\n"
+        "  - /home/test/.ssh:/home/test/.ssh\n"
+        "  - /etc/ssh:/etc/ssh\n"
+        "  ingress: false\n"
+        "  empty_env: null\n"
+        "  environment: []\n"
+        "  ports:\n"
+        "  - 80:80\n"
+        "  - 443:443\n"
+        "  - 8080:8080\n"
+        "  properties: {}\n"
+        "  networks:\n"
+        "  - default\n"
+        "  extra_hosts:\n"
+        "  - host.docker.internal:host-gateway\n"
+        "  subject_alternative_name: null\n"
+        "  upstreams: []\n"
+        "  status:\n"
+        "    active: true\n"
+        "    archived: false\n"
+        "    triggered_config: null\n"
+        "networks:\n"
+        "- tag: default\n"
+        "  name: envnet\n"
+        "  external: true\n"
+        "  driver: null\n"
+        "  attachable: null\n"
+        "  enable_ipv6: null\n"
+        "  driver_opts: null\n"
+        "  ipam: null\n"
+        "volumes:\n"
+        "- tag: app_data_ext\n"
+        "  external: true\n"
+        "  name: nfs-1\n"
+        "  driver: null\n"
+        "  driver_opts: null\n"
+        "  labels: null\n"
+        "status:\n"
+        "  active: true\n"
+        "  archived: false\n"
+        "  triggered_config: null\n\n"
+    )
+
+
+@pytest.mark.docker
+def test_env_render_compose_env_resolved(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-r"])
+    assert result.exit_code == 0
+
+    assert result.output == (
+        "template: default\n"
+        "factory: docker-compose\n"
+        "tag: test-1\n"
+        "services:\n"
+        "- template: default\n"
+        "  factory: docker\n"
+        "  tag: test-1\n"
+        "  service_class: null\n"
+        "  image: busybox:stable-glibc\n"
+        "  build: null\n"
+        "  hostname: null\n"
+        "  container_name: null\n"
+        "  labels:\n"
+        "  - com.example.label1=value1\n"
+        "  - com.example.label2=value2\n"
+        "  - domain=sslip.io\n"
         "  workdir: /test\n"
         "  volumes:\n"
         "  - /home/test/.ssh:/home/test/.ssh\n"
@@ -426,6 +537,72 @@ def test_env_render_target_compose_env_ext_net(
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
+        "    - domain=${domain}\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - default\n"
+        "  test-2-test-1:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-2-test-1\n"
+        "    container_name: test-2-test-1\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    volumes:\n"
+        "    - /home/test/.ssh:/home/test/.ssh\n"
+        "    - /etc/ssh:/etc/ssh\n"
+        "    ports:\n"
+        "    - 80:80\n"
+        "    - 443:443\n"
+        "    - 8080:8080\n"
+        "    extra_hosts:\n"
+        "    - host.docker.internal:host-gateway\n"
+        "    networks:\n"
+        "    - default\n"
+        "networks:\n"
+        "  default:\n"
+        "    name: envnet\n"
+        "    external: true\n"
+        "volumes:\n"
+        "  app_data_ext:\n"
+        "    name: nfs-1\n"
+        "    external: true\n\n"
+    )
+
+
+@pytest.mark.docker
+def test_env_render_target_compose_env_resolved(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t", "-r"])
+    assert result.exit_code == 0
+
+    assert result.output == (
+        "name: test-1\n"
+        "services:\n"
+        "  test-1-test-1:\n"
+        "    image: busybox:stable-glibc\n"
+        "    hostname: test-1-test-1\n"
+        "    container_name: test-1-test-1\n"
+        "    labels:\n"
+        "    - com.example.label1=value1\n"
+        "    - com.example.label2=value2\n"
+        "    - domain=sslip.io\n"
         "    volumes:\n"
         "    - /home/test/.ssh:/home/test/.ssh\n"
         "    - /etc/ssh:/etc/ssh\n"

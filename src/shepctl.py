@@ -387,9 +387,10 @@ def reload_svc(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
 @cli.command(name="build")
 @click.argument("tag", required=True)
 @click.pass_obj
-def build(shepherd: ShepherdMng, tag: str):
-    """Build service image."""
-    shepherd.serviceMng.build_image_svc(tag)
+@require_active_env
+def build(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+    """Build service."""
+    shepherd.serviceMng.build_svc(envCfg, tag)
 
 
 # =====================================================

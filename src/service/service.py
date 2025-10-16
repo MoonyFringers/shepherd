@@ -135,8 +135,11 @@ class ServiceMng:
         else:
             return None
 
-    def build_image_svc(self, service_template: str):
-        pass
+    def build_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+        """Build a service."""
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.build()
 
     def start_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Start a service."""

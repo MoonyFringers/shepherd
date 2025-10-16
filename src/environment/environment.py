@@ -107,6 +107,21 @@ class Environment(ABC):
             self.get_path(),
             self.envCfg.tag,
         )
+
+        for service in self.services:
+            if svc_t_path := self.configMng.get_service_template_path(
+                service.svcCfg.template
+            ):
+                Util.copy_dir(
+                    svc_t_path,
+                    os.path.join(self.get_path(), service.svcCfg.tag),
+                )
+            else:
+                Util.print_error_and_die(
+                    f"Service Template: '{service.svcCfg.template}' "
+                    f"does not exist."
+                )
+
         self.sync_config()
 
     def realize_from(self, src_env: Environment):

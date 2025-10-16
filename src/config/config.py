@@ -1076,6 +1076,21 @@ class ConfigMng:
         """
         self.store_config(self.config)
 
+    def get_service_template_path(self, serviceTemplate: str) -> Optional[str]:
+        """
+        Retrieves the service template path by its tag.
+
+        :param serviceTemplate: The tag of the service template.
+        :return: The service template path.
+        """
+        if self.get_service_template(serviceTemplate):
+            return os.path.join(
+                self.config.templates_path,
+                Constants.SVC_TEMPLATES_DIR,
+                serviceTemplate,
+            )
+        return None
+
     def get_environment_template(
         self, envTemplate: str
     ) -> Optional[EnvironmentTemplateCfg]:

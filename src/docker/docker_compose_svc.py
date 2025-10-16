@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, override
 
 import yaml
@@ -26,7 +27,7 @@ from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from service import Service
 from util import Util
 
-from .docker_compose_util import run_compose
+from .docker_compose_util import build_docker_image, run_compose
 
 
 class DockerComposeSvc(Service):
@@ -87,7 +88,29 @@ class DockerComposeSvc(Service):
     @override
     def build(self):
         """Build the service."""
-        pass
+        if build := self.svcCfg.build:
+            if dockerfile := build.dockerfile_path:
+                if context_path := build.context_path:
+                    build_docker_image(
+                        Path(dockerfile),
+                        Path(context_path),
+                        self.svcCfg.image,
+                    )
+                else:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' build configuration is "
+                        f"missing a build context path."
+                    )
+            else:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' build configuration is "
+                    f"missing a Dockerfile path."
+                )
+        else:
+            Util.print_error_and_die(
+                f"Service '{self.svcCfg.tag}' does not have a build "
+                f"configuration."
+            )
 
     @override
     def start(self):

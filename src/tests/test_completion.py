@@ -714,7 +714,7 @@ def test_completion_build_svc(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["build"])
-    assert completions == ["t1", "t2"], "Expected build svc completion"
+    assert completions == ["red", "white"], "Expected build svc completion"
 
 
 @pytest.mark.compl

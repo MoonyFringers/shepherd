@@ -118,8 +118,8 @@ service_templates:
     factory: docker
     image: ${pg_image}
     build:
-      context_path: #{cfg.envs_path}/#{env.tag}/build
-      dockerfile_path: #{env.build.context_path}/Dockerfile
+      context_path: '#{cfg.envs_path}/#{env.tag}/build'
+      dockerfile_path: '#{svc.build.context_path}/Dockerfile'
     hostname: null
     container_name: null
     labels: []
@@ -149,8 +149,8 @@ envs:
         service_class: null
         image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
         build:
-          context_path: #{cfg.envs_path}/#{env.tag}/build
-          dockerfile_path: #{env.build.context_path}/Dockerfile
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
         hostname: null
         container_name: null
         labels: []
@@ -568,6 +568,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].image == (
         "ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40"
     )
+    assert service_templates[0].build is None
     assert service_templates[0].hostname == "ora-host"
     assert service_templates[0].container_name == "ora-cnt-1"
     assert service_templates[0].empty_env == "fresh-ora-19300"
@@ -596,6 +597,13 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].factory == "docker"
     assert service_templates[1].image == (
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
+    )
+    assert service_templates[1].build
+    assert service_templates[1].build.context_path == (
+        "${test_path}/envs/#{env.tag}/build"
+    )
+    assert service_templates[1].build.dockerfile_path == (
+        "#{svc.build.context_path}/Dockerfile"
     )
     assert service_templates[1].empty_env == "fresh-pg-1735"
     assert not service_templates[1].is_ingress()
@@ -759,6 +767,39 @@ def test_store_config_with_real_files():
         for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+
+@pytest.mark.cfg
+def test_load_config_change_resolve_status(mocker: MockerFixture):
+    """Test regular parsing"""
+
+    mocker.patch.dict(
+        os.environ,
+        {
+            "ora_container_name": "ora-cnt-1",
+            "ora_hostname": "ora-host",
+        },
+    )
+
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    config: Config = cMng.load_config()
+    config.set_unresolved()
+    assert config.envs
+    assert config.envs[0].services
+    config.envs[0].get_yaml(True)
+    config.envs[0].services[0].get_yaml(True)
+    config.set_resolved()
+    config.envs[0].get_yaml(False)
+    config.envs[0].services[0].get_yaml(False)
 
 
 @pytest.mark.cfg

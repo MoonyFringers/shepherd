@@ -273,11 +273,15 @@ def test_cli_complete(
 def test_cli_build_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_build = mocker.patch.object(ServiceMng, "build_image_svc")
+    mock_build = mocker.patch.object(ServiceMng, "build_svc")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
 
-    result = runner.invoke(cli, ["build", "service_template"])
+    result = runner.invoke(cli, ["build", "service_tag"])
     assert result.exit_code == 0
-    mock_build.assert_called_once_with("service_template")
+    mock_build.assert_called_once()
 
 
 @pytest.mark.shpd
