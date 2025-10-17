@@ -63,6 +63,7 @@ values = """
   cert_subject_alternative_names=
 
   shpd_path=${test_path}
+  templates_path=${shpd_path}/templates
   envs_path=${shpd_path}/envs
   volumes_path=${shpd_path}/volumes
   staging_area_volumes_path=${shpd_path}/sa_volumes

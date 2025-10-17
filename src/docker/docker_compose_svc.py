@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, override
 
 import yaml
@@ -26,7 +27,7 @@ from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from service import Service
 from util import Util
 
-from .docker_compose_util import run_compose
+from .docker_compose_util import build_docker_image, run_compose
 
 
 class DockerComposeSvc(Service):
@@ -38,35 +39,78 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def render_target(self) -> str:
+    def render_target(self, resolved: bool) -> str:
         """
         Render the docker-compose service configuration for this service.
+
+        Args:
+            resolved: If True, ensure placeholders in svcCfg are resolved
+            before rendering.
         """
-        service_def: dict[str, Any] = {
-            "image": self.svcCfg.image,
-            "hostname": self.hostname,
-            "container_name": self.container_name,
-        }
+        was_resolved = self.svcCfg.is_resolved()
+        changed_state = False
 
-        if self.svcCfg.labels:
-            service_def["labels"] = self.svcCfg.labels
-        if self.svcCfg.environment:
-            service_def["environment"] = self.svcCfg.environment
-        if self.svcCfg.volumes:
-            service_def["volumes"] = self.svcCfg.volumes
-        if self.svcCfg.ports:
-            service_def["ports"] = self.svcCfg.ports
-        if self.svcCfg.extra_hosts:
-            service_def["extra_hosts"] = self.svcCfg.extra_hosts
-        if self.svcCfg.networks:
-            service_def["networks"] = self.svcCfg.networks
+        try:
+            if resolved and not was_resolved:
+                self.envCfg.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.envCfg.set_unresolved()
+                changed_state = True
 
-        return yaml.dump({self.name: service_def}, sort_keys=False)
+            service_def: dict[str, Any] = {
+                "image": self.svcCfg.image,
+                "hostname": self.hostname,
+                "container_name": self.container_name,
+            }
+
+            if self.svcCfg.labels:
+                service_def["labels"] = self.svcCfg.labels
+            if self.svcCfg.environment:
+                service_def["environment"] = self.svcCfg.environment
+            if self.svcCfg.volumes:
+                service_def["volumes"] = self.svcCfg.volumes
+            if self.svcCfg.ports:
+                service_def["ports"] = self.svcCfg.ports
+            if self.svcCfg.extra_hosts:
+                service_def["extra_hosts"] = self.svcCfg.extra_hosts
+            if self.svcCfg.networks:
+                service_def["networks"] = self.svcCfg.networks
+
+            return yaml.dump({self.name: service_def}, sort_keys=False)
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.envCfg.set_resolved()
+                else:
+                    self.envCfg.set_unresolved()
 
     @override
     def build(self):
         """Build the service."""
-        pass
+        if build := self.svcCfg.build:
+            if dockerfile := build.dockerfile_path:
+                if context_path := build.context_path:
+                    build_docker_image(
+                        Path(dockerfile),
+                        Path(context_path),
+                        self.svcCfg.image,
+                    )
+                else:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' build configuration is "
+                        f"missing a build context path."
+                    )
+            else:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' build configuration is "
+                    f"missing a Dockerfile path."
+                )
+        else:
+            Util.print_error_and_die(
+                f"Service '{self.svcCfg.tag}' does not have a build "
+                f"configuration."
+            )
 
     @override
     def start(self):

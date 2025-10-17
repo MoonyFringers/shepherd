@@ -34,6 +34,7 @@ shpd_registry:
   ftp_psw: ${shpd_registry_ftp_psw}
   ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
   ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
 host_inet_ip: ${host_inet_ip}
@@ -90,6 +91,7 @@ service_templates:
   - tag: oracle
     factory: docker
     image: ${ora_image}
+    build: null
     hostname: ${ora_hostname}
     container_name: ${ora_container_name}
     labels: []
@@ -115,6 +117,9 @@ service_templates:
   - tag: postgres
     factory: docker
     image: ${pg_image}
+    build:
+      context_path: '#{cfg.envs_path}/#{env.tag}/build'
+      dockerfile_path: '#{svc.build.context_path}/Dockerfile'
     hostname: null
     container_name: null
     labels: []
@@ -143,6 +148,9 @@ envs:
         tag: pg-1
         service_class: null
         image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
         hostname: null
         container_name: null
         labels: []
@@ -192,6 +200,7 @@ envs:
         tag: traefik-1
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -215,6 +224,7 @@ envs:
         tag: primary
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -240,6 +250,7 @@ envs:
         tag: poke
         service_class: null
         image: ''
+        build: null
         hostname: null
         container_name: null
         labels: []
@@ -295,6 +306,7 @@ shpd_registry:
   ftp_psw: ${shpd_registry_ftp_psw}
   ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
   ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
 host_inet_ip: ${host_inet_ip}
@@ -363,6 +375,7 @@ service_templates:
   - tag: nginx
     factory: docker
     image: nginx:latest
+    build: null
     hostname: web-instance
     container_name: web-instance
     labels:
@@ -384,6 +397,7 @@ service_templates:
   - tag: postgres
     factory: docker
     image: postgres:14
+    build: null
     hostname: db-instance
     container_name: db-instance
     labels:
@@ -412,6 +426,7 @@ envs:
         tag: web
         service_class: null
         image: nginx:latest
+        build: null
         hostname: web-instance
         container_name: web-instance
         labels:
@@ -441,6 +456,7 @@ envs:
         tag: db
         service_class: '#{not.exist}'
         image: postgres:14
+        build: null
         hostname: db-instance
         container_name: db-instance
         labels:
@@ -552,6 +568,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].image == (
         "ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40"
     )
+    assert service_templates[0].build is None
     assert service_templates[0].hostname == "ora-host"
     assert service_templates[0].container_name == "ora-cnt-1"
     assert service_templates[0].empty_env == "fresh-ora-19300"
@@ -580,6 +597,13 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].factory == "docker"
     assert service_templates[1].image == (
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
+    )
+    assert service_templates[1].build
+    assert service_templates[1].build.context_path == (
+        "${test_path}/envs/#{env.tag}/build"
+    )
+    assert service_templates[1].build.dockerfile_path == (
+        "#{svc.build.context_path}/Dockerfile"
     )
     assert service_templates[1].empty_env == "fresh-pg-1735"
     assert not service_templates[1].is_ingress()
@@ -655,6 +679,7 @@ def test_load_config(mocker: MockerFixture):
     assert not config.envs[0].volumes[0].is_external()
 
     assert ports and ports[0] == "3000:3000"
+    assert config.templates_path == "${test_path}/templates"
     assert config.envs_path == "${test_path}/envs"
     assert config.volumes_path == "${test_path}/volumes"
     assert config.host_inet_ip == "127.0.0.1"
@@ -742,6 +767,39 @@ def test_store_config_with_real_files():
         for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+
+@pytest.mark.cfg
+def test_load_config_change_resolve_status(mocker: MockerFixture):
+    """Test regular parsing"""
+
+    mocker.patch.dict(
+        os.environ,
+        {
+            "ora_container_name": "ora-cnt-1",
+            "ora_hostname": "ora-host",
+        },
+    )
+
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    config: Config = cMng.load_config()
+    config.set_unresolved()
+    assert config.envs
+    assert config.envs[0].services
+    config.envs[0].get_yaml(True)
+    config.envs[0].services[0].get_yaml(True)
+    config.set_resolved()
+    config.envs[0].get_yaml(False)
+    config.envs[0].services[0].get_yaml(False)
 
 
 @pytest.mark.cfg

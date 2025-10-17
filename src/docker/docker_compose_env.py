@@ -92,63 +92,86 @@ class DockerComposeEnv(Environment):
             run_compose(self.envCfg.status.triggered_config, "restart")
 
     @override
-    def render_target(self) -> str:
+    def render_target(self, resolved: bool = False) -> str:
         """
         Render the full docker-compose YAML configuration for the environment.
+
+        Args:
+            resolved: If True, ensure placeholders in envCfg and child services
+                      are resolved before rendering.
         """
+        was_resolved = self.envCfg.is_resolved()
+        changed_state = False
 
-        compose_config: dict[str, Any] = {
-            "name": self.envCfg.tag,
-            "services": {},
-            "networks": {},
-            "volumes": {},
-        }
+        try:
+            if resolved and not was_resolved:
+                self.envCfg.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.envCfg.set_unresolved()
+                changed_state = True
 
-        for svc in self.services:
-            svc_yaml = yaml.safe_load(svc.render_target())
-            compose_config["services"].update(svc_yaml)
+            compose_config: dict[str, Any] = {
+                "name": self.envCfg.tag,
+                "services": {},
+                "networks": {},
+                "volumes": {},
+            }
 
-        if self.envCfg.networks:
-            for net in self.envCfg.networks:
-                net_config = {}
+            # --- Services ---
+            for svc in self.services:
+                svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
+                compose_config["services"].update(svc_yaml)
 
-                if net.is_external():
-                    if net.name:
-                        net_config["name"] = net.name
-                    net_config["external"] = True
+            # --- Networks ---
+            if self.envCfg.networks:
+                for net in self.envCfg.networks:
+                    net_config = {}
+
+                    if net.is_external():
+                        if net.name:
+                            net_config["name"] = net.name
+                        net_config["external"] = True
+                    else:
+                        if net.driver:
+                            net_config["driver"] = net.driver
+                        if net.attachable is not None:
+                            net_config["attachable"] = net.is_attachable()
+                        if net.enable_ipv6 is not None:
+                            net_config["enable_ipv6"] = net.is_enable_ipv6()
+                        if net.driver_opts:
+                            net_config["driver_opts"] = net.driver_opts
+                        if net.ipam:
+                            net_config["ipam"] = net.ipam
+
+                    compose_config["networks"][net.tag] = net_config
+
+            # --- Volumes ---
+            if self.envCfg.volumes:
+                for vol in self.envCfg.volumes:
+                    vol_config = {}
+
+                    if vol.is_external():
+                        if vol.name:
+                            vol_config["name"] = vol.name
+                        vol_config["external"] = True
+                    else:
+                        if vol.driver:
+                            vol_config["driver"] = vol.driver
+                        if vol.driver_opts:
+                            vol_config["driver_opts"] = vol.driver_opts
+                        if vol.labels:
+                            vol_config["labels"] = vol.labels
+
+                    compose_config["volumes"][vol.tag] = vol_config
+
+            return yaml.dump(compose_config, sort_keys=False)
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.envCfg.set_resolved()
                 else:
-                    if net.driver:
-                        net_config["driver"] = net.driver
-                    if net.attachable is not None:
-                        net_config["attachable"] = net.is_attachable()
-                    if net.enable_ipv6 is not None:
-                        net_config["enable_ipv6"] = net.is_enable_ipv6()
-                    if net.driver_opts:
-                        net_config["driver_opts"] = net.driver_opts
-                    if net.ipam:
-                        net_config["ipam"] = net.ipam
-
-                compose_config["networks"][net.tag] = net_config
-
-        if self.envCfg.volumes:
-            for vol in self.envCfg.volumes:
-                vol_config = {}
-
-                if vol.is_external():
-                    if vol.name:
-                        vol_config["name"] = vol.name
-                    vol_config["external"] = True
-                else:
-                    if vol.driver:
-                        vol_config["driver"] = vol.driver
-                    if vol.driver_opts:
-                        vol_config["driver_opts"] = vol.driver_opts
-                    if vol.labels:
-                        vol_config["labels"] = vol.labels
-
-                compose_config["volumes"][vol.tag] = vol_config
-
-        return yaml.dump(compose_config, sort_keys=False)
+                    self.envCfg.set_unresolved()
 
     @override
     def status(self) -> list[dict[str, str]]:

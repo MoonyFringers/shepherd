@@ -62,11 +62,12 @@ class Constants:
     APP_NAME: str = "shepctl"
     APP_VERSION: str = "0.0.0"
     APP_AUTHOR: str = "Moony Fringers"
-    APP_LICENSE: str = "MIT"
+    APP_LICENSE: str = "AGPL-3.0"
     APP_URL: str = "https://github.com/MoonyFringers/shepherd"
 
     # Environment templates:
 
+    ENV_TEMPLATES_DIR: str = "envs"
     ENV_TEMPLATE_DEFAULT: str = "default"
 
     # Environment types
@@ -81,6 +82,7 @@ class Constants:
 
     # Service templates:
 
+    SVC_TEMPLATES_DIR: str = "svcs"
     SVC_TEMPLATE_DEFAULT: str = "default"
     SVC_TAG_DEFAULT: str = "service-default"
 
@@ -144,6 +146,7 @@ class Constants:
                 "ftp_shpd_path": "${shpd_registry_ftp_shpd_path}",
                 "ftp_env_imgs_path": "${shpd_registry_ftp_imgs_path}",
             },
+            "templates_path": "${templates_path}",
             "envs_path": "${envs_path}",
             "volumes_path": "${volumes_path}",
             "host_inet_ip": "${host_inet_ip}",

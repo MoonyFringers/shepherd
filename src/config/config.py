@@ -242,7 +242,7 @@ class Resolvable:
     def set_resolver(self, mapping: dict[str, str] | None):
         self._walk_and_set(mapping, True)
 
-    def _is_resolved(self) -> bool:
+    def is_resolved(self) -> bool:
         return getattr(self, "_resolved", False)
 
     def _resolve_str(self, s: str) -> str:
@@ -286,11 +286,12 @@ class Resolvable:
             name.startswith("_")
             or name
             in (
+                "is_resolved",
                 "set_resolver",
                 "set_resolved",
                 "set_unresolved",
             )
-            or not self._is_resolved()
+            or not self.is_resolved()
         ):
             return object.__getattribute__(self, name)
 
@@ -427,6 +428,16 @@ class VolumeCfg(Resolvable):
 
 
 @dataclass
+class BuildCfg(Resolvable):
+    """
+    Represents a build configuration.
+    """
+
+    context_path: Optional[str] = None
+    dockerfile_path: Optional[str] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -435,6 +446,7 @@ class ServiceTemplateCfg(Resolvable):
     tag: str
     factory: str
     image: str
+    build: Optional[BuildCfg] = None
     hostname: Optional[str] = None
     container_name: Optional[str] = None
     labels: Optional[list[str]] = None
@@ -476,6 +488,7 @@ class ServiceCfg(Resolvable):
     tag: str
     service_class: Optional[str] = None
     image: str = ""
+    build: Optional[BuildCfg] = None
     hostname: Optional[str] = None
     container_name: Optional[str] = None
     labels: Optional[list[str]] = None
@@ -499,14 +512,31 @@ class ServiceCfg(Resolvable):
             self.ingress if self.ingress is not None else "false"
         )
 
-    def get_yaml(self) -> str:
+    def get_yaml(self, resolved: bool = False) -> str:
         """
         Returns the YAML representation of the service configuration.
+
+        Args:
+        resolved: If True, ensure placeholders are resolved before dumping.
         """
-        self.set_unresolved()
-        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
-        self.set_resolved()
-        return yml
+        was_resolved = self.is_resolved()
+        changed_state = False
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+                changed_state = True
+
+            return yaml.dump(cfg_asdict(self), sort_keys=False)
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.set_resolved()
+                else:
+                    self.set_unresolved()
 
 
 @dataclass
@@ -550,14 +580,27 @@ class EnvironmentCfg(Resolvable):
                 return svc
         return None
 
-    def get_yaml(self) -> str:
+    def get_yaml(self, resolved: bool = False) -> str:
         """
-        Returns the YAML representation of the environment configuration.
+        Return the YAML representation of the environment configuration.
+
+        Args:
+            resolved: If True, ensure placeholders are resolved before dumping.
         """
-        self.set_unresolved()
-        yml = yaml.dump(cfg_asdict(self), sort_keys=False)
-        self.set_resolved()
-        return yml
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            return yaml.dump(cfg_asdict(self), sort_keys=False)
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
 
 
 @dataclass
@@ -622,6 +665,7 @@ class Config(Resolvable):
     """
 
     shpd_registry: ShpdRegistryCfg
+    templates_path: str
     envs_path: str
     volumes_path: str
     host_inet_ip: str
@@ -661,11 +705,18 @@ def parse_config(yaml_str: str) -> Config:
             ),
         )
 
+    def parse_build(item: Any) -> BuildCfg:
+        return BuildCfg(
+            context_path=item.get("context_path"),
+            dockerfile_path=item.get("dockerfile_path"),
+        )
+
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
             tag=item["tag"],
             factory=item["factory"],
             image=item["image"],
+            build=parse_build(item["build"]) if item.get("build") else None,
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
             labels=item.get("labels", []),
@@ -692,6 +743,7 @@ def parse_config(yaml_str: str) -> Config:
             tag=item["tag"],
             service_class=item.get("service_class"),
             image=item["image"],
+            build=parse_build(item["build"]) if item.get("build") else None,
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
             labels=item.get("labels", []),
@@ -839,6 +891,7 @@ def parse_config(yaml_str: str) -> Config:
             for service_template in data.get("service_templates", [])
         ],
         shpd_registry=parse_shpd_registry(data["shpd_registry"]),
+        templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
         host_inet_ip=data["host_inet_ip"],
@@ -885,11 +938,33 @@ class ConfigMng:
 
     def ensure_dirs(self):
         dirs = {
+            "TEMPLATES": self.config.templates_path,
+            "TEMPLATES_ENV": os.path.join(
+                self.config.templates_path, Constants.ENV_TEMPLATES_DIR
+            ),
+            "TEMPLATES_SVC": os.path.join(
+                self.config.templates_path, Constants.SVC_TEMPLATES_DIR
+            ),
             "ENVS": self.config.envs_path,
             "VOLUMES": self.config.volumes_path,
             "VOLUMES_SA": self.config.staging_area.volumes_path,
             "IMAGES_SA": self.config.staging_area.images_path,
         }
+
+        for template in self.get_environment_templates() or []:
+            dirs[f"TEMPLATE_ENV_{template.tag}"] = os.path.join(
+                self.config.templates_path,
+                Constants.ENV_TEMPLATES_DIR,
+                template.tag,
+            )
+
+        for template in self.get_service_templates() or []:
+            dirs[f"TEMPLATE_SVC_{template.tag}"] = os.path.join(
+                self.config.templates_path,
+                Constants.SVC_TEMPLATES_DIR,
+                template.tag,
+            )
+
         for desc, dir_path in dirs.items():
             resolved_path = os.path.realpath(dir_path)
             if not os.path.exists(resolved_path) or not os.path.isdir(
@@ -1000,6 +1075,21 @@ class ConfigMng:
         Stores the current configuration by calling `store_config`.
         """
         self.store_config(self.config)
+
+    def get_service_template_path(self, serviceTemplate: str) -> Optional[str]:
+        """
+        Retrieves the service template path by its tag.
+
+        :param serviceTemplate: The tag of the service template.
+        :return: The service template path.
+        """
+        if self.get_service_template(serviceTemplate):
+            return os.path.join(
+                self.config.templates_path,
+                Constants.SVC_TEMPLATES_DIR,
+                serviceTemplate,
+            )
+        return None
 
     def get_environment_template(
         self, envTemplate: str
@@ -1265,6 +1355,7 @@ class ConfigMng:
             tag=other.tag,
             factory=other.factory,
             image=other.image,
+            build=deepcopy(other.build),
             hostname=other.hostname,
             container_name=other.container_name,
             labels=deepcopy(other.labels),
@@ -1295,6 +1386,7 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             image="",
+            build=None,
             hostname=None,
             container_name=None,
             labels=[],
@@ -1326,6 +1418,7 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             image=service_template.image,
+            build=deepcopy(service_template.build),
             hostname=service_template.hostname,
             container_name=service_template.container_name,
             labels=deepcopy(service_template.labels),

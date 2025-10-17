@@ -47,12 +47,12 @@ class Service(ABC):
         """
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
 
-    def render(self) -> str:
+    def render(self, resolved: bool) -> str:
         """Render the service configuration."""
-        return self.svcCfg.get_yaml()
+        return self.svcCfg.get_yaml(resolved)
 
     @abstractmethod
-    def render_target(self) -> str:
+    def render_target(self, resolved: bool) -> str:
         """
         Render the service configuration in the target system.
         """
@@ -135,8 +135,11 @@ class ServiceMng:
         else:
             return None
 
-    def build_image_svc(self, service_template: str):
-        pass
+    def build_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+        """Build a service."""
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            service.build()
 
     def start_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
         """Start a service."""
@@ -157,14 +160,14 @@ class ServiceMng:
             service.reload()
 
     def render_svc(
-        self, envCfg: EnvironmentCfg, svc_tag: str, target: bool
+        self, envCfg: EnvironmentCfg, svc_tag: str, target: bool, resolved: bool
     ) -> Optional[str]:
         """Render a service configuration."""
         service = self.get_service(envCfg, svc_tag)
         if service:
             if target:
-                return service.render_target()
-            return service.render()
+                return service.render_target(resolved)
+            return service.render(resolved)
         return None
 
     def logs_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
