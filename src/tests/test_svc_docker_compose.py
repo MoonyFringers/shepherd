@@ -37,6 +37,7 @@ shpd_registry:
   ftp_psw: ${shpd_registry_ftp_psw}
   ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
   ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
 host_inet_ip: ${host_inet_ip}
@@ -77,6 +78,9 @@ service_templates:
   - tag: default
     factory: docker
     image: test-image:latest
+    build:
+      context_path: '#{cfg.envs_path}/#{env.tag}/build'
+      dockerfile_path: '#{svc.build.context_path}/Dockerfile'
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
@@ -106,6 +110,128 @@ envs:
         factory: docker
         tag: test
         image: test-image:latest
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-1
+        image: test-image:latest
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-2
+        image: test-image:latest
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-3
+        image: test-image:latest
+        build:
+          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
+        labels:
+          - com.example.label1=value1
+          - com.example.label2=value2
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ingress: false
+        empty_env: null
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        properties: {}
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: default
+        factory: docker
+        tag: test-4
+        image: test-image:latest
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{svc.build.context_path}/Dockerfile-Not-Exist'
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -146,6 +272,11 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     config_file = temp_home / ".shpd.conf"
     config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
+    envs = temp_home / "envs"
+    envs.mkdir()
+    (envs / "test-1" / "build").mkdir(parents=True)
+    (envs / "test-1" / "build" / "Dockerfile").write_text("FROM alpine:latest")
+
     os.environ["SHPD_CONF"] = str(config_file)
     return temp_home, config_file
 
@@ -173,6 +304,60 @@ def test_svc_render_default_compose_service(
         "tag: test\n"
         "service_class: null\n"
         "image: test-image:latest\n"
+        "build:\n"
+        "  context_path: '#{cfg.envs_path}/#{env.tag}/build'\n"
+        "  dockerfile_path: '#{svc.build.context_path}/Dockerfile'\n"
+        "hostname: null\n"
+        "container_name: null\n"
+        "labels:\n"
+        "- com.example.label1=value1\n"
+        "- com.example.label2=value2\n"
+        "workdir: /test\n"
+        "volumes:\n"
+        "- /home/test/.ssh:/home/test/.ssh\n"
+        "- /etc/ssh:/etc/ssh\n"
+        "ingress: false\n"
+        "empty_env: null\n"
+        "environment: []\n"
+        "ports:\n"
+        "- 80:80\n"
+        "- 443:443\n"
+        "- 8080:8080\n"
+        "properties: {}\n"
+        "networks:\n"
+        "- default\n"
+        "extra_hosts:\n"
+        "- host.docker.internal:host-gateway\n"
+        "subject_alternative_name: null\n"
+        "upstreams: []\n"
+        "status:\n"
+        "  active: true\n"
+        "  archived: false\n"
+        "  triggered_config: null\n\n"
+    )
+
+
+@pytest.mark.docker
+def test_svc_render_default_compose_service_resolved(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-r"])
+    assert result.exit_code == 0
+
+    assert result.output == (
+        "template: default\n"
+        "factory: docker\n"
+        "tag: test\n"
+        "service_class: null\n"
+        "image: test-image:latest\n"
+        "build:\n"
+        f"  context_path: {str(shpd_path)}/envs/test-1/build\n"
+        f"  dockerfile_path: {str(shpd_path)}/envs/test-1/build/Dockerfile\n"
         "hostname: null\n"
         "container_name: null\n"
         "labels:\n"
@@ -425,3 +610,133 @@ def test_shell_svc(
     result = runner.invoke(cli, ["shell", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_build_svc(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_build_svc_missing_build(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-1-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test-1"])
+    assert result.exit_code == 1
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_build_svc_missing_build_dockerfile(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-2-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test-2"])
+    assert result.exit_code == 1
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_build_svc_missing_build_context_path(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-3-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test-3"])
+    assert result.exit_code == 1
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_build_svc_dockerfile_does_not_exist(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-4-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test-4"])
+    assert result.exit_code == 1
+    mock_subproc.assert_not_called()

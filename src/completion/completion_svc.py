@@ -65,8 +65,8 @@ class CompletionSvcMng(AbstractCompletionMng):
         )
 
     def get_build_completions(self, args: list[str]) -> list[str]:
-        if not self.is_svc_template_chosen(args):
-            return self.get_svc_templates(args)
+        if not self.is_svc_tag_chosen(args):
+            return self.get_svc_tags(args)
         return []
 
     def is_svc_tag_chosen(self, args: list[str]) -> bool:

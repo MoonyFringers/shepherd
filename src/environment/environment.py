@@ -68,12 +68,12 @@ class Environment(ABC):
         """Reload the environment."""
         pass
 
-    def render(self) -> str:
+    def render(self, resolved: bool) -> str:
         """Render the environment configuration."""
-        return self.envCfg.get_yaml()
+        return self.envCfg.get_yaml(resolved)
 
     @abstractmethod
-    def render_target(self) -> str:
+    def render_target(self, resolved: bool) -> str:
         """
         Render the environment configuration in the target system.
         """
@@ -107,6 +107,21 @@ class Environment(ABC):
             self.get_path(),
             self.envCfg.tag,
         )
+
+        for service in self.services:
+            if svc_t_path := self.configMng.get_service_template_path(
+                service.svcCfg.template
+            ):
+                Util.copy_dir(
+                    svc_t_path,
+                    os.path.join(self.get_path(), service.svcCfg.tag),
+                )
+            else:
+                Util.print_error_and_die(
+                    f"Service Template: '{service.svcCfg.template}' "
+                    f"does not exist."
+                )
+
         self.sync_config()
 
     def realize_from(self, src_env: Environment):
@@ -324,7 +339,7 @@ class EnvironmentMng:
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        env.envCfg.status.triggered_config = env.render_target()
+        env.envCfg.status.triggered_config = env.render_target(True)
         env.sync_config()
         env.start()
         Util.print(f"Started environment: {env.envCfg.tag}")
@@ -348,13 +363,15 @@ class EnvironmentMng:
         env.reload()
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
-    def render_env(self, env_tag: str, target: bool) -> Optional[str]:
+    def render_env(
+        self, env_tag: str, target: bool, resolved: bool
+    ) -> Optional[str]:
         """Render an environment configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
-                return env.render_target()
-            return env.render()
+                return env.render_target(resolved)
+            return env.render(resolved)
         return None
 
     def status_env(self, envCfg: EnvironmentCfg):
