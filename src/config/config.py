@@ -110,6 +110,8 @@ def cfg_asdict(obj: Any) -> dict[str, Any] | list[Any] | Any:
         result: dict[str, Any] = {}
         for f in fields(obj):
             val = getattr(obj, f.name)
+            if f.metadata.get("transient"):
+                continue
             if f.metadata.get("boolify") and isinstance(val, str):
                 if val.lower() == "true":
                     result[f.name] = True
@@ -444,7 +446,13 @@ class ContainerCfg(Resolvable):
     tag: str
     image: Optional[str] = None
     hostname: Optional[str] = None
+    run_hostname: Optional[str] = field(
+        default=None, metadata={"transient": True}
+    )
     container_name: Optional[str] = None
+    run_container_name: Optional[str] = field(
+        default=None, metadata={"transient": True}
+    )
     workdir: Optional[str] = None
     volumes: Optional[list[str]] = None
     environment: Optional[list[str]] = None

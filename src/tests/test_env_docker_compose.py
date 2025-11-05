@@ -334,8 +334,8 @@ services:
   - image: busybox:stable-glibc
     build: null
     tag: container-1
-    container_name: container-1-test-1-test-1
-    hostname: container-1-test-1-test-1
+    container_name: null
+    hostname: null
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -370,8 +370,8 @@ services:
   - image: busybox:stable-glibc
     tag: container-1
     build: null
-    container_name: container-1-test-2-test-1
-    hostname: container-1-test-2-test-1
+    container_name: null
+    hostname: null
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -450,9 +450,9 @@ services:
   containers:
   - image: busybox:stable-glibc
     tag: container-1
-    container_name: container-1-test-1-test-1
+    container_name: null
     build: null
-    hostname: container-1-test-1-test-1
+    hostname: null
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -487,8 +487,8 @@ services:
   - image: busybox:stable-glibc
     build: null
     tag: container-1
-    container_name: container-1-test-2-test-1
-    hostname: container-1-test-2-test-1
+    container_name: null
+    hostname: null
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh

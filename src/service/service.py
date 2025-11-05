@@ -47,7 +47,7 @@ class Service(ABC):
         if self.svcCfg.containers:
             if len(self.svcCfg.containers) > 1:
                 for container in self.svcCfg.containers:
-                    container.hostname = (
+                    container.run_hostname = (
                         container.hostname
                         if container.hostname
                         else (
@@ -55,7 +55,7 @@ class Service(ABC):
                             f"{self.svcCfg.tag}-{self.envCfg.tag}"
                         )
                     )
-                    container.container_name = (
+                    container.run_container_name = (
                         container.container_name
                         if container.container_name
                         else (
@@ -65,13 +65,13 @@ class Service(ABC):
                     )
             elif len(self.svcCfg.containers) == 1:
                 container = self.svcCfg.containers[0]
-                container.hostname = (
+                container.run_hostname = (
                     container.hostname
                     if container.hostname
                     else f"{container.tag}-"
                     f"{self.svcCfg.tag}-{self.envCfg.tag}"
                 )
-                container.container_name = (
+                container.run_container_name = (
                     container.container_name
                     if container.container_name
                     else f"{container.tag}-"

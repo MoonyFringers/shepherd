@@ -388,8 +388,8 @@ class EnvironmentMng:
 
         for svc in services:
             rows: list[list[str]] = []
-            for container in getattr(svc.svcCfg, "containers", []) or []:
-                cnt_name = container.container_name
+            for container in svc.svcCfg.containers or []:
+                cnt_name = container.run_container_name or ""
                 cnt_info = status_by_service.get(cnt_name)
                 state = (
                     cnt_info.get("State", "?").lower()

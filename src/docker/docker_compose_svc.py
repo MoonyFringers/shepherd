@@ -67,10 +67,10 @@ class DockerComposeSvc(Service):
                 service_def: dict[str, Any] = {}
                 if container.image:
                     service_def["image"] = container.image
-                if container.hostname:
-                    service_def["hostname"] = container.hostname
-                if container.container_name:
-                    service_def["container_name"] = container.container_name
+                if container.run_hostname:
+                    service_def["hostname"] = container.run_hostname
+                if container.run_container_name:
+                    service_def["container_name"] = container.run_container_name
                 if container.workdir:
                     service_def["working_dir"] = container.workdir
                 if container.volumes:
@@ -85,7 +85,9 @@ class DockerComposeSvc(Service):
                     service_def["extra_hosts"] = container.extra_hosts
                 if self.svcCfg.labels:
                     service_def["labels"] = self.svcCfg.labels
-                services_def["services"][container.container_name] = service_def
+                services_def["services"][
+                    container.run_container_name
+                ] = service_def
 
             return yaml.dump(services_def, sort_keys=False)
 
@@ -132,13 +134,14 @@ class DockerComposeSvc(Service):
 
     @override
     def start(self):
-        if self.envCfg.status.triggered_config:
-            run_compose(
-                self.envCfg.status.triggered_config,
-                "up",
-                "-d",
-                self.canonical_name(),
-            )
+        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            for container in self.svcCfg.containers or []:
+                run_compose(
+                    self.envCfg.status.triggered_config,
+                    "up",
+                    "-d",
+                    container.run_container_name or "",
+                )
         else:
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
@@ -147,12 +150,13 @@ class DockerComposeSvc(Service):
     @override
     def stop(self):
         """Stop the service."""
-        if self.envCfg.status.triggered_config:
-            run_compose(
-                self.envCfg.status.triggered_config,
-                "stop",
-                self.canonical_name(),
-            )
+        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            for container in self.svcCfg.containers or []:
+                run_compose(
+                    self.envCfg.status.triggered_config,
+                    "stop",
+                    container.run_container_name or "",
+                )
         else:
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
@@ -161,12 +165,13 @@ class DockerComposeSvc(Service):
     @override
     def reload(self):
         """Reload the service."""
-        if self.envCfg.status.triggered_config:
-            run_compose(
-                self.envCfg.status.triggered_config,
-                "restart",
-                self.canonical_name(),
-            )
+        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            for container in self.svcCfg.containers or []:
+                run_compose(
+                    self.envCfg.status.triggered_config,
+                    "restart",
+                    container.run_container_name or "",
+                )
         else:
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
