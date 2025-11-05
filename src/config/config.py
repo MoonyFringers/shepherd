@@ -452,6 +452,7 @@ class ContainerCfg(Resolvable):
     networks: Optional[list[str]] = None
     extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
+    build: Optional[BuildCfg] = None
 
 
 @dataclass
@@ -462,7 +463,6 @@ class ServiceTemplateCfg(Resolvable):
 
     tag: str
     factory: str
-    build: Optional[BuildCfg] = None
     labels: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
     empty_env: Optional[str] = None
@@ -495,7 +495,6 @@ class ServiceCfg(Resolvable):
     factory: str
     template: str
     service_class: Optional[str] = None
-    build: Optional[BuildCfg] = None
     labels: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
     empty_env: Optional[str] = None
@@ -723,13 +722,13 @@ def parse_config(yaml_str: str) -> Config:
             networks=item.get("networks", []),
             extra_hosts=item.get("extra_hosts", []),
             subject_alternative_name=item.get("subject_alternative_name"),
+            build=parse_build(item["build"]) if item.get("build") else None,
         )
 
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
             tag=item["tag"],
             factory=item["factory"],
-            build=parse_build(item["build"]) if item.get("build") else None,
             labels=item.get("labels", []),
             properties=item.get("properties", {}),
             empty_env=item.get("empty_env"),
@@ -750,7 +749,6 @@ def parse_config(yaml_str: str) -> Config:
             factory=item["factory"],
             template=item["template"],
             service_class=item.get("service_class"),
-            build=parse_build(item["build"]) if item.get("build") else None,
             labels=item.get("labels", []),
             properties=item.get("properties", {}),
             empty_env=item.get("empty_env"),
@@ -1356,7 +1354,6 @@ class ConfigMng:
         return ServiceTemplateCfg(
             tag=other.tag,
             factory=other.factory,
-            build=deepcopy(other.build),
             labels=deepcopy(other.labels),
             ingress=other.ingress,
             empty_env=other.empty_env,
@@ -1378,7 +1375,6 @@ class ConfigMng:
             factory="",
             tag=service_tag,
             service_class=service_class,
-            build=None,
             labels=[],
             ingress="false",
             empty_env=None,
@@ -1401,7 +1397,6 @@ class ConfigMng:
             factory=service_template.factory,
             tag=service_tag,
             service_class=service_class,
-            build=deepcopy(service_template.build),
             labels=deepcopy(service_template.labels),
             ingress=service_template.ingress,
             empty_env=service_template.empty_env,

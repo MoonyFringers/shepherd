@@ -326,13 +326,13 @@ factory: docker-compose
 tag: test-1
 services:
 - template: default
-  build: null
   factory: docker
   tag: test-1
   service_class: null
   upstreams: []
   containers:
   - image: busybox:stable-glibc
+    build: null
     tag: container-1
     container_name: test-1-test-1
     hostname: test-1-test-1
@@ -362,7 +362,6 @@ services:
     archived: false
     triggered_config: null
 - template: default
-  build: null
   factory: docker
   tag: test-2
   service_class: null
@@ -370,6 +369,7 @@ services:
   containers:
   - image: busybox:stable-glibc
     tag: container-1
+    build: null
     container_name: test-2-test-1
     hostname: test-2-test-1
     workdir: /test
@@ -443,7 +443,6 @@ factory: docker-compose
 tag: test-1
 services:
 - template: default
-  build: null
   factory: docker
   tag: test-1
   service_class: null
@@ -452,6 +451,7 @@ services:
   - image: busybox:stable-glibc
     tag: container-1
     container_name: test-1-test-1
+    build: null
     hostname: test-1-test-1
     workdir: /test
     volumes:
@@ -479,13 +479,13 @@ services:
     archived: false
     triggered_config: null
 - template: default
-  build: null
   factory: docker
   tag: test-2
   service_class: null
   upstreams: []
   containers:
   - image: busybox:stable-glibc
+    build: null
     tag: container-1
     container_name: test-2-test-1
     hostname: test-2-test-1

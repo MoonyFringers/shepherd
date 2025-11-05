@@ -95,9 +95,9 @@ service_templates:
         extra_hosts:
           - host.docker.internal:host-gateway
         subject_alternative_name: null
-    build:
-      context_path: '#{cfg.envs_path}/#{env.tag}/build'
-      dockerfile_path: '#{svc.build.context_path}/Dockerfile'
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
@@ -112,9 +112,6 @@ envs:
       - template: default
         factory: docker
         tag: test
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
-          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -123,6 +120,9 @@ envs:
         properties: {}
         containers:
           - image: test-image:latest
+            build:
+              context_path: '#{cfg.envs_path}/#{env.tag}/build'
+              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
             tag: container-1
             workdir: /test
             volumes:
@@ -175,8 +175,6 @@ envs:
       - template: default
         factory: docker
         tag: test-2
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -186,6 +184,8 @@ envs:
         containers:
           - image: test-image:latest
             tag: container-1
+            build:
+              context_path: '#{cfg.envs_path}/#{env.tag}/build'
             workdir: /test
             volumes:
               - /home/test/.ssh:/home/test/.ssh
@@ -207,8 +207,6 @@ envs:
       - template: default
         factory: docker
         tag: test-3
-        build:
-          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -217,6 +215,8 @@ envs:
         properties: {}
         containers:
           - image: test-image:latest
+            build:
+              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
             tag: container-1
             workdir: /test
             volumes:
@@ -239,9 +239,6 @@ envs:
       - template: default
         factory: docker
         tag: test-4
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
-          dockerfile_path: '#{svc.build.context_path}/Dockerfile-Not-Exist'
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -250,6 +247,9 @@ envs:
         properties: {}
         containers:
           - image: test-image:latest
+            build:
+              context_path: '#{cfg.envs_path}/#{env.tag}/build'
+              dockerfile_path: '#{cnt.build.context_path}/Dockerfile-Not-Exist'
             tag: container-1
             workdir: /test
             volumes:
@@ -334,10 +334,10 @@ def test_svc_render_default_compose_service(
         "    extra_hosts:\n"
         "      - host.docker.internal:host-gateway\n"
         "    subject_alternative_name: null\n"
+        "    build:\n"
+        "      context_path: '#{cfg.envs_path}/#{env.tag}/build'\n"
+        "      dockerfile_path: '#{cnt.build.context_path}/Dockerfile'\n"
         "service_class: null\n"
-        "build:\n"
-        "  context_path: '#{cfg.envs_path}/#{env.tag}/build'\n"
-        "  dockerfile_path: '#{svc.build.context_path}/Dockerfile'\n"
         "labels:\n"
         "- com.example.label1=value1\n"
         "- com.example.label2=value2\n"
@@ -392,9 +392,9 @@ def test_svc_render_default_compose_service_resolved(
         "    extra_hosts:\n"
         "      - host.docker.internal:host-gateway\n"
         "    subject_alternative_name: null\n"
-        "build:\n"
-        f"  context_path: {str(shpd_path)}/envs/test-1/build\n"
-        f"  dockerfile_path: {str(shpd_path)}/envs/test-1/build/Dockerfile\n"
+        "    build:\n"
+        f"     context_path: {str(shpd_path)}/envs/test-1/build\n"
+        f"     dockerfile_path: {str(shpd_path)}/envs/test-1/build/Dockerfile\n"
         "labels:\n"
         "- com.example.label1=value1\n"
         "- com.example.label2=value2\n"

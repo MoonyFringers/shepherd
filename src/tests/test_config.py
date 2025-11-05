@@ -104,7 +104,7 @@ service_templates:
         networks: []
         extra_hosts: []
         subject_alternative_name: null
-    build: null
+        build: null
     labels: []
     ingress: false
     empty_env: ${ora_empty_env}
@@ -131,9 +131,9 @@ service_templates:
         networks: []
         extra_hosts: []
         subject_alternative_name: null
-    build:
-      context_path: '#{cfg.envs_path}/#{env.tag}/build'
-      dockerfile_path: '#{svc.build.context_path}/Dockerfile'
+        build:
+          context_path: '#{cfg.envs_path}/#{env.tag}/build'
+          dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
     labels: []
     ingress: false
     empty_env: ${pg_empty_env}
@@ -161,11 +161,11 @@ envs:
             networks: []
             extra_hosts: []
             subject_alternative_name: null
+            build:
+              context_path: '#{cfg.envs_path}/#{env.tag}/build'
+              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
         tag: pg-1
         service_class: null
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
-          dockerfile_path: '#{svc.build.context_path}/Dockerfile'
         labels: []
         ingress: null
         empty_env: null
@@ -217,7 +217,7 @@ envs:
             networks: []
             extra_hosts: []
             subject_alternative_name: null
-        build: null
+            build: null
         labels: []
         ingress: true
         empty_env: null
@@ -243,7 +243,7 @@ envs:
             networks: []
             extra_hosts: []
             subject_alternative_name: null
-        build: null
+            build: null
         labels: []
         ingress: true
         empty_env: null
@@ -256,12 +256,12 @@ envs:
           archived: false
           triggered_config: null
       - template: nodejs
-        build: null
         factory: docker
         tag: poke
         service_class: null
         containers:
           - image: ''
+            build: null
             tag: 1
             hostname: null
             container_name: null
@@ -402,7 +402,7 @@ service_templates:
           - '#{env.tag}'
         extra_hosts: []
         subject_alternative_name: null
-    build: null
+        build: null
     labels:
       - com.example.type=web
     ingress: true
@@ -426,7 +426,7 @@ service_templates:
           - '#{env.tag}'
         extra_hosts: []
         subject_alternative_name: null
-    build: null
+        build: null
     labels:
       - com.example.type=db
     ingress: false
@@ -456,7 +456,7 @@ envs:
               - '#{env.tag}'
             extra_hosts: []
             subject_alternative_name: null
-        build: null
+            build: null
         labels:
           - com.example.type=web
         ingress: true
@@ -490,7 +490,7 @@ envs:
               - '#{env.tag}'
             extra_hosts: []
             subject_alternative_name: null
-        build: null
+            build: null
         labels:
           - com.example.type=db
         ingress: false
@@ -561,6 +561,7 @@ def test_load_config(mocker: MockerFixture):
 
     cMng = ConfigMng(".shpd.conf")
     config: Config = cMng.load_config()
+    config.set_resolved()
 
     env_templates = config.env_templates
     assert env_templates and env_templates[0].tag == "default"
@@ -590,7 +591,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].containers[0].image == (
         "ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40"
     )
-    assert service_templates[0].build is None
+    assert service_templates[0].containers[0].build is None
     assert service_templates[0].containers[0].hostname == "ora-host"
     assert service_templates[0].containers[0].container_name == "ora-cnt-1"
     assert service_templates[0].empty_env == "fresh-ora-19300"
@@ -622,12 +623,12 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].containers[0].image == (
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
     )
-    assert service_templates[1].build
-    assert service_templates[1].build.context_path == (
+    assert service_templates[1].containers[0].build
+    assert service_templates[1].containers[0].build.context_path == (
         "${test_path}/envs/#{env.tag}/build"
     )
-    assert service_templates[1].build.dockerfile_path == (
-        "#{svc.build.context_path}/Dockerfile"
+    assert service_templates[1].containers[0].build.dockerfile_path == (
+        "${test_path}/envs/#{env.tag}/build/Dockerfile"
     )
     assert service_templates[1].empty_env == "fresh-pg-1735"
     assert not service_templates[1].is_ingress()

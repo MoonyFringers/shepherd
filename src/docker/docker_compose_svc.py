@@ -97,37 +97,36 @@ class DockerComposeSvc(Service):
     @override
     def build(self):
         """Build the service."""
-        if build := self.svcCfg.build:
-            if dockerfile := build.dockerfile_path:
-                if context_path := build.context_path:
-                    build_docker_image(
-                        Path(dockerfile),
-                        Path(context_path),
-                        (
-                            (
-                                self.svcCfg.containers[0].image
-                                if self.svcCfg.containers[0].image
-                                else "None"
+        if self.svcCfg.containers and len(self.svcCfg.containers) > 0:
+            for container in self.svcCfg.containers:
+                if build := container.build:
+                    if dockerfile := build.dockerfile_path:
+                        if context_path := build.context_path:
+                            build_docker_image(
+                                Path(dockerfile),
+                                Path(context_path),
+                                container.image if container.image else "",
                             )
-                            if self.svcCfg.containers
-                            else "None"
-                        ),
-                    )
+                        else:
+                            Util.print_error_and_die(
+                                f"Service '{self.svcCfg.tag}' "
+                                f"container '{container.tag}' "
+                                f"build configuration is missing "
+                                f"a build context path."
+                            )
+                    else:
+                        Util.print_error_and_die(
+                            f"Service '{self.svcCfg.tag}' "
+                            f"container '{container.tag}' "
+                            f"build configuration is missing "
+                            f"a Dockerfile path."
+                        )
                 else:
                     Util.print_error_and_die(
-                        f"Service '{self.svcCfg.tag}' build configuration is "
-                        f"missing a build context path."
+                        f"Service '{self.svcCfg.tag}' "
+                        f"container '{container.tag}' "
+                        f"does not have a build configuration."
                     )
-            else:
-                Util.print_error_and_die(
-                    f"Service '{self.svcCfg.tag}' build configuration is "
-                    f"missing a Dockerfile path."
-                )
-        else:
-            Util.print_error_and_die(
-                f"Service '{self.svcCfg.tag}' does not have a build "
-                f"configuration."
-            )
 
     @override
     def start(self):
