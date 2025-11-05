@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import values
@@ -87,27 +88,29 @@ env_templates:
 service_templates:
   - tag: default
     factory: docker
-    image: busybox:stable-glibc
+    containers:
+      - image: busybox:stable-glibc
+        tag: container-1
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
 envs:
   - template: default
     factory: docker-compose
@@ -116,28 +119,30 @@ envs:
       - template: default
         factory: docker
         tag: test-1
-        image: busybox:stable-glibc
+        containers:
+          - image: busybox:stable-glibc
+            tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
           - domain=${domain}
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -145,27 +150,29 @@ envs:
       - template: default
         factory: docker
         tag: test-2
-        image: busybox:stable-glibc
+        containers:
+          - image: busybox:stable-glibc
+            tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -189,27 +196,29 @@ envs:
       - template: default
         factory: docker
         tag: test-1
-        image: busybox:stable-glibc
+        containers:
+          - image: busybox:stable-glibc
+            tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - internal_net
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - internal_net
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -217,27 +226,29 @@ envs:
       - template: default
         factory: docker
         tag: test-2
-        image: busybox:stable-glibc
+        containers:
+          - image: busybox:stable-glibc
+            tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - internal_net
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - internal_net
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -309,99 +320,107 @@ def test_env_render_compose_env_ext_net(
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml"])
     assert result.exit_code == 0
 
-    assert result.output == (
-        "template: default\n"
-        "factory: docker-compose\n"
-        "tag: test-1\n"
-        "services:\n"
-        "- template: default\n"
-        "  factory: docker\n"
-        "  tag: test-1\n"
-        "  service_class: null\n"
-        "  image: busybox:stable-glibc\n"
-        "  build: null\n"
-        "  hostname: null\n"
-        "  container_name: null\n"
-        "  labels:\n"
-        "  - com.example.label1=value1\n"
-        "  - com.example.label2=value2\n"
-        "  - domain=${domain}\n"
-        "  workdir: /test\n"
-        "  volumes:\n"
-        "  - /home/test/.ssh:/home/test/.ssh\n"
-        "  - /etc/ssh:/etc/ssh\n"
-        "  ingress: false\n"
-        "  empty_env: null\n"
-        "  environment: []\n"
-        "  ports:\n"
-        "  - 80:80\n"
-        "  - 443:443\n"
-        "  - 8080:8080\n"
-        "  properties: {}\n"
-        "  networks:\n"
-        "  - default\n"
-        "  extra_hosts:\n"
-        "  - host.docker.internal:host-gateway\n"
-        "  subject_alternative_name: null\n"
-        "  upstreams: []\n"
-        "  status:\n"
-        "    active: true\n"
-        "    archived: false\n"
-        "    triggered_config: null\n"
-        "- template: default\n"
-        "  factory: docker\n"
-        "  tag: test-2\n"
-        "  service_class: null\n"
-        "  image: busybox:stable-glibc\n"
-        "  build: null\n"
-        "  hostname: null\n"
-        "  container_name: null\n"
-        "  labels:\n"
-        "  - com.example.label1=value1\n"
-        "  - com.example.label2=value2\n"
-        "  workdir: /test\n"
-        "  volumes:\n"
-        "  - /home/test/.ssh:/home/test/.ssh\n"
-        "  - /etc/ssh:/etc/ssh\n"
-        "  ingress: false\n"
-        "  empty_env: null\n"
-        "  environment: []\n"
-        "  ports:\n"
-        "  - 80:80\n"
-        "  - 443:443\n"
-        "  - 8080:8080\n"
-        "  properties: {}\n"
-        "  networks:\n"
-        "  - default\n"
-        "  extra_hosts:\n"
-        "  - host.docker.internal:host-gateway\n"
-        "  subject_alternative_name: null\n"
-        "  upstreams: []\n"
-        "  status:\n"
-        "    active: true\n"
-        "    archived: false\n"
-        "    triggered_config: null\n"
-        "networks:\n"
-        "- tag: default\n"
-        "  name: envnet\n"
-        "  external: true\n"
-        "  driver: null\n"
-        "  attachable: null\n"
-        "  enable_ipv6: null\n"
-        "  driver_opts: null\n"
-        "  ipam: null\n"
-        "volumes:\n"
-        "- tag: app_data_ext\n"
-        "  external: true\n"
-        "  name: nfs-1\n"
-        "  driver: null\n"
-        "  driver_opts: null\n"
-        "  labels: null\n"
-        "status:\n"
-        "  active: true\n"
-        "  archived: false\n"
-        "  triggered_config: null\n\n"
-    )
+    expected = """
+template: default
+factory: docker-compose
+tag: test-1
+services:
+- template: default
+  build: null
+  factory: docker
+  tag: test-1
+  service_class: null
+  upstreams: []
+  containers:
+  - image: busybox:stable-glibc
+    tag: container-1
+    container_name: test-1-test-1
+    hostname: test-1-test-1
+    workdir: /test
+    volumes:
+    - /home/test/.ssh:/home/test/.ssh
+    - /etc/ssh:/etc/ssh
+    environment: []
+    ports:
+    - 80:80
+    - 443:443
+    - 8080:8080
+    networks:
+    - default
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    subject_alternative_name: null
+  labels:
+  - com.example.label1=value1
+  - com.example.label2=value2
+  - domain=${domain}
+  ingress: false
+  empty_env: null
+  properties: {}
+  status:
+    active: true
+    archived: false
+    triggered_config: null
+- template: default
+  build: null
+  factory: docker
+  tag: test-2
+  service_class: null
+  upstreams: []
+  containers:
+  - image: busybox:stable-glibc
+    tag: container-1
+    container_name: test-2-test-1
+    hostname: test-2-test-1
+    workdir: /test
+    volumes:
+    - /home/test/.ssh:/home/test/.ssh
+    - /etc/ssh:/etc/ssh
+    environment: []
+    ports:
+    - 80:80
+    - 443:443
+    - 8080:8080
+    networks:
+    - default
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    subject_alternative_name: null
+  labels:
+  - com.example.label1=value1
+  - com.example.label2=value2
+  ingress: false
+  empty_env: null
+  properties: {}
+  status:
+    active: true
+    archived: false
+    triggered_config: null
+networks:
+- tag: default
+  name: envnet
+  external: true
+  driver: null
+  attachable: null
+  enable_ipv6: null
+  driver_opts: null
+  ipam: null
+volumes:
+- tag: app_data_ext
+  external: true
+  name: nfs-1
+  driver: null
+  driver_opts: null
+  labels: null
+status:
+  active: true
+  archived: false
+  triggered_config: null
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
 
 
 @pytest.mark.docker
@@ -418,99 +437,107 @@ def test_env_render_compose_env_resolved(
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-r"])
     assert result.exit_code == 0
 
-    assert result.output == (
-        "template: default\n"
-        "factory: docker-compose\n"
-        "tag: test-1\n"
-        "services:\n"
-        "- template: default\n"
-        "  factory: docker\n"
-        "  tag: test-1\n"
-        "  service_class: null\n"
-        "  image: busybox:stable-glibc\n"
-        "  build: null\n"
-        "  hostname: null\n"
-        "  container_name: null\n"
-        "  labels:\n"
-        "  - com.example.label1=value1\n"
-        "  - com.example.label2=value2\n"
-        "  - domain=sslip.io\n"
-        "  workdir: /test\n"
-        "  volumes:\n"
-        "  - /home/test/.ssh:/home/test/.ssh\n"
-        "  - /etc/ssh:/etc/ssh\n"
-        "  ingress: false\n"
-        "  empty_env: null\n"
-        "  environment: []\n"
-        "  ports:\n"
-        "  - 80:80\n"
-        "  - 443:443\n"
-        "  - 8080:8080\n"
-        "  properties: {}\n"
-        "  networks:\n"
-        "  - default\n"
-        "  extra_hosts:\n"
-        "  - host.docker.internal:host-gateway\n"
-        "  subject_alternative_name: null\n"
-        "  upstreams: []\n"
-        "  status:\n"
-        "    active: true\n"
-        "    archived: false\n"
-        "    triggered_config: null\n"
-        "- template: default\n"
-        "  factory: docker\n"
-        "  tag: test-2\n"
-        "  service_class: null\n"
-        "  image: busybox:stable-glibc\n"
-        "  build: null\n"
-        "  hostname: null\n"
-        "  container_name: null\n"
-        "  labels:\n"
-        "  - com.example.label1=value1\n"
-        "  - com.example.label2=value2\n"
-        "  workdir: /test\n"
-        "  volumes:\n"
-        "  - /home/test/.ssh:/home/test/.ssh\n"
-        "  - /etc/ssh:/etc/ssh\n"
-        "  ingress: false\n"
-        "  empty_env: null\n"
-        "  environment: []\n"
-        "  ports:\n"
-        "  - 80:80\n"
-        "  - 443:443\n"
-        "  - 8080:8080\n"
-        "  properties: {}\n"
-        "  networks:\n"
-        "  - default\n"
-        "  extra_hosts:\n"
-        "  - host.docker.internal:host-gateway\n"
-        "  subject_alternative_name: null\n"
-        "  upstreams: []\n"
-        "  status:\n"
-        "    active: true\n"
-        "    archived: false\n"
-        "    triggered_config: null\n"
-        "networks:\n"
-        "- tag: default\n"
-        "  name: envnet\n"
-        "  external: true\n"
-        "  driver: null\n"
-        "  attachable: null\n"
-        "  enable_ipv6: null\n"
-        "  driver_opts: null\n"
-        "  ipam: null\n"
-        "volumes:\n"
-        "- tag: app_data_ext\n"
-        "  external: true\n"
-        "  name: nfs-1\n"
-        "  driver: null\n"
-        "  driver_opts: null\n"
-        "  labels: null\n"
-        "status:\n"
-        "  active: true\n"
-        "  archived: false\n"
-        "  triggered_config: null\n\n"
-    )
+    expected = """
+template: default
+factory: docker-compose
+tag: test-1
+services:
+- template: default
+  build: null
+  factory: docker
+  tag: test-1
+  service_class: null
+  upstreams: []
+  containers:
+  - image: busybox:stable-glibc
+    tag: container-1
+    container_name: test-1-test-1
+    hostname: test-1-test-1
+    workdir: /test
+    volumes:
+    - /home/test/.ssh:/home/test/.ssh
+    - /etc/ssh:/etc/ssh
+    environment: []
+    ports:
+    - 80:80
+    - 443:443
+    - 8080:8080
+    networks:
+    - default
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    subject_alternative_name: null
+  labels:
+  - com.example.label1=value1
+  - com.example.label2=value2
+  - domain=sslip.io
+  ingress: false
+  empty_env: null
+  properties: {}
+  status:
+    active: true
+    archived: false
+    triggered_config: null
+- template: default
+  build: null
+  factory: docker
+  tag: test-2
+  service_class: null
+  upstreams: []
+  containers:
+  - image: busybox:stable-glibc
+    tag: container-1
+    container_name: test-2-test-1
+    hostname: test-2-test-1
+    workdir: /test
+    volumes:
+    - /home/test/.ssh:/home/test/.ssh
+    - /etc/ssh:/etc/ssh
+    environment: []
+    ports:
+    - 80:80
+    - 443:443
+    - 8080:8080
+    networks:
+    - default
+    extra_hosts:
+    - host.docker.internal:host-gateway
+    subject_alternative_name: null
+  labels:
+  - com.example.label1=value1
+  - com.example.label2=value2
+  ingress: false
+  empty_env: null
+  properties: {}
+  status:
+    active: true
+    archived: false
+    triggered_config: null
+networks:
+- tag: default
+  name: envnet
+  external: true
+  driver: null
+  attachable: null
+  enable_ipv6: null
+  driver_opts: null
+  ipam: null
+volumes:
+- tag: app_data_ext
+  external: true
+  name: nfs-1
+  driver: null
+  driver_opts: null
+  labels: null
+status:
+  active: true
+  archived: false
+  triggered_config: null
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
 
 
 @pytest.mark.docker
@@ -527,13 +554,14 @@ def test_env_render_target_compose_env_ext_net(
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t"])
     assert result.exit_code == 0
 
-    assert result.output == (
+    expected = (
         "name: test-1\n"
         "services:\n"
         "  test-1-test-1:\n"
         "    image: busybox:stable-glibc\n"
         "    hostname: test-1-test-1\n"
         "    container_name: test-1-test-1\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -553,6 +581,7 @@ def test_env_render_target_compose_env_ext_net(
         "    image: busybox:stable-glibc\n"
         "    hostname: test-2-test-1\n"
         "    container_name: test-2-test-1\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -577,6 +606,10 @@ def test_env_render_target_compose_env_ext_net(
         "    external: true\n\n"
     )
 
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
 
 @pytest.mark.docker
 def test_env_render_target_compose_env_resolved(
@@ -592,13 +625,14 @@ def test_env_render_target_compose_env_resolved(
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t", "-r"])
     assert result.exit_code == 0
 
-    assert result.output == (
+    expected = (
         "name: test-1\n"
         "services:\n"
         "  test-1-test-1:\n"
         "    image: busybox:stable-glibc\n"
         "    hostname: test-1-test-1\n"
         "    container_name: test-1-test-1\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -618,6 +652,7 @@ def test_env_render_target_compose_env_resolved(
         "    image: busybox:stable-glibc\n"
         "    hostname: test-2-test-1\n"
         "    container_name: test-2-test-1\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -642,6 +677,10 @@ def test_env_render_target_compose_env_resolved(
         "    external: true\n\n"
     )
 
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
 
 @pytest.mark.docker
 def test_env_render_target_compose_env_int_net(
@@ -657,13 +696,14 @@ def test_env_render_target_compose_env_int_net(
     result = runner.invoke(cli, ["get", "env", "test-2", "-oyaml", "-t"])
     assert result.exit_code == 0
 
-    assert result.output == (
+    expected = (
         "name: test-2\n"
         "services:\n"
         "  test-1-test-2:\n"
         "    image: busybox:stable-glibc\n"
         "    hostname: test-1-test-2\n"
         "    container_name: test-1-test-2\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -682,6 +722,7 @@ def test_env_render_target_compose_env_int_net(
         "    image: busybox:stable-glibc\n"
         "    hostname: test-2-test-2\n"
         "    container_name: test-2-test-2\n"
+        "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
@@ -718,6 +759,10 @@ def test_env_render_target_compose_env_int_net(
         "    labels:\n"
         "      env: production\n\n"
     )
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
 
 
 @pytest.mark.docker

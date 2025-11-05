@@ -90,19 +90,24 @@ env_templates:
 service_templates:
   - tag: oracle
     factory: docker
-    image: ${ora_image}
+    containers:
+      - image: ${ora_image}
+        tag: container-ora
+        hostname: ${ora_hostname}
+        container_name: ${ora_container_name}
+        workdir: null
+        environment: []
+        volumes:
+          - app_data:/mnt/test
+        ports:
+          - 1521:${ora_listener_port}
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
     build: null
-    hostname: ${ora_hostname}
-    container_name: ${ora_container_name}
     labels: []
-    workdir: null
-    volumes:
-      - app_data:/mnt/test
     ingress: false
     empty_env: ${ora_empty_env}
-    environment: []
-    ports:
-      - 1521:${ora_listener_port}
     properties:
       pump_dir_name: ${ora_pump_dir}
       root_db_name: ${ora_root_db_name}
@@ -111,33 +116,32 @@ service_templates:
       sys_psw: ${db_sys_psw}
       user: ${db_usr}
       psw: ${db_psw}
-    networks: []
-    extra_hosts: []
-    subject_alternative_name: null
   - tag: postgres
     factory: docker
-    image: ${pg_image}
+    containers:
+      - image: ${pg_image}
+        tag: container-pg
+        hostname: ${pg_hostname}
+        container_name: ${pg_container_name}
+        workdir: null
+        environment: []
+        volumes: []
+        ports:
+          - 5432:${pg_listener_port}
+        networks: []
+        extra_hosts: []
+        subject_alternative_name: null
     build:
       context_path: '#{cfg.envs_path}/#{env.tag}/build'
       dockerfile_path: '#{svc.build.context_path}/Dockerfile'
-    hostname: null
-    container_name: null
     labels: []
-    workdir: null
-    volumes: []
     ingress: false
     empty_env: ${pg_empty_env}
-    environment: []
-    ports:
-      - 5432:${pg_listener_port}
     properties:
       sys_user: ${db_sys_usr}
       sys_psw: ${db_sys_psw}
       user: ${db_usr}
       psw: ${db_psw}
-    networks: []
-    extra_hosts: []
-    subject_alternative_name: null
 envs:
   - template: default
     factory: docker-compose
@@ -145,29 +149,31 @@ envs:
     services:
       - template: postgres
         factory: docker
+        containers:
+          - image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
+            tag: container-pg
+            hostname: null
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: null
+            ports: []
+            networks: []
+            extra_hosts: []
+            subject_alternative_name: null
         tag: pg-1
         service_class: null
-        image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
         build:
           context_path: '#{cfg.envs_path}/#{env.tag}/build'
           dockerfile_path: '#{svc.build.context_path}/Dockerfile'
-        hostname: null
-        container_name: null
         labels: []
-        workdir: null
-        volumes: []
         ingress: null
         empty_env: null
-        environment: null
-        ports: []
         properties:
           sys_user: syspg1
           sys_psw: syspg1
           user: pg1
           psw: pg1
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
         upstreams:
           - type: postgres
             tag: upstream-1
@@ -199,21 +205,23 @@ envs:
         factory: docker
         tag: traefik-1
         service_class: null
-        image: ''
+        containers:
+          - image: ''
+            tag: 1
+            hostname: null
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: null
+            ports: []
+            networks: []
+            extra_hosts: []
+            subject_alternative_name: null
         build: null
-        hostname: null
-        container_name: null
         labels: []
-        workdir: null
-        volumes: []
         ingress: true
         empty_env: null
-        environment: null
-        ports: []
         properties: {}
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
         upstreams: []
         status:
           active: true
@@ -223,50 +231,54 @@ envs:
         factory: docker
         tag: primary
         service_class: null
-        image: ''
+        containers:
+          - image: ''
+            tag: 1
+            hostname: null
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: null
+            ports: []
+            networks: []
+            extra_hosts: []
+            subject_alternative_name: null
         build: null
-        hostname: null
-        container_name: null
         labels: []
-        workdir: null
-        volumes: []
         ingress: true
         empty_env: null
-        environment: null
-        ports: null
         properties:
           instance.name: primary
           instance.id: 1
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
         upstreams: []
         status:
           active: true
           archived: false
           triggered_config: null
       - template: nodejs
+        build: null
         factory: docker
         tag: poke
         service_class: null
-        image: ''
-        build: null
-        hostname: null
-        container_name: null
+        containers:
+          - image: ''
+            tag: 1
+            hostname: null
+            container_name: null
+            workdir: null
+            volumes: []
+            environment:
+              - USER=user
+              - PSW=psw
+            ports:
+              - 3000:3000
+            networks: []
+            extra_hosts: []
+            subject_alternative_name: null
         labels: []
-        workdir: null
-        volumes: []
         ingress: null
         empty_env: null
-        environment:
-          - USER=user
-          - PSW=psw
-        ports:
-          - 3000:3000
         properties: {}
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
         upstreams: []
         status:
           active: true
@@ -374,109 +386,117 @@ env_templates:
 service_templates:
   - tag: nginx
     factory: docker
-    image: nginx:latest
+    containers:
+      - image: nginx:latest
+        tag: nginx
+        hostname: web-instance
+        container_name: web-instance
+        workdir: /usr/share/nginx/html
+        volumes:
+          - nginx:/usr/share/nginx/html
+        environment:
+          - NGINX_PORT=80
+        ports:
+          - 8080:80
+        networks:
+          - '#{env.tag}'
+        extra_hosts: []
+        subject_alternative_name: null
     build: null
-    hostname: web-instance
-    container_name: web-instance
     labels:
       - com.example.type=web
-    workdir: /usr/share/nginx/html
-    volumes:
-      - nginx:/usr/share/nginx/html
     ingress: true
     empty_env: ''
-    environment:
-      - NGINX_PORT=80
-    ports:
-      - 8080:80
     properties: {}
-    networks:
-      - '#{env.tag}'
-    extra_hosts: []
-    subject_alternative_name: null
   - tag: postgres
     factory: docker
-    image: postgres:14
+    containers:
+      - image: postgres:14
+        tag: postgres
+        hostname: db-instance
+        container_name: db-instance
+        workdir: /var/lib/postgresql/data
+        volumes:
+          - postgres:/var/lib/postgresql/data
+        environment:
+          - POSTGRES_PASSWORD=secret
+        ports:
+          - 5432:5432
+        networks:
+          - '#{env.tag}'
+        extra_hosts: []
+        subject_alternative_name: null
     build: null
-    hostname: db-instance
-    container_name: db-instance
     labels:
       - com.example.type=db
-    workdir: /var/lib/postgresql/data
-    volumes:
-      - postgres:/var/lib/postgresql/data
     ingress: false
     empty_env: ''
-    environment:
-      - POSTGRES_PASSWORD=secret
-    ports:
-      - 5432:5432
     properties: {}
-    networks:
-      - '#{env.tag}'
-    extra_hosts: []
-    subject_alternative_name: null
 envs:
   - template: nginx-postgres
     factory: docker-compose
     tag: foo
     services:
       - template: nginx
-        factory: docker
         tag: web
-        service_class: null
-        image: nginx:latest
+        factory: docker
+        containers:
+          - image: nginx:latest
+            tag: nginx
+            hostname: web-instance
+            container_name: web-instance
+            workdir: /usr/share/nginx/html
+            volumes:
+              - nginx:/usr/share/nginx/html
+            environment:
+              - NGINX_PORT=80
+            ports:
+              - 8080:80
+            networks:
+              - '#{env.tag}'
+            extra_hosts: []
+            subject_alternative_name: null
         build: null
-        hostname: web-instance
-        container_name: web-instance
         labels:
           - com.example.type=web
-        workdir: /usr/share/nginx/html
-        volumes:
-          - nginx:/usr/share/nginx/html
         ingress: true
         empty_env: ''
-        environment:
-          - NGINX_PORT=80
-        ports:
-          - 8080:80
+        service_class: '#{not.exist}'
         properties:
           com.example.type: '#{svc.tag}'
-        networks:
-          - '#{env.tag}'
-        extra_hosts: []
-        subject_alternative_name: null
         upstreams: []
         status:
           active: true
           archived: false
           triggered_config: null
       - template: postgres
+        upstreams: []
         factory: docker
         tag: db
         service_class: '#{not.exist}'
-        image: postgres:14
+        containers:
+          - image: postgres:14
+            tag: postgres
+            hostname: db-instance
+            container_name: db-instance
+            workdir: /var/lib/postgresql/data
+            volumes:
+              - postgres:/var/lib/postgresql/data
+            environment:
+              - POSTGRES_PASSWORD=secret
+            ports:
+              - 5432:5432
+            networks:
+              - '#{env.tag}'
+            extra_hosts: []
+            subject_alternative_name: null
         build: null
-        hostname: db-instance
-        container_name: db-instance
         labels:
           - com.example.type=db
-        workdir: /var/lib/postgresql/data
-        volumes:
-          - postgres:/var/lib/postgresql/data
         ingress: false
         empty_env: ''
-        environment:
-          - POSTGRES_PASSWORD=secret
-        ports:
-          - 5432:5432
         properties:
           com.example.type: '#{svc.tag}'
-        networks:
-          - '#{env.tag}'
-        extra_hosts: []
-        subject_alternative_name: null
-        upstreams: []
         status:
           active: true
           archived: false
@@ -565,22 +585,25 @@ def test_load_config(mocker: MockerFixture):
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"
     assert service_templates[0].factory == "docker"
-    assert service_templates[0].image == (
+    assert service_templates[0].containers
+    assert service_templates[0].containers[0].tag == "container-ora"
+    assert service_templates[0].containers[0].image == (
         "ghcr.io/MoonyFringers/shepherd/oracle:19.3.0.0_TZ40"
     )
     assert service_templates[0].build is None
-    assert service_templates[0].hostname == "ora-host"
-    assert service_templates[0].container_name == "ora-cnt-1"
+    assert service_templates[0].containers[0].hostname == "ora-host"
+    assert service_templates[0].containers[0].container_name == "ora-cnt-1"
     assert service_templates[0].empty_env == "fresh-ora-19300"
     assert not service_templates[0].is_ingress()
-    assert service_templates[0].environment == []
+    assert service_templates[0].containers[0].environment == []
     assert (
-        service_templates[0].ports
-        and service_templates[0].ports[0] == "1521:1521"
+        service_templates[0].containers[0].ports
+        and service_templates[0].containers[0].ports[0] == "1521:1521"
     )
     assert (
-        service_templates[0].volumes
-        and service_templates[0].volumes[0] == "app_data:/mnt/test"
+        service_templates[0].containers[0].volumes
+        and service_templates[0].containers[0].volumes[0]
+        == "app_data:/mnt/test"
     )
     assert (
         service_templates[0].properties
@@ -592,10 +615,11 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].properties["sys_psw"] == "sys"
     assert service_templates[0].properties["user"] == "docker"
     assert service_templates[0].properties["psw"] == "docker"
-    assert service_templates[0].subject_alternative_name is None
+    assert service_templates[0].containers[0].subject_alternative_name is None
     assert service_templates[1].tag == "postgres"
     assert service_templates[1].factory == "docker"
-    assert service_templates[1].image == (
+    assert service_templates[1].containers
+    assert service_templates[1].containers[0].image == (
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
     )
     assert service_templates[1].build
@@ -607,10 +631,10 @@ def test_load_config(mocker: MockerFixture):
     )
     assert service_templates[1].empty_env == "fresh-pg-1735"
     assert not service_templates[1].is_ingress()
-    assert service_templates[1].environment == []
+    assert service_templates[1].containers[0].environment == []
     assert (
-        service_templates[1].ports
-        and service_templates[1].ports[0] == "5432:5432"
+        service_templates[1].containers[0].ports
+        and service_templates[1].containers[0].ports[0] == "5432:5432"
     )
     assert (
         service_templates[1].properties
@@ -619,7 +643,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].properties["sys_psw"] == "sys"
     assert service_templates[1].properties["user"] == "docker"
     assert service_templates[1].properties["psw"] == "docker"
-    assert service_templates[1].subject_alternative_name is None
+    assert service_templates[1].containers[0].subject_alternative_name is None
 
     assert config.shpd_registry.ftp_server == "ftp.example.com"
     assert config.envs[0].template == Constants.ENV_TEMPLATE_DEFAULT
@@ -629,7 +653,8 @@ def test_load_config(mocker: MockerFixture):
     assert services and services[0].template == "postgres"
     assert services[0].factory == "docker"
     assert services[0].tag == "pg-1"
-    assert services[0].image == (
+    assert services[0].containers
+    assert services[0].containers[0].image == (
         "ghcr.io/MoonyFringers/shepherd/postgres:17-3.5"
     )
     properties = services[0].properties
@@ -665,10 +690,11 @@ def test_load_config(mocker: MockerFixture):
     assert services[2].tag == "primary"
     assert services[3].template == "nodejs"
     assert services[3].tag == "poke"
-    environment = services[3].environment
+    assert services[3].containers
+    environment = services[3].containers[0].environment
     assert environment and environment[0] == "USER=user"
     assert environment and environment[1] == "PSW=psw"
-    ports = services[3].ports
+    ports = services[3].containers[0].ports
     assert config.envs[0].networks
     assert config.envs[0].networks[0].tag == "shpdnet"
     assert config.envs[0].networks[0].name == "envnet"
@@ -759,8 +785,8 @@ def test_store_config_with_real_files():
 
         with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
-            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=False)
-            y2: str = yaml.dump(yaml.safe_load(config_yaml), sort_keys=False)
+            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
+            y2: str = yaml.dump(yaml.safe_load(config_yaml), sort_keys=True)
             assert y1 == y2
 
     finally:
@@ -860,9 +886,10 @@ def test_load_config_with_refs(mocker: MockerFixture):
     assert config.envs[0].services
     assert config.envs[0].services[0].template == "nginx"
     assert config.envs[0].services[0].factory == Constants.SVC_FACTORY_DEFAULT
-    assert config.envs[0].services[0].image == "nginx:latest"
-    assert config.envs[0].services[0].networks
-    assert config.envs[0].services[0].networks[0] == "foo"
+    assert config.envs[0].services[0].containers
+    assert config.envs[0].services[0].containers[0].image == "nginx:latest"
+    assert config.envs[0].services[0].containers[0].networks
+    assert config.envs[0].services[0].containers[0].networks[0] == "foo"
     assert config.envs[0].services[0].properties
     assert config.envs[0].services[0].properties["com.example.type"] == "web"
     assert config.envs[0].volumes
@@ -883,9 +910,10 @@ def test_load_config_with_refs(mocker: MockerFixture):
     assert config.envs[0].services[1].template == "postgres"
     assert config.envs[0].services[1].service_class == "#{not.exist}"
     assert config.envs[0].services[1].factory == Constants.SVC_FACTORY_DEFAULT
-    assert config.envs[0].services[1].image == "postgres:14"
-    assert config.envs[0].services[1].networks
-    assert config.envs[0].services[1].networks[0] == "foo"
+    assert config.envs[0].services[1].containers
+    assert config.envs[0].services[1].containers[0].image == "postgres:14"
+    assert config.envs[0].services[1].containers[0].networks
+    assert config.envs[0].services[1].containers[0].networks[0] == "foo"
     assert config.envs[0].services[1].properties
     assert config.envs[0].services[1].properties["com.example.type"] == "db"
 
@@ -908,9 +936,9 @@ def test_store_config_with_refs_with_real_files():
 
         with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
-            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=False)
+            y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
             y2: str = yaml.dump(
-                yaml.safe_load(config_yaml_with_refs), sort_keys=False
+                yaml.safe_load(config_yaml_with_refs), sort_keys=True
             )
             assert y1 == y2
 

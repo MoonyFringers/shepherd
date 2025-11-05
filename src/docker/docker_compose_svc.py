@@ -58,26 +58,35 @@ class DockerComposeSvc(Service):
                 self.envCfg.set_unresolved()
                 changed_state = True
 
-            service_def: dict[str, Any] = {
-                "image": self.svcCfg.image,
-                "hostname": self.hostname,
-                "container_name": self.container_name,
-            }
+            if not self.svcCfg.containers:
+                return yaml.dump({self.name: {}}, sort_keys=False)
 
+            container = self.svcCfg.containers[0]
+            service_def: dict[str, Any] = {}
+
+            if container.image:
+                service_def["image"] = container.image
+            if container.hostname:
+                service_def["hostname"] = container.hostname
+            if container.container_name:
+                service_def["container_name"] = container.container_name
+            if container.workdir:
+                service_def["working_dir"] = container.workdir
+            if container.volumes:
+                service_def["volumes"] = container.volumes
+            if container.environment:
+                service_def["environment"] = container.environment
+            if container.ports:
+                service_def["ports"] = container.ports
+            if container.networks:
+                service_def["networks"] = container.networks
+            if container.extra_hosts:
+                service_def["extra_hosts"] = container.extra_hosts
             if self.svcCfg.labels:
                 service_def["labels"] = self.svcCfg.labels
-            if self.svcCfg.environment:
-                service_def["environment"] = self.svcCfg.environment
-            if self.svcCfg.volumes:
-                service_def["volumes"] = self.svcCfg.volumes
-            if self.svcCfg.ports:
-                service_def["ports"] = self.svcCfg.ports
-            if self.svcCfg.extra_hosts:
-                service_def["extra_hosts"] = self.svcCfg.extra_hosts
-            if self.svcCfg.networks:
-                service_def["networks"] = self.svcCfg.networks
 
             return yaml.dump({self.name: service_def}, sort_keys=False)
+
         finally:
             if changed_state:
                 if was_resolved:
@@ -94,7 +103,15 @@ class DockerComposeSvc(Service):
                     build_docker_image(
                         Path(dockerfile),
                         Path(context_path),
-                        self.svcCfg.image,
+                        (
+                            (
+                                self.svcCfg.containers[0].image
+                                if self.svcCfg.containers[0].image
+                                else "None"
+                            )
+                            if self.svcCfg.containers
+                            else "None"
+                        ),
                     )
                 else:
                     Util.print_error_and_die(

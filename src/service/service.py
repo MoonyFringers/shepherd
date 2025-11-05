@@ -32,20 +32,43 @@ class Service(ABC):
         self.envCfg = envCfg
         self.svcCfg = svcCfg
         self.name = self.canonical_name()
-        self.hostname = (
-            svcCfg.hostname if svcCfg.hostname else self.canonical_name()
-        )
-        self.container_name = (
-            svcCfg.container_name
-            if svcCfg.container_name
-            else self.canonical_name()
-        )
+        self._generate_containers_names()
 
     def canonical_name(self) -> str:
         """
         Get the canonical name of the service.
         """
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
+
+    def _generate_containers_names(self):
+        """
+        Generate the container names for the service.
+        """
+        if self.svcCfg.containers:
+            if len(self.svcCfg.containers) > 1:
+                for container in self.svcCfg.containers:
+                    container.hostname = (
+                        container.hostname
+                        if container.hostname
+                        else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                    )
+                    container.container_name = (
+                        container.container_name
+                        if container.container_name
+                        else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                    )
+            elif len(self.svcCfg.containers) == 1:
+                container = self.svcCfg.containers[0]
+                container.hostname = (
+                    container.hostname
+                    if container.hostname
+                    else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                )
+                container.container_name = (
+                    container.container_name
+                    if container.container_name
+                    else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                )
 
     def render(self, resolved: bool) -> str:
         """Render the service configuration."""

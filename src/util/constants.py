@@ -131,12 +131,24 @@ class Constants:
                 {
                     "tag": self.SVC_TEMPLATE_DEFAULT,
                     "factory": self.SVC_FACTORY_DEFAULT,
-                    "image": "",
-                    "ingress": "false",
-                    "envvars": {},
-                    "ports": [],
+                    "labels": [],
                     "properties": {},
-                    "subject_alternative_name": None,
+                    "empty_env": None,
+                    "ingress": None,
+                    "containers": [
+                        {
+                            "image": "",
+                            "hostname": None,
+                            "container_name": None,
+                            "workdir": None,
+                            "volumes": [],
+                            "environment": [],
+                            "ports": [],
+                            "networks": [],
+                            "extra_hosts": [],
+                            "subject_alternative_name": None,
+                        }
+                    ],
                 },
             ],
             "shpd_registry": {

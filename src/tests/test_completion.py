@@ -74,50 +74,54 @@ env_templates:
 service_templates:
   - tag: t1
     factory: docker
-    image: test-image:latest
+    containers:
+      - image: test-image:latest
+        tag: container-1
+        workdir: /test
+        environment: []
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
   - tag: t2
     factory: docker
-    image: test-image:latest
+    containers:
+      - image: test-image:latest
+        tag: container-2
+        workdir: /test
+        environment: []
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
 envs:
   - template: default
     factory: docker-compose
@@ -127,27 +131,29 @@ envs:
         factory: docker
         tag: red
         service_class: foo-class
-        image: test-image:latest
+        containers:
+          - image: test-image:latest
+            tag: container-1
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -155,27 +161,24 @@ envs:
       - template: t1
         factory: docker
         tag: white
-        image: test-image:latest
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
+        containers:
+          - image: test-image:latest
+            tag: container-1
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         ingress: false
-        empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -191,27 +194,24 @@ envs:
       - template: t2
         factory: docker
         tag: blue
-        image: test-image:latest
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
+        containers:
+          - image: test-image:latest
+            tag: container-2
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         ingress: false
-        empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false

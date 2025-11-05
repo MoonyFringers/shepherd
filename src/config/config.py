@@ -41,6 +41,7 @@ REF_ENV: str = "env"
 REF_SVC: str = "svc"
 REF_VOL: str = "vol"
 REF_NET: str = "net"
+REF_CNT: str = "cnt"
 
 
 REF_MAP: dict[str, str] = {
@@ -49,6 +50,7 @@ REF_MAP: dict[str, str] = {
     "ServiceCfg": REF_SVC,
     "VolumeCfg": REF_VOL,
     "NetworkCfg": REF_NET,
+    "ContainerCfg": REF_CNT,
 }
 
 
@@ -438,6 +440,21 @@ class BuildCfg(Resolvable):
 
 
 @dataclass
+class ContainerCfg(Resolvable):
+    tag: str
+    image: Optional[str] = None
+    hostname: Optional[str] = None
+    container_name: Optional[str] = None
+    workdir: Optional[str] = None
+    volumes: Optional[list[str]] = None
+    environment: Optional[list[str]] = None
+    ports: Optional[list[str]] = None
+    networks: Optional[list[str]] = None
+    extra_hosts: Optional[list[str]] = None
+    subject_alternative_name: Optional[str] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -445,21 +462,12 @@ class ServiceTemplateCfg(Resolvable):
 
     tag: str
     factory: str
-    image: str
     build: Optional[BuildCfg] = None
-    hostname: Optional[str] = None
-    container_name: Optional[str] = None
     labels: Optional[list[str]] = None
-    workdir: Optional[str] = None
-    volumes: Optional[list[str]] = None
-    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
-    empty_env: Optional[str] = None
-    environment: Optional[list[str]] = None
-    ports: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
-    networks: Optional[list[str]] = None
-    extra_hosts: Optional[list[str]] = None
-    subject_alternative_name: Optional[str] = None
+    empty_env: Optional[str] = None
+    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
+    containers: Optional[list[ContainerCfg]] = None
 
     def is_ingress(self) -> bool:
         return str_to_bool(
@@ -483,26 +491,17 @@ class ServiceCfg(Resolvable):
     Represents a service configuration.
     """
 
-    template: str
-    factory: str
     tag: str
+    factory: str
+    template: str
     service_class: Optional[str] = None
-    image: str = ""
     build: Optional[BuildCfg] = None
-    hostname: Optional[str] = None
-    container_name: Optional[str] = None
     labels: Optional[list[str]] = None
-    workdir: Optional[str] = None
-    volumes: Optional[list[str]] = None
-    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
-    empty_env: Optional[str] = None
-    environment: Optional[list[str]] = None
-    ports: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
-    networks: Optional[list[str]] = None
-    extra_hosts: Optional[list[str]] = None
-    subject_alternative_name: Optional[str] = None
+    empty_env: Optional[str] = None
+    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     upstreams: Optional[list[UpstreamCfg]] = None
+    containers: Optional[list[ContainerCfg]] = None
     status: EntityStatus = field(
         default_factory=lambda: EntityStatus(active=True)
     )
@@ -711,59 +710,62 @@ def parse_config(yaml_str: str) -> Config:
             dockerfile_path=item.get("dockerfile_path"),
         )
 
-    def parse_service_template(item: Any) -> ServiceTemplateCfg:
-        return ServiceTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            image=item["image"],
-            build=parse_build(item["build"]) if item.get("build") else None,
+    def parse_container(item: Any) -> ContainerCfg:
+        return ContainerCfg(
+            tag=item.get("tag"),
+            image=item.get("image"),
             hostname=item.get("hostname"),
             container_name=item.get("container_name"),
-            labels=item.get("labels", []),
             workdir=item.get("workdir"),
             volumes=item.get("volumes", []),
-            ingress=(
-                bool_to_str(val)
-                if isinstance(val := item["ingress"], bool)
-                else val
-            ),
-            empty_env=item.get("empty_env"),
             environment=item.get("environment", []),
             ports=item.get("ports", []),
-            properties=item.get("properties", {}),
             networks=item.get("networks", []),
             extra_hosts=item.get("extra_hosts", []),
             subject_alternative_name=item.get("subject_alternative_name"),
         )
 
-    def parse_service(item: Any) -> ServiceCfg:
-        return ServiceCfg(
-            template=item["template"],
-            factory=item["factory"],
+    def parse_service_template(item: Any) -> ServiceTemplateCfg:
+        return ServiceTemplateCfg(
             tag=item["tag"],
-            service_class=item.get("service_class"),
-            image=item["image"],
+            factory=item["factory"],
             build=parse_build(item["build"]) if item.get("build") else None,
-            hostname=item.get("hostname"),
-            container_name=item.get("container_name"),
             labels=item.get("labels", []),
-            workdir=item.get("workdir"),
-            volumes=item.get("volumes", []),
+            properties=item.get("properties", {}),
+            empty_env=item.get("empty_env"),
             ingress=(
                 bool_to_str(val)
                 if isinstance(val := item["ingress"], bool)
                 else val
             ),
-            empty_env=item.get("empty_env"),
-            environment=item.get("environment", []),
-            ports=item.get("ports", []),
+            containers=[
+                parse_container(container)
+                for container in item.get("containers", [])
+            ],
+        )
+
+    def parse_service(item: Any) -> ServiceCfg:
+        return ServiceCfg(
+            tag=item["tag"],
+            factory=item["factory"],
+            template=item["template"],
+            service_class=item.get("service_class"),
+            build=parse_build(item["build"]) if item.get("build") else None,
+            labels=item.get("labels", []),
             properties=item.get("properties", {}),
-            networks=item.get("networks", []),
-            extra_hosts=item.get("extra_hosts", []),
-            subject_alternative_name=item.get("subject_alternative_name"),
+            empty_env=item.get("empty_env"),
+            ingress=(
+                bool_to_str(val)
+                if isinstance(val := item["ingress"], bool)
+                else val
+            ),
             upstreams=[
                 parse_upstream(upstream)
                 for upstream in item.get("upstreams", [])
+            ],
+            containers=[
+                parse_container(container)
+                for container in item.get("containers", [])
             ],
             status=parse_status(item["status"]),
         )
@@ -1354,21 +1356,12 @@ class ConfigMng:
         return ServiceTemplateCfg(
             tag=other.tag,
             factory=other.factory,
-            image=other.image,
             build=deepcopy(other.build),
-            hostname=other.hostname,
-            container_name=other.container_name,
             labels=deepcopy(other.labels),
-            workdir=other.workdir,
-            volumes=deepcopy(other.volumes),
             ingress=other.ingress,
             empty_env=other.empty_env,
-            environment=deepcopy(other.environment),
-            ports=deepcopy(other.ports),
             properties=deepcopy(other.properties),
-            networks=deepcopy(other.networks),
-            extra_hosts=deepcopy(other.extra_hosts),
-            subject_alternative_name=other.subject_alternative_name,
+            containers=deepcopy(other.containers),
         )
 
     def svc_cfg_from_tag(
@@ -1385,22 +1378,13 @@ class ConfigMng:
             factory="",
             tag=service_tag,
             service_class=service_class,
-            image="",
             build=None,
-            hostname=None,
-            container_name=None,
             labels=[],
-            workdir=None,
-            volumes=[],
             ingress="false",
             empty_env=None,
-            environment=[],
-            ports=[],
             properties={},
-            networks=[],
-            extra_hosts=[],
-            subject_alternative_name=None,
             upstreams=[],
+            containers=[],
         )
 
     def svc_cfg_from_service_template(
@@ -1417,20 +1401,11 @@ class ConfigMng:
             factory=service_template.factory,
             tag=service_tag,
             service_class=service_class,
-            image=service_template.image,
             build=deepcopy(service_template.build),
-            hostname=service_template.hostname,
-            container_name=service_template.container_name,
             labels=deepcopy(service_template.labels),
-            workdir=service_template.workdir,
-            volumes=deepcopy(service_template.volumes),
             ingress=service_template.ingress,
             empty_env=service_template.empty_env,
-            environment=deepcopy(service_template.environment),
-            ports=deepcopy(service_template.ports),
             properties=deepcopy(service_template.properties),
-            networks=deepcopy(service_template.networks),
-            extra_hosts=deepcopy(service_template.extra_hosts),
-            subject_alternative_name=service_template.subject_alternative_name,
             upstreams=[],
+            containers=deepcopy(service_template.containers),
         )
