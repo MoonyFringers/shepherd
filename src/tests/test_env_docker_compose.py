@@ -334,8 +334,8 @@ services:
   - image: busybox:stable-glibc
     build: null
     tag: container-1
-    container_name: test-1-test-1
-    hostname: test-1-test-1
+    container_name: container-1-test-1-test-1
+    hostname: container-1-test-1-test-1
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -370,8 +370,8 @@ services:
   - image: busybox:stable-glibc
     tag: container-1
     build: null
-    container_name: test-2-test-1
-    hostname: test-2-test-1
+    container_name: container-1-test-2-test-1
+    hostname: container-1-test-2-test-1
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -450,9 +450,9 @@ services:
   containers:
   - image: busybox:stable-glibc
     tag: container-1
-    container_name: test-1-test-1
+    container_name: container-1-test-1-test-1
     build: null
-    hostname: test-1-test-1
+    hostname: container-1-test-1-test-1
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -487,8 +487,8 @@ services:
   - image: busybox:stable-glibc
     build: null
     tag: container-1
-    container_name: test-2-test-1
-    hostname: test-2-test-1
+    container_name: container-1-test-2-test-1
+    hostname: container-1-test-2-test-1
     workdir: /test
     volumes:
     - /home/test/.ssh:/home/test/.ssh
@@ -557,10 +557,10 @@ def test_env_render_target_compose_env_ext_net(
     expected = (
         "name: test-1\n"
         "services:\n"
-        "  test-1-test-1:\n"
+        "  container-1-test-1-test-1:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-1-test-1\n"
-        "    container_name: test-1-test-1\n"
+        "    hostname: container-1-test-1-test-1\n"
+        "    container_name: container-1-test-1-test-1\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
@@ -577,10 +577,10 @@ def test_env_render_target_compose_env_ext_net(
         "    - host.docker.internal:host-gateway\n"
         "    networks:\n"
         "    - default\n"
-        "  test-2-test-1:\n"
+        "  container-1-test-2-test-1:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-2-test-1\n"
-        "    container_name: test-2-test-1\n"
+        "    hostname: container-1-test-2-test-1\n"
+        "    container_name: container-1-test-2-test-1\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
@@ -628,10 +628,10 @@ def test_env_render_target_compose_env_resolved(
     expected = (
         "name: test-1\n"
         "services:\n"
-        "  test-1-test-1:\n"
+        "  container-1-test-1-test-1:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-1-test-1\n"
-        "    container_name: test-1-test-1\n"
+        "    hostname: container-1-test-1-test-1\n"
+        "    container_name: container-1-test-1-test-1\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
@@ -648,10 +648,10 @@ def test_env_render_target_compose_env_resolved(
         "    - host.docker.internal:host-gateway\n"
         "    networks:\n"
         "    - default\n"
-        "  test-2-test-1:\n"
+        "  container-1-test-2-test-1:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-2-test-1\n"
-        "    container_name: test-2-test-1\n"
+        "    hostname: container-1-test-2-test-1\n"
+        "    container_name: container-1-test-2-test-1\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
@@ -699,10 +699,10 @@ def test_env_render_target_compose_env_int_net(
     expected = (
         "name: test-2\n"
         "services:\n"
-        "  test-1-test-2:\n"
+        "  container-1-test-1-test-2:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-1-test-2\n"
-        "    container_name: test-1-test-2\n"
+        "    hostname: container-1-test-1-test-2\n"
+        "    container_name: container-1-test-1-test-2\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"
@@ -718,10 +718,10 @@ def test_env_render_target_compose_env_int_net(
         "    - host.docker.internal:host-gateway\n"
         "    networks:\n"
         "    - internal_net\n"
-        "  test-2-test-2:\n"
+        "  container-1-test-2-test-2:\n"
         "    image: busybox:stable-glibc\n"
-        "    hostname: test-2-test-2\n"
-        "    container_name: test-2-test-2\n"
+        "    hostname: container-1-test-2-test-2\n"
+        "    container_name: container-1-test-2-test-2\n"
         "    working_dir: /test\n"
         "    labels:\n"
         "    - com.example.label1=value1\n"

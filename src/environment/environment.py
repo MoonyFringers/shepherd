@@ -386,22 +386,32 @@ class EnvironmentMng:
 
         rows: list[list[str]] = []
         for svc in services:
-            svc_name = svc.canonical_name()
-            svc_info = status_by_service.get(svc_name)
+            if svc.svcCfg.containers:
+                for container in svc.svcCfg.containers:
+                    cnt_info = status_by_service.get(container.container_name)
 
-            if svc_info:
-                state = svc_info.get("State", "?").lower()
-            else:
-                state = "stopped"
+                    if cnt_info:
+                        state = cnt_info.get("State", "?").lower()
+                    else:
+                        state = "stopped"
 
-            if state == "running":
-                state_colored = f"[bold green]{state}[/bold green]"
-            elif state == "stopped":
-                state_colored = f"[bold red]{state}[/bold red]"
-            else:
-                state_colored = f"[yellow]{state}[/yellow]"
+                    if state == "running":
+                        state_colored = f"[bold green]{state}[/bold green]"
+                    elif state == "stopped":
+                        state_colored = f"[bold red]{state}[/bold red]"
+                    else:
+                        state_colored = f"[yellow]{state}[/yellow]"
 
-            rows.append([svc.svcCfg.tag, state_colored])
+                    rows.append(
+                        [
+                            (
+                                container.container_name
+                                if container.container_name
+                                else ""
+                            ),
+                            state_colored,
+                        ]
+                    )
 
         if not rows:
             Util.console.print(

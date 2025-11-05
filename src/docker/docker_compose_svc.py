@@ -61,31 +61,33 @@ class DockerComposeSvc(Service):
             if not self.svcCfg.containers:
                 return yaml.dump({self.name: {}}, sort_keys=False)
 
-            container = self.svcCfg.containers[0]
-            service_def: dict[str, Any] = {}
+            services_def: dict[str, Any] = {"services": {}}
 
-            if container.image:
-                service_def["image"] = container.image
-            if container.hostname:
-                service_def["hostname"] = container.hostname
-            if container.container_name:
-                service_def["container_name"] = container.container_name
-            if container.workdir:
-                service_def["working_dir"] = container.workdir
-            if container.volumes:
-                service_def["volumes"] = container.volumes
-            if container.environment:
-                service_def["environment"] = container.environment
-            if container.ports:
-                service_def["ports"] = container.ports
-            if container.networks:
-                service_def["networks"] = container.networks
-            if container.extra_hosts:
-                service_def["extra_hosts"] = container.extra_hosts
-            if self.svcCfg.labels:
-                service_def["labels"] = self.svcCfg.labels
+            for container in self.svcCfg.containers:
+                service_def: dict[str, Any] = {}
+                if container.image:
+                    service_def["image"] = container.image
+                if container.hostname:
+                    service_def["hostname"] = container.hostname
+                if container.container_name:
+                    service_def["container_name"] = container.container_name
+                if container.workdir:
+                    service_def["working_dir"] = container.workdir
+                if container.volumes:
+                    service_def["volumes"] = container.volumes
+                if container.environment:
+                    service_def["environment"] = container.environment
+                if container.ports:
+                    service_def["ports"] = container.ports
+                if container.networks:
+                    service_def["networks"] = container.networks
+                if container.extra_hosts:
+                    service_def["extra_hosts"] = container.extra_hosts
+                if self.svcCfg.labels:
+                    service_def["labels"] = self.svcCfg.labels
+                services_def["services"][container.container_name] = service_def
 
-            return yaml.dump({self.name: service_def}, sort_keys=False)
+            return yaml.dump(services_def, sort_keys=False)
 
         finally:
             if changed_state:

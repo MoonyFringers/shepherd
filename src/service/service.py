@@ -50,24 +50,32 @@ class Service(ABC):
                     container.hostname = (
                         container.hostname
                         if container.hostname
-                        else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        else (
+                            f"{container.tag}-"
+                            f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        )
                     )
                     container.container_name = (
                         container.container_name
                         if container.container_name
-                        else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        else (
+                            f"{container.tag}-"
+                            f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        )
                     )
             elif len(self.svcCfg.containers) == 1:
                 container = self.svcCfg.containers[0]
                 container.hostname = (
                     container.hostname
                     if container.hostname
-                    else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                    else f"{container.tag}-"
+                    f"{self.svcCfg.tag}-{self.envCfg.tag}"
                 )
                 container.container_name = (
                     container.container_name
                     if container.container_name
-                    else f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                    else f"{container.tag}-"
+                    f"{self.svcCfg.tag}-{self.envCfg.tag}"
                 )
 
     def render(self, resolved: bool) -> str:
