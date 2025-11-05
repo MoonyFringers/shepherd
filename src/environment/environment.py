@@ -384,49 +384,46 @@ class EnvironmentMng:
             row.get("Service"): row for row in env_status if row.get("Service")
         }
 
-        rows: list[list[str]] = []
+        grouped: dict[str, list[list[str]]] = {}
+
         for svc in services:
-            if svc.svcCfg.containers:
-                for container in svc.svcCfg.containers:
-                    cnt_info = status_by_service.get(container.container_name)
+            rows: list[list[str]] = []
+            for container in getattr(svc.svcCfg, "containers", []) or []:
+                cnt_name = container.container_name
+                cnt_info = status_by_service.get(cnt_name)
+                state = (
+                    cnt_info.get("State", "?").lower()
+                    if cnt_info
+                    else "stopped"
+                )
 
-                    if cnt_info:
-                        state = cnt_info.get("State", "?").lower()
-                    else:
-                        state = "stopped"
+                if state == "running":
+                    state_colored = "[bold green]● running[/bold green]"
+                elif state == "stopped":
+                    state_colored = "[bold red]● stopped[/bold red]"
+                else:
+                    state_colored = f"[yellow]● {state}[/yellow]"
 
-                    if state == "running":
-                        state_colored = f"[bold green]{state}[/bold green]"
-                    elif state == "stopped":
-                        state_colored = f"[bold red]{state}[/bold red]"
-                    else:
-                        state_colored = f"[yellow]{state}[/yellow]"
+                rows.append([cnt_name, state_colored])
 
-                    rows.append(
-                        [
-                            (
-                                container.container_name
-                                if container.container_name
-                                else ""
-                            ),
-                            state_colored,
-                        ]
-                    )
+            if rows:
+                grouped[svc.svcCfg.tag] = rows
 
-        if not rows:
+        if not grouped:
             Util.console.print(
                 f"[yellow]No services found for "
                 f"environment '{envCfg.tag}'[/yellow]"
             )
             return
 
-        Util.render_table(
+        Util.render_grouped_table(
             title=f"[white]{envCfg.tag}[/white]",
-            columns=[
-                {"header": "Tag", "style": "cyan"},
+            group_column_header="Service",
+            item_columns=[
+                {"header": "Container", "style": "white"},
                 {"header": "State"},
             ],
-            rows=rows,
+            groups=grouped,
         )
 
     def add_service(
