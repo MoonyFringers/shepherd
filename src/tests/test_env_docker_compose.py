@@ -65,52 +65,6 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-env_templates:
-  - tag: default
-    factory: docker-compose
-    service_templates:
-      - template: default
-        tag: service-default
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-    volumes:
-      - tag: app_data
-        external: false
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: /srv/data
-        labels:
-          env: production
-service_templates:
-  - tag: default
-    factory: docker
-    containers:
-      - image: busybox:stable-glibc
-        tag: container-1
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-    labels:
-      - com.example.label1=value1
-      - com.example.label2=value2
-    ingress: false
-    empty_env: null
-    properties: {}
 envs:
   - template: default
     factory: docker-compose

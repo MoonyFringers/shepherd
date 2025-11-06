@@ -65,45 +65,6 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-env_templates:
-  - tag: default
-    factory: docker-compose
-    service_templates:
-      - template: default
-        tag: service-default
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-service_templates:
-  - tag: default
-    factory: docker
-    containers:
-      - image: test-image:latest
-        tag: container-1
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
-          dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-    labels:
-      - com.example.label1=value1
-      - com.example.label2=value2
-    ingress: false
-    empty_env: null
-    properties: {}
 envs:
   - template: default
     factory: docker-compose
@@ -128,7 +89,10 @@ envs:
             volumes:
               - /home/test/.ssh:/home/test/.ssh
               - /etc/ssh:/etc/ssh
-            environment: []
+            environment:
+              - POSTGRES_PASSWORD=psw
+              - POSTGRES_USER=sys
+              - POSTGRES_DB=docker
             ports:
               - 80:80
               - 443:443
@@ -154,6 +118,25 @@ envs:
         containers:
           - image: test-image:latest
             tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
+          - image: test-image:latest
+            build:
+              context_path: '#{cfg.envs_path}/#{env.tag}/build'
+              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
+            tag: container-2
             workdir: /test
             volumes:
               - /home/test/.ssh:/home/test/.ssh
@@ -324,7 +307,10 @@ def test_svc_render_default_compose_service(
         "    volumes:\n"
         "      - /home/test/.ssh:/home/test/.ssh\n"
         "      - /etc/ssh:/etc/ssh\n"
-        "    environment: []\n"
+        "    environment:\n"
+        "     - POSTGRES_PASSWORD=psw\n"
+        "     - POSTGRES_USER=sys\n"
+        "     - POSTGRES_DB=docker\n"
         "    ports:\n"
         "      - 80:80\n"
         "      - 443:443\n"
@@ -382,7 +368,10 @@ def test_svc_render_default_compose_service_resolved(
         "    volumes:\n"
         "      - /home/test/.ssh:/home/test/.ssh\n"
         "      - /etc/ssh:/etc/ssh\n"
-        "    environment: []\n"
+        "    environment:\n"
+        "     - POSTGRES_PASSWORD=psw\n"
+        "     - POSTGRES_USER=sys\n"
+        "     - POSTGRES_DB=docker\n"
         "    ports:\n"
         "      - 80:80\n"
         "      - 443:443\n"
@@ -435,6 +424,10 @@ def test_svc_render_target_compose_service(
         "     labels:\n"
         "     - com.example.label1=value1\n"
         "     - com.example.label2=value2\n"
+        "     environment:\n"
+        "     - POSTGRES_PASSWORD=psw\n"
+        "     - POSTGRES_USER=sys\n"
+        "     - POSTGRES_DB=docker\n"
         "     volumes:\n"
         "     - /home/test/.ssh:/home/test/.ssh\n"
         "     - /etc/ssh:/etc/ssh\n"
@@ -492,6 +485,44 @@ def test_start_svc(
 
 
 @pytest.mark.docker
+def test_start_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "svc", "test-1", "container-2"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
 def test_stop_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -525,6 +556,44 @@ def test_stop_svc(
     )
 
     result = runner.invoke(cli, ["halt", "svc", "test"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_stop_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "stop", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["halt", "svc", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -568,6 +637,44 @@ def test_reload_svc(
 
 
 @pytest.mark.docker
+def test_reload_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "restart", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["reload", "svc", "test-1", "container-2"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
 def test_logs_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -601,6 +708,44 @@ def test_logs_svc(
     )
 
     result = runner.invoke(cli, ["logs", "test"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_logs_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "logs", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["logs", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -644,6 +789,44 @@ def test_shell_svc(
 
 
 @pytest.mark.docker
+def test_shell_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start", "-d"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "shell", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["shell", "test-1", "container-2"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
 def test_build_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -665,6 +848,32 @@ def test_build_svc(
     )
 
     result = runner.invoke(cli, ["build", "test"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_build_svc_cnt_2(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config_svc_default)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker build output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["build", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
