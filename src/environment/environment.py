@@ -404,7 +404,7 @@ class EnvironmentMng:
                 else:
                     state_colored = f"[yellow]● {state}[/yellow]"
 
-                rows.append([cnt_name, state_colored])
+                rows.append([container.tag, state_colored])
 
             if rows:
                 grouped[svc.svcCfg.tag] = rows

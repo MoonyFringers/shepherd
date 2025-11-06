@@ -67,6 +67,22 @@ class CompletionSvcMng(AbstractCompletionMng):
     def get_build_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
+        return []
+
+    def is_cnt_tag_chosen(self, args: list[str]) -> bool:
+        if len(args) < 2:
+            return False
+        cnt_tag = args[1]
+        return cnt_tag in self.get_svc_tags(args)
+
+    def get_cnt_tags(self, args: list[str]) -> list[str]:
+        env = self.configMng.get_active_environment()
+        if env:
+            svc = self.configMng.get_service(env, args[0])
+            if svc:
+                return self.configMng.get_container_tags(svc)
         return []
 
     def is_svc_tag_chosen(self, args: list[str]) -> bool:
@@ -84,21 +100,29 @@ class CompletionSvcMng(AbstractCompletionMng):
     def get_start_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
         return []
 
     def get_stop_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
         return []
 
     def get_logs_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
         return []
 
     def get_shell_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
         return []
 
     def get_render_completions(self, args: list[str]) -> list[str]:
@@ -109,6 +133,8 @@ class CompletionSvcMng(AbstractCompletionMng):
     def get_reload_completions(self, args: list[str]) -> list[str]:
         if not self.is_svc_tag_chosen(args):
             return self.get_svc_tags(args)
+        if not self.is_cnt_tag_chosen(args):
+            return self.get_cnt_tags(args)
         return []
 
     def is_svc_class_chosen(self, args: list[str]) -> bool:

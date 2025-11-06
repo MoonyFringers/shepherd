@@ -544,6 +544,20 @@ class ServiceCfg(Resolvable):
                 else:
                     self.set_unresolved()
 
+    def get_container_by_tag(self, cnt_tag: str) -> Optional[ContainerCfg]:
+        """
+        Retrieves a container configuration by its tag.
+
+        :param cnt_tag: The runtime name of the container to retrieve.
+        :return: The container configuration if found, else None.
+        """
+        if not self.containers:
+            return None
+        for cnt in self.containers:
+            if cnt.tag == cnt_tag:
+                return cnt
+        return None
+
 
 @dataclass
 class EnvironmentTemplateCfg(Resolvable):
@@ -1306,6 +1320,25 @@ class ConfigMng:
         """
         if env.services:
             return sorted({svc.tag for svc in env.services if svc.tag})
+        return []
+
+    def get_service(
+        self, env: EnvironmentCfg, svc_tag: str
+    ) -> Optional[ServiceCfg]:
+        if env.services:
+            for svc in env.services:
+                if svc.tag == svc_tag:
+                    return svc
+        return None
+
+    def get_container_tags(self, svc: ServiceCfg) -> list[str]:
+        """
+        Retrieves all unique container tags from the container configurations.
+
+        :return: A list of unique container tags.
+        """
+        if svc.containers:
+            return sorted({cnt.tag for cnt in svc.containers if cnt.tag})
         return []
 
     def env_cfg_from_tag(

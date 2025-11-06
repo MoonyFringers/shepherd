@@ -19,11 +19,12 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, override
+from typing import Any, Optional, override
 
 import yaml
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
+from config.config import ContainerCfg
 from service import Service
 from util import Util
 
@@ -98,43 +99,75 @@ class DockerComposeSvc(Service):
                 else:
                     self.envCfg.set_unresolved()
 
-    @override
-    def build(self):
-        """Build the service."""
-        if self.svcCfg.containers and len(self.svcCfg.containers) > 0:
-            for container in self.svcCfg.containers:
-                if build := container.build:
-                    if dockerfile := build.dockerfile_path:
-                        if context_path := build.context_path:
-                            build_docker_image(
-                                Path(dockerfile),
-                                Path(context_path),
-                                container.image if container.image else "",
-                            )
-                        else:
-                            Util.print_error_and_die(
-                                f"Service '{self.svcCfg.tag}' "
-                                f"container '{container.tag}' "
-                                f"build configuration is missing "
-                                f"a build context path."
-                            )
-                    else:
-                        Util.print_error_and_die(
-                            f"Service '{self.svcCfg.tag}' "
-                            f"container '{container.tag}' "
-                            f"build configuration is missing "
-                            f"a Dockerfile path."
-                        )
-                else:
-                    Util.print_error_and_die(
-                        f"Service '{self.svcCfg.tag}' "
-                        f"container '{container.tag}' "
-                        f"does not have a build configuration."
-                    )
+    def _build_one_container(self, container: ContainerCfg) -> None:
+        """Validate config and build a single container."""
+        if not container.build:
+            Util.print_error_and_die(
+                f"Service '{self.svcCfg.tag}' "
+                f"container '{container.tag}' "
+                f"does not have a build configuration."
+            )
+
+        if build := container.build:
+            if not build.dockerfile_path:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' "
+                    f"container '{container.tag}' "
+                    f"build configuration is missing "
+                    f"a Dockerfile path."
+                )
+            if not build.context_path:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' "
+                    f"container '{container.tag}' "
+                    f"build configuration is missing "
+                    f"a build context path."
+                )
+
+            if build.dockerfile_path and build.context_path:
+                build_docker_image(
+                    Path(build.dockerfile_path),
+                    Path(build.context_path),
+                    container.image or "",
+                )
 
     @override
-    def start(self):
+    def build(self, cnt_tag: Optional[str] = None) -> None:
+        """Build the service."""
+        if cnt_tag:
+            container = self.svcCfg.get_container_by_tag(cnt_tag)
+            if not container:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' does not have a "
+                    f"container named '{cnt_tag}'."
+                )
+            if container:
+                self._build_one_container(container)
+            return
+
+        containers = self.svcCfg.containers or []
+        for container in containers:
+            self._build_one_container(container)
+
+    @override
+    def start(self, cnt_tag: Optional[str] = None):
+        """Start the service."""
         if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+                if container:
+                    run_compose(
+                        self.envCfg.status.triggered_config,
+                        "up",
+                        "-d",
+                        container.run_container_name or "",
+                    )
+                return
             for container in self.svcCfg.containers or []:
                 run_compose(
                     self.envCfg.status.triggered_config,
@@ -148,9 +181,23 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def stop(self):
+    def stop(self, cnt_tag: Optional[str] = None):
         """Stop the service."""
         if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+                if container:
+                    run_compose(
+                        self.envCfg.status.triggered_config,
+                        "stop",
+                        container.run_container_name or "",
+                    )
+                return
             for container in self.svcCfg.containers or []:
                 run_compose(
                     self.envCfg.status.triggered_config,
@@ -163,9 +210,23 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def reload(self):
+    def reload(self, cnt_tag: Optional[str] = None):
         """Reload the service."""
         if self.envCfg.status.triggered_config and self.svcCfg.containers:
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+                if container:
+                    run_compose(
+                        self.envCfg.status.triggered_config,
+                        "restart",
+                        container.run_container_name or "",
+                    )
+                return
             for container in self.svcCfg.containers or []:
                 run_compose(
                     self.envCfg.status.triggered_config,
@@ -178,29 +239,68 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def get_stdout(self):
+    def get_stdout(self, cnt_tag: Optional[str] = None):
         """Show the service stdout."""
         if self.envCfg.status.triggered_config:
-            run_compose(
-                self.envCfg.status.triggered_config,
-                "logs",
-                self.canonical_name(),
-            )
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+                if container:
+                    run_compose(
+                        self.envCfg.status.triggered_config,
+                        "logs",
+                        container.run_container_name or "",
+                    )
+            elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
+                run_compose(
+                    self.envCfg.status.triggered_config,
+                    "logs",
+                    self.svcCfg.containers[0].run_container_name or "",
+                )
+            else:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' has multiple containers. "
+                    f"Specify a container name."
+                )
         else:
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
             )
 
     @override
-    def get_shell(self):
+    def get_shell(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
         if self.envCfg.status.triggered_config:
-            run_compose(
-                self.envCfg.status.triggered_config,
-                "exec",
-                self.canonical_name(),
-                "sh",
-            )
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+                if container:
+                    run_compose(
+                        self.envCfg.status.triggered_config,
+                        "exec",
+                        container.run_container_name or "",
+                        "sh",
+                    )
+            elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
+                run_compose(
+                    self.envCfg.status.triggered_config,
+                    "exec",
+                    self.svcCfg.containers[0].run_container_name or "",
+                    "sh",
+                )
+            else:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' has multiple containers. "
+                    f"Specify a container name."
+                )
         else:
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
