@@ -316,12 +316,18 @@ def up_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
 
 
 @up.command(name="svc")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def up_svc(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def up_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Start service."""
-    shepherd.serviceMng.start_svc(envCfg, tag)
+    shepherd.serviceMng.start_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================
@@ -347,12 +353,18 @@ def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
 
 
 @halt.command(name="svc")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def halt_svc(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def halt_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Stop service."""
-    shepherd.serviceMng.stop_svc(envCfg, tag)
+    shepherd.serviceMng.stop_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================
@@ -373,48 +385,72 @@ def reload_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
 
 
 @reload.command(name="svc")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def reload_svc(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def reload_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Reload service."""
-    shepherd.serviceMng.reload_svc(envCfg, tag)
+    shepherd.serviceMng.reload_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================
 # BUILD
 # =====================================================
 @cli.command(name="build")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def build(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def build(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Build service."""
-    shepherd.serviceMng.build_svc(envCfg, tag)
+    shepherd.serviceMng.build_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================
 # LOGS
 # =====================================================
 @cli.command(name="logs")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def logs(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def logs(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Show service logs."""
-    shepherd.serviceMng.logs_svc(envCfg, tag)
+    shepherd.serviceMng.logs_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================
 # SHELL
 # =====================================================
 @cli.command(name="shell")
-@click.argument("tag", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
 @click.pass_obj
 @require_active_env
-def shell(shepherd: ShepherdMng, envCfg: EnvironmentCfg, tag: str):
+def shell(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
     """Get a shell session for a service."""
-    shepherd.serviceMng.shell_svc(envCfg, tag)
+    shepherd.serviceMng.shell_svc(envCfg, svc_tag, cnt_tag)
 
 
 # =====================================================

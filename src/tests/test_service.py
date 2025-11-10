@@ -27,113 +27,6 @@ from test_util import values
 
 from shepctl import ShepherdMng, cli
 
-shpd_config_svc_default = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-env_templates:
-  - tag: default
-    factory: docker-compose
-    service_templates:
-      - template: default
-        tag: service-default
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-service_templates:
-  - tag: default
-    factory: docker
-    image: test-image:latest
-    labels:
-      - com.example.label1=value1
-      - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
-    ingress: false
-    empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
-    properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
-envs:
-  - template: default
-    factory: docker-compose
-    tag: test-1
-    services:
-      - template: default
-        factory: docker
-        tag: test
-        image: test-image:latest
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        ingress: false
-        empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-"""
-
 shpd_config_pg_template = """
 shpd_registry:
   ftp_server: ${shpd_registry}
@@ -181,27 +74,31 @@ env_templates:
 service_templates:
   - tag: default
     factory: docker
-    image: ''
+    containers:
+      - image: ''
+        tag: container-1
+        ports: []
+        subject_alternative_name: null
+        environment: []
     ingress: false
     empty_env: null
-    envvars: {}
-    ports: []
     properties: {}
-    subject_alternative_name: null
   - tag: postgres
     factory: postgres
-    image: ${pg_image}
+    containers:
+      - image: ${pg_image}
+        tag: pg-container
+        environment: []
+        ports:
+          - net_listener_port:${pg_listener_port}
+        subject_alternative_name: null
     ingress: false
     empty_env: ${pg_empty_env}
-    envvars: {}
-    ports:
-      - net_listener_port:${pg_listener_port}
     properties:
       sys_user: ${db_sys_usr}
       sys_psw: ${db_sys_psw}
       user: ${db_usr}
       psw: ${db_psw}
-    subject_alternative_name: null
 envs: []
 """
 
@@ -253,18 +150,23 @@ def test_add_svc_one_default(
     assert (
         env.services[0].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[0].image == "", "Service image should be ''"
+    assert env.services[0].containers
+    assert (
+        env.services[0].containers[0].image == ""
+    ), "Service image should be ''"
 
     assert not env.services[0].is_ingress(), "Service ingress should be False"
     assert (
-        env.services[0].environment == []
+        env.services[0].containers[0].environment == []
     ), "Service environment should be empty"
-    assert env.services[0].ports == [], "Service ports should be empty"
+    assert (
+        env.services[0].containers[0].ports == []
+    ), "Service ports should be empty"
     assert (
         env.services[0].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[0].subject_alternative_name is None
+        env.services[0].containers[0].subject_alternative_name is None
     ), "Service SAN should be None"
 
     assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
@@ -274,18 +176,23 @@ def test_add_svc_one_default(
     assert (
         env.services[1].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[1].image == "", "Service image should be ''"
+    assert env.services[1].containers
+    assert (
+        env.services[1].containers[0].image == ""
+    ), "Service image should be ''"
 
     assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
-        env.services[1].environment == []
+        env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
-    assert env.services[1].ports == [], "Service ports should be empty"
+    assert (
+        env.services[1].containers[0].ports == []
+    ), "Service ports should be empty"
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[1].subject_alternative_name is None
+        env.services[1].containers[0].subject_alternative_name is None
     ), "Service SAN should be None"
 
 
@@ -318,18 +225,23 @@ def test_add_svc_two_default(
     assert (
         env.services[1].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[1].image == "", "Service image should be ''"
+    assert env.services[1].containers
+    assert (
+        env.services[1].containers[0].image == ""
+    ), "Service image should be ''"
 
     assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
-        env.services[1].environment == []
+        env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
-    assert env.services[1].ports == [], "Service ports should be empty"
+    assert (
+        env.services[1].containers[0].ports == []
+    ), "Service ports should be empty"
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[1].subject_alternative_name is None
+        env.services[1].containers[0].subject_alternative_name is None
     ), "Service SAN should be None"
 
     assert env.services[2].tag == "svc-2", "Service tag should be 'svc-2'"
@@ -339,18 +251,23 @@ def test_add_svc_two_default(
     assert (
         env.services[2].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[2].image == "", "Service image should be ''"
+    assert env.services[2].containers
+    assert (
+        env.services[2].containers[0].image == ""
+    ), "Service image should be ''"
 
     assert not env.services[2].is_ingress(), "Service ingress should be False"
     assert (
-        env.services[2].environment == []
+        env.services[2].containers[0].environment == []
     ), "Service environment should be empty"
-    assert env.services[2].ports == [], "Service ports should be empty"
+    assert (
+        env.services[2].containers[0].ports == []
+    ), "Service ports should be empty"
     assert (
         env.services[2].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[2].subject_alternative_name is None
+        env.services[2].containers[0].subject_alternative_name is None
     ), "Service SAN should be None"
 
 
@@ -382,18 +299,23 @@ def test_add_svc_two_same_tag_default(
     assert (
         env.services[1].factory == "docker"
     ), "Service factory should be 'docker'"
-    assert env.services[1].image == "", "Service image should be ''"
+    assert env.services[1].containers
+    assert (
+        env.services[1].containers[0].image == ""
+    ), "Service image should be ''"
 
     assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
-        env.services[1].environment == []
+        env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
-    assert env.services[1].ports == [], "Service ports should be empty"
+    assert (
+        env.services[1].containers[0].ports == []
+    ), "Service ports should be empty"
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
     assert (
-        env.services[1].subject_alternative_name is None
+        env.services[1].containers[0].subject_alternative_name is None
     ), "Service SAN should be None"
 
 

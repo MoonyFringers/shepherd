@@ -84,27 +84,29 @@ env_templates:
 service_templates:
   - tag: default
     factory: docker
-    image: test-image:latest
+    containers:
+      - image: test-image:latest
+        tag: container-1
+        workdir: /test
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        environment: []
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
 envs:
   - template: default
     factory: docker-compose
@@ -112,56 +114,60 @@ envs:
     services:
       - template: default
         factory: docker
+        containers:
+          - image: test-1-image:latest
+            tag: container-2
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            workdir: /test
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         tag: test-1
-        image: test-1-image:latest
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
           triggered_config: null
       - template: default
         factory: docker
+        containers:
+          - image: test-2-image:latest
+            tag: container-2
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         tag: test-2
-        image: test-2-image:latest
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -184,56 +190,60 @@ envs:
     services:
       - template: default
         factory: docker
+        containers:
+          - image: test-1-image:latest
+            tag: container-1
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - internal_net
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         tag: test-1
-        image: test-1-image:latest
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - internal_net
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
           triggered_config: null
       - template: default
         factory: docker
+        containers:
+          - image: test-2-image:latest
+            tag: container-2
+            workdir: /test
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            environment: []
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - internal_net
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         tag: test-2
-        image: test-2-image:latest
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - internal_net
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false

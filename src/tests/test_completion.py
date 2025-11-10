@@ -74,50 +74,70 @@ env_templates:
 service_templates:
   - tag: t1
     factory: docker
-    image: test-image:latest
+    containers:
+      - image: test-image:latest
+        tag: container-1
+        workdir: /test
+        environment: []
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
+      - image: test-image:latest
+        tag: container-2
+        workdir: /test
+        environment: []
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
   - tag: t2
     factory: docker
-    image: test-image:latest
+    containers:
+      - image: test-image:latest
+        tag: container-2
+        workdir: /test
+        environment: []
+        volumes:
+          - /home/test/.ssh:/home/test/.ssh
+          - /etc/ssh:/etc/ssh
+        ports:
+          - 80:80
+          - 443:443
+          - 8080:8080
+        networks:
+          - default
+        extra_hosts:
+          - host.docker.internal:host-gateway
+        subject_alternative_name: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
-    workdir: /test
-    volumes:
-      - /home/test/.ssh:/home/test/.ssh
-      - /etc/ssh:/etc/ssh
     ingress: false
     empty_env: null
-    environment: []
-    ports:
-      - 80:80
-      - 443:443
-      - 8080:8080
     properties: {}
-    networks:
-      - default
-    extra_hosts:
-      - host.docker.internal:host-gateway
-    subject_alternative_name: null
 envs:
   - template: default
     factory: docker-compose
@@ -127,27 +147,45 @@ envs:
         factory: docker
         tag: red
         service_class: foo-class
-        image: test-image:latest
+        containers:
+          - image: test-image:latest
+            tag: container-1
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
+          - image: test-image:latest
+            tag: container-2
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
         ingress: false
         empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
         properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -155,27 +193,24 @@ envs:
       - template: t1
         factory: docker
         tag: white
-        image: test-image:latest
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
+        containers:
+          - image: test-image:latest
+            tag: container-1
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         ingress: false
-        empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -191,27 +226,24 @@ envs:
       - template: t2
         factory: docker
         tag: blue
-        image: test-image:latest
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        workdir: /test
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
+        containers:
+          - image: test-image:latest
+            tag: container-2
+            workdir: /test
+            environment: []
+            volumes:
+              - /home/test/.ssh:/home/test/.ssh
+              - /etc/ssh:/etc/ssh
+            ports:
+              - 80:80
+              - 443:443
+              - 8080:8080
+            networks:
+              - default
+            extra_hosts:
+              - host.docker.internal:host-gateway
+            subject_alternative_name: null
         ingress: false
-        empty_env: null
-        environment: []
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        properties: {}
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
         status:
           active: true
           archived: false
@@ -530,6 +562,25 @@ def test_completion_start_svc(
 
 
 @pytest.mark.compl
+def test_completion_start_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["up", "svc", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected up svc completion"
+
+
+@pytest.mark.compl
 def test_completion_stop(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -580,6 +631,25 @@ def test_completion_stop_svc(
 
 
 @pytest.mark.compl
+def test_completion_stop_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["halt", "svc", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected halt svc completion"
+
+
+@pytest.mark.compl
 def test_completion_reload(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -627,6 +697,25 @@ def test_completion_reload_svc(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["reload", "svc"])
     assert completions == ["red", "white"], "Expected reload svc completion"
+
+
+@pytest.mark.compl
+def test_completion_reload_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["reload", "svc", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected reload svc completion"
 
 
 @pytest.mark.compl
@@ -718,6 +807,25 @@ def test_completion_build_svc(
 
 
 @pytest.mark.compl
+def test_completion_build_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["build", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected build svc completion"
+
+
+@pytest.mark.compl
 def test_completion_logs_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -734,6 +842,25 @@ def test_completion_logs_svc(
 
 
 @pytest.mark.compl
+def test_completion_logs_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["logs", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected logs svc completion"
+
+
+@pytest.mark.compl
 def test_completion_shell_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -747,6 +874,25 @@ def test_completion_shell_svc(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["shell"])
     assert completions == ["red", "white"], "Expected shell svc completion"
+
+
+@pytest.mark.compl
+def test_completion_shell_svc_cnt_1(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["shell", "red"])
+    assert completions == [
+        "container-1",
+        "container-2",
+    ], "Expected shell svc completion"
 
 
 @pytest.mark.compl

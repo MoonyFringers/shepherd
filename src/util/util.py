@@ -145,6 +145,92 @@ class Util:
         Util.console.print(table)
 
     @staticmethod
+    def render_grouped_table(
+        title: Optional[str],
+        group_column_header: str,
+        item_columns: list[dict[str, str]],
+        groups: dict[str, list[list[str]]],
+        *,
+        branch_glyph_mid: str = "├─",
+        branch_glyph_last: str = "└─",
+        group_style: str = "bold",
+        group_col_style: str = "cyan",
+        box_style: box.Box = box.SIMPLE,
+    ) -> None:
+        """
+        Render a grouped table using rich.
+
+        Args:
+            title: Table title (None for no title).
+            group_column_header: header for the left-most "group"
+            column (e.g., "Service").
+
+            item_columns: like in render_table, list of dicts with keys:
+                         - "header" (required)
+                         - "style" (optional)
+
+            groups: mapping from group label -> list of item rows
+            (each list[str] must match item_columns length)
+
+            branch_glyph_mid: glyph used before non-last items
+            (visual nesting).
+
+            branch_glyph_last: glyph used before the last item in a group.
+            group_style: style applied to the group label row.
+            group_col_style: style for the group column.
+            box_style: rich box style.
+        """
+        table = Table(
+            title=title or "",
+            box=box_style,
+            title_justify="left",
+            title_style="bold",
+        )
+
+        # Add columns: group column + item columns
+        table.add_column(
+            group_column_header, style=group_col_style, no_wrap=True
+        )
+        for col in item_columns:
+            table.add_column(
+                col["header"], style=col.get("style", ""), no_wrap=False
+            )
+
+        if not groups:
+            Util.console.print("[yellow]No data.[/yellow]")
+            return
+
+        for group_label in sorted(groups.keys()):
+            items = groups[group_label] or []
+
+            # Group header row
+            table.add_row(
+                f"[{group_style}]{group_label}[/{group_style}]",
+                *[""] * len(item_columns),
+            )
+
+            # Nested items
+            for idx, row in enumerate(items):
+                is_last = idx == len(items) - 1
+                branch = branch_glyph_last if is_last else branch_glyph_mid
+
+                # Prepend branch glyph to the first item column
+                # (if there is at least one)
+                if row:
+                    first_cell = f"{branch} {row[0]}"
+                    rest = row[1:]
+                    table.add_row("", first_cell, *rest, end_section=is_last)
+                else:
+                    table.add_row(
+                        "",
+                        "",
+                        *[""] * (len(item_columns) - 1),
+                        end_section=is_last,
+                    )
+
+        Util.console.print(table)
+
+    @staticmethod
     def ensure_dir(dir_path: str, desc: str, mode: int = 0o755):
         if os.path.exists(dir_path):
             if not os.path.isdir(dir_path):

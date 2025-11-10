@@ -32,20 +32,51 @@ class Service(ABC):
         self.envCfg = envCfg
         self.svcCfg = svcCfg
         self.name = self.canonical_name()
-        self.hostname = (
-            svcCfg.hostname if svcCfg.hostname else self.canonical_name()
-        )
-        self.container_name = (
-            svcCfg.container_name
-            if svcCfg.container_name
-            else self.canonical_name()
-        )
+        self._generate_containers_names()
 
     def canonical_name(self) -> str:
         """
         Get the canonical name of the service.
         """
         return f"{self.svcCfg.tag}-{self.envCfg.tag}"
+
+    def _generate_containers_names(self):
+        """
+        Generate the container names for the service.
+        """
+        if self.svcCfg.containers:
+            if len(self.svcCfg.containers) > 1:
+                for container in self.svcCfg.containers:
+                    container.run_hostname = (
+                        container.hostname
+                        if container.hostname
+                        else (
+                            f"{container.tag}-"
+                            f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        )
+                    )
+                    container.run_container_name = (
+                        container.container_name
+                        if container.container_name
+                        else (
+                            f"{container.tag}-"
+                            f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                        )
+                    )
+            elif len(self.svcCfg.containers) == 1:
+                container = self.svcCfg.containers[0]
+                container.run_hostname = (
+                    container.hostname
+                    if container.hostname
+                    else f"{container.tag}-"
+                    f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                )
+                container.run_container_name = (
+                    container.container_name
+                    if container.container_name
+                    else f"{container.tag}-"
+                    f"{self.svcCfg.tag}-{self.envCfg.tag}"
+                )
 
     def render(self, resolved: bool) -> str:
         """Render the service configuration."""
@@ -59,32 +90,32 @@ class Service(ABC):
         pass
 
     @abstractmethod
-    def build(self):
+    def build(self, cnt_tag: Optional[str] = None):
         """Build the service."""
         pass
 
     @abstractmethod
-    def start(self):
+    def start(self, cnt_tag: Optional[str] = None):
         """Start the service."""
         pass
 
     @abstractmethod
-    def stop(self):
+    def stop(self, cnt_tag: Optional[str] = None):
         """Stop the service."""
         pass
 
     @abstractmethod
-    def reload(self):
+    def reload(self, cnt_tag: Optional[str] = None):
         """Reload the service."""
         pass
 
     @abstractmethod
-    def get_stdout(self):
+    def get_stdout(self, cnt_tag: Optional[str] = None):
         """Show the service stdout."""
         pass
 
     @abstractmethod
-    def get_shell(self):
+    def get_shell(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
         pass
 
@@ -135,29 +166,49 @@ class ServiceMng:
         else:
             return None
 
-    def build_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def build_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Build a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.build()
+            service.build(cnt_tag)
 
-    def start_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def start_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Start a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.start()
+            service.start(cnt_tag)
 
-    def stop_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def stop_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Halt a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.stop()
+            service.stop(cnt_tag)
 
-    def reload_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def reload_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Reload a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.reload()
+            service.reload(cnt_tag)
 
     def render_svc(
         self, envCfg: EnvironmentCfg, svc_tag: str, target: bool, resolved: bool
@@ -170,14 +221,24 @@ class ServiceMng:
             return service.render(resolved)
         return None
 
-    def logs_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def logs_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Get service stdout."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.get_stdout()
+            service.get_stdout(cnt_tag)
 
-    def shell_svc(self, envCfg: EnvironmentCfg, svc_tag: str):
+    def shell_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cnt_tag: Optional[str] = None,
+    ):
         """Get a shell session for a service."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.get_shell()
+            service.get_shell(cnt_tag)

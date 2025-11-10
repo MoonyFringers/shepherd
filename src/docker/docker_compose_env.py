@@ -121,7 +121,7 @@ class DockerComposeEnv(Environment):
             # --- Services ---
             for svc in self.services:
                 svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
-                compose_config["services"].update(svc_yaml)
+                compose_config["services"].update(svc_yaml["services"])
 
             # --- Networks ---
             if self.envCfg.networks:
