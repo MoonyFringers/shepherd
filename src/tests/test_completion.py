@@ -23,236 +23,9 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import values
+from test_util import read_fixture
 
 from shepctl import ShepherdMng
-
-shpd_config = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-env_templates:
-  - tag: default
-    factory: docker-compose
-    service_templates:
-      - template: default
-        tag: service-default
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-service_templates:
-  - tag: t1
-    factory: docker
-    containers:
-      - image: test-image:latest
-        tag: container-1
-        workdir: /test
-        environment: []
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-      - image: test-image:latest
-        tag: container-2
-        workdir: /test
-        environment: []
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-    labels:
-      - com.example.label1=value1
-      - com.example.label2=value2
-    ingress: false
-    empty_env: null
-    properties: {}
-  - tag: t2
-    factory: docker
-    containers:
-      - image: test-image:latest
-        tag: container-2
-        workdir: /test
-        environment: []
-        volumes:
-          - /home/test/.ssh:/home/test/.ssh
-          - /etc/ssh:/etc/ssh
-        ports:
-          - 80:80
-          - 443:443
-          - 8080:8080
-        networks:
-          - default
-        extra_hosts:
-          - host.docker.internal:host-gateway
-        subject_alternative_name: null
-    labels:
-      - com.example.label1=value1
-      - com.example.label2=value2
-    ingress: false
-    empty_env: null
-    properties: {}
-envs:
-  - template: default
-    factory: docker-compose
-    tag: test-1
-    services:
-      - template: t1
-        factory: docker
-        tag: red
-        service_class: foo-class
-        containers:
-          - image: test-image:latest
-            tag: container-1
-            workdir: /test
-            environment: []
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-          - image: test-image:latest
-            tag: container-2
-            workdir: /test
-            environment: []
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: t1
-        factory: docker
-        tag: white
-        containers:
-          - image: test-image:latest
-            tag: container-1
-            workdir: /test
-            environment: []
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        ingress: false
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-  - template: default
-    factory: docker-compose
-    tag: test-2
-    services:
-      - template: t2
-        factory: docker
-        tag: blue
-        containers:
-          - image: test-image:latest
-            tag: container-2
-            workdir: /test
-            environment: []
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        ingress: false
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    status:
-      active: false
-      archived: false
-      triggered_config: null
-"""
 
 
 @pytest.fixture
@@ -262,6 +35,7 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
+    values = read_fixture("completion", "values.conf")
     config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
     os.environ["SHPD_CONF"] = str(config_file)
@@ -295,6 +69,8 @@ def test_completion_add(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -313,6 +89,7 @@ def test_completion_add_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -331,6 +108,7 @@ def test_completion_add_svc_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -347,6 +125,7 @@ def test_completion_add_svc_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -363,6 +142,7 @@ def test_completion_add_svc_3(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -381,6 +161,7 @@ def test_completion_clone(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -399,6 +180,7 @@ def test_completion_clone_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -415,6 +197,7 @@ def test_completion_rename(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -433,6 +216,7 @@ def test_completion_rename_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -449,6 +233,7 @@ def test_completion_checkout_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -467,6 +252,7 @@ def test_completion_delete(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -485,6 +271,7 @@ def test_completion_delete_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -504,6 +291,7 @@ def test_completion_list(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -520,6 +308,7 @@ def test_completion_start(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -538,6 +327,7 @@ def test_completion_start_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -554,6 +344,7 @@ def test_completion_start_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -570,6 +361,7 @@ def test_completion_start_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -589,6 +381,7 @@ def test_completion_stop(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -607,6 +400,7 @@ def test_completion_stop_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -623,6 +417,7 @@ def test_completion_stop_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -639,6 +434,7 @@ def test_completion_stop_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -658,6 +454,7 @@ def test_completion_reload(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -676,6 +473,7 @@ def test_completion_reload_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -692,6 +490,7 @@ def test_completion_reload_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -708,6 +507,7 @@ def test_completion_reload_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -727,6 +527,7 @@ def test_completion_get(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -745,6 +546,7 @@ def test_completion_get_env_oyaml(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -764,6 +566,7 @@ def test_completion_get_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -783,6 +586,7 @@ def test_completion_get_svc_oyaml(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -799,6 +603,7 @@ def test_completion_build_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -815,6 +620,7 @@ def test_completion_build_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -834,6 +640,7 @@ def test_completion_logs_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -850,6 +657,7 @@ def test_completion_logs_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -869,6 +677,7 @@ def test_completion_shell_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -885,6 +694,7 @@ def test_completion_shell_svc_cnt_1(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
@@ -904,6 +714,7 @@ def test_completion_status_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()

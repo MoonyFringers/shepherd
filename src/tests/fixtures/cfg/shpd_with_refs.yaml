@@ -1,0 +1,236 @@
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+status: null
+env_templates:
+  - tag: nginx-postgres
+    factory: docker-compose
+    service_templates:
+      - template: nginx
+        tag: web
+      - template: postgres
+        tag: db
+    networks:
+      - tag: "#{env.tag}"
+        name: "#{net.tag}"
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: nginx
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+        labels:
+          env: production
+      - tag: postgres
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+        labels:
+          env: production
+service_templates:
+  - tag: nginx
+    factory: docker
+    inits: []
+    probes: []
+    start: null
+    containers:
+      - image: nginx:latest
+        tag: nginx
+        hostname: web-instance
+        container_name: web-instance
+        workdir: /usr/share/nginx/html
+        volumes:
+          - nginx:/usr/share/nginx/html
+        environment:
+          - NGINX_PORT=80
+        ports:
+          - 8080:80
+        networks:
+          - "#{env.tag}"
+        extra_hosts: []
+        subject_alternative_name: null
+        build: null
+    labels:
+      - com.example.type=web
+    ingress: true
+    empty_env: ""
+    properties: {}
+  - tag: postgres
+    factory: docker
+    inits: []
+    probes: []
+    start: null
+    containers:
+      - image: postgres:14
+        tag: postgres
+        hostname: db-instance
+        container_name: db-instance
+        workdir: /var/lib/postgresql/data
+        volumes:
+          - postgres:/var/lib/postgresql/data
+        environment:
+          - POSTGRES_PASSWORD=secret
+        ports:
+          - 5432:5432
+        networks:
+          - "#{env.tag}"
+        extra_hosts: []
+        subject_alternative_name: null
+        build: null
+    labels:
+      - com.example.type=db
+    ingress: false
+    empty_env: ""
+    properties: {}
+envs:
+  - template: nginx-postgres
+    factory: docker-compose
+    tag: foo
+    services:
+      - template: nginx
+        tag: web
+        factory: docker
+        inits: []
+        probes: []
+        start: null
+        containers:
+          - image: nginx:latest
+            tag: nginx
+            hostname: web-instance
+            container_name: web-instance
+            workdir: /usr/share/nginx/html
+            volumes:
+              - nginx:/usr/share/nginx/html
+            environment:
+              - NGINX_PORT=80
+            ports:
+              - 8080:80
+            networks:
+              - "#{env.tag}"
+            extra_hosts: []
+            subject_alternative_name: null
+            build: null
+        labels:
+          - com.example.type=web
+        ingress: true
+        empty_env: ""
+        service_class: "#{not.exist}"
+        properties:
+          com.example.type: "#{svc.tag}"
+        upstreams: []
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+      - template: postgres
+        upstreams: []
+        inits: []
+        probes: []
+        start: null
+        factory: docker
+        tag: db
+        service_class: "#{not.exist}"
+        containers:
+          - image: postgres:14
+            tag: postgres
+            hostname: db-instance
+            container_name: db-instance
+            workdir: /var/lib/postgresql/data
+            volumes:
+              - postgres:/var/lib/postgresql/data
+            environment:
+              - POSTGRES_PASSWORD=secret
+            ports:
+              - 5432:5432
+            networks:
+              - "#{env.tag}"
+            extra_hosts: []
+            subject_alternative_name: null
+            build: null
+        labels:
+          - com.example.type=db
+        ingress: false
+        empty_env: ""
+        properties:
+          com.example.type: "#{svc.tag}"
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    networks:
+      - tag: "#{env.tag}"
+        name: "#{net.tag}"
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: nginx
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+        labels:
+          env: production
+      - tag: postgres
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+        labels:
+          env: production
+    status:
+      active: true
+      archived: false
+      triggered_config: null

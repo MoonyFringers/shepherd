@@ -27,214 +27,9 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import values
+from test_util import read_fixture
 
 from shepctl import ShepherdMng, cli
-
-shpd_config = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-envs:
-  - template: default
-    factory: docker-compose
-    tag: test-1
-    services:
-      - template: default
-        factory: docker
-        tag: test-1
-        containers:
-          - image: busybox:stable-glibc
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-          - domain=${domain}
-        ingress: false
-        empty_env: null
-        properties: {}
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-2
-        containers:
-          - image: busybox:stable-glibc
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    networks:
-      - tag: default
-        name: envnet
-        external: true
-    volumes:
-      - tag: app_data_ext
-        external: true
-        name: nfs-1
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-  - template: default
-    factory: docker-compose
-    tag: test-2
-    services:
-      - template: default
-        factory: docker
-        tag: test-1
-        containers:
-          - image: busybox:stable-glibc
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - internal_net
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-2
-        containers:
-          - image: busybox:stable-glibc
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - internal_net
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    networks:
-      - tag: internal_net
-        external: false
-        driver: bridge
-        attachable: true
-        enable_ipv6: false
-        driver_opts:
-          com.docker.network.bridge.name: br-internal
-        ipam:
-          driver: default
-          config:
-            - subnet: 172.30.0.0/16
-              gateway: 172.30.0.1
-    volumes:
-      - tag: app_data
-        external: false
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: /srv/data
-        labels:
-          env: production
-    status:
-      active: false
-      archived: false
-      triggered_config: null
-"""
 
 docker_compose_ps_output = """
 {"Command":"\\\"docker-entrypoint.s…\\\"","CreatedAt":"2025-09-08 12:22:01 +0200 CEST","ExitCode":0,"Health":"","ID":"cc1200024a2a","Image":"postgres:14","Labels":"com.docker.compose.oneoff=False","LocalVolumes":"1","Mounts":"beppe_postgres","Name":"db-instance","Names":"db-instance","Networks":"beppe_beppe","Ports":"0.0.0.0:5432-\u003e5432/tcp, [::]:5432-\u003e5432/tcp","Project":"beppe","Publishers":[{"URL":"0.0.0.0","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"},{"URL":"::","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"}],"RunningFor":"About a minute ago","Service":"test-1-test-1","Size":"0B","State":"running","Status":"Up About a minute"}
@@ -249,6 +44,7 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
+    values = read_fixture("env_docker", "values.conf")
     config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
     os.environ["SHPD_CONF"] = str(config_file)
@@ -269,6 +65,7 @@ def test_env_render_compose_env_ext_net(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml"])
@@ -386,6 +183,7 @@ def test_env_render_compose_env_resolved(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-r"])
@@ -503,6 +301,7 @@ def test_env_render_target_compose_env_ext_net(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t"])
@@ -574,6 +373,7 @@ def test_env_render_target_compose_env_resolved(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t", "-r"])
@@ -645,6 +445,7 @@ def test_env_render_target_compose_env_int_net(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "env", "test-2", "-oyaml", "-t"])
@@ -728,6 +529,7 @@ def test_start_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
@@ -761,6 +563,7 @@ def test_stop_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
@@ -806,6 +609,7 @@ def test_reload_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
@@ -851,6 +655,7 @@ def test_status_env(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(

@@ -27,236 +27,9 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import values
+from test_util import read_fixture
 
 from shepctl import cli
-
-shpd_config_svc_default = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-envs:
-  - template: default
-    factory: docker-compose
-    tag: test-1
-    services:
-      - template: default
-        factory: docker
-        tag: test
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        containers:
-          - image: test-image:latest
-            build:
-              context_path: '#{cfg.envs_path}/#{env.tag}/build'
-              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment:
-              - POSTGRES_PASSWORD=psw
-              - POSTGRES_USER=sys
-              - POSTGRES_DB=docker
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-1
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        containers:
-          - image: test-image:latest
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-          - image: test-image:latest
-            build:
-              context_path: '#{cfg.envs_path}/#{env.tag}/build'
-              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-            tag: container-2
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-2
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        containers:
-          - image: test-image:latest
-            tag: container-1
-            build:
-              context_path: '#{cfg.envs_path}/#{env.tag}/build'
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-3
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        containers:
-          - image: test-image:latest
-            build:
-              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: default
-        factory: docker
-        tag: test-4
-        labels:
-          - com.example.label1=value1
-          - com.example.label2=value2
-        ingress: false
-        empty_env: null
-        properties: {}
-        containers:
-          - image: test-image:latest
-            build:
-              context_path: '#{cfg.envs_path}/#{env.tag}/build'
-              dockerfile_path: '#{cnt.build.context_path}/Dockerfile-Not-Exist'
-            tag: container-1
-            workdir: /test
-            volumes:
-              - /home/test/.ssh:/home/test/.ssh
-              - /etc/ssh:/etc/ssh
-            environment: []
-            ports:
-              - 80:80
-              - 443:443
-              - 8080:8080
-            networks:
-              - default
-            extra_hosts:
-              - host.docker.internal:host-gateway
-            subject_alternative_name: null
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-"""
 
 
 @pytest.fixture
@@ -266,6 +39,7 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     temp_home.mkdir()
 
     config_file = temp_home / ".shpd.conf"
+    values = read_fixture("svc_docker", "values.conf")
     config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
     envs = temp_home / "envs"
@@ -289,7 +63,8 @@ def test_svc_render_default_compose_service(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "svc", "test", "-oyaml"])
     assert result.exit_code == 0
@@ -349,7 +124,8 @@ def test_svc_render_default_compose_service_resolved(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-r"])
     assert result.exit_code == 0
@@ -409,7 +185,8 @@ def test_svc_render_target_compose_service(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-t"])
     assert result.exit_code == 0
@@ -455,7 +232,8 @@ def test_start_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -493,7 +271,8 @@ def test_start_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -531,7 +310,8 @@ def test_stop_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -569,7 +349,8 @@ def test_stop_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -607,7 +388,8 @@ def test_reload_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -645,7 +427,8 @@ def test_reload_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -683,7 +466,8 @@ def test_logs_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -721,7 +505,8 @@ def test_logs_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -759,7 +544,8 @@ def test_shell_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -797,7 +583,8 @@ def test_shell_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -835,7 +622,8 @@ def test_build_svc(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -861,7 +649,8 @@ def test_build_svc_cnt_2(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -887,7 +676,8 @@ def test_build_svc_missing_build(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -913,7 +703,8 @@ def test_build_svc_missing_build_dockerfile(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -939,7 +730,8 @@ def test_build_svc_missing_build_context_path(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -965,7 +757,8 @@ def test_build_svc_dockerfile_does_not_exist(
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_yaml.write_text(shpd_config_svc_default)
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
