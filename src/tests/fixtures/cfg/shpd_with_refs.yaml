@@ -31,7 +31,6 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-status: null
 env_templates:
   - tag: nginx-postgres
     factory: docker-compose
@@ -40,6 +39,7 @@ env_templates:
         tag: web
       - template: postgres
         tag: db
+    probes: []
     networks:
       - tag: "#{env.tag}"
         name: "#{net.tag}"
@@ -74,7 +74,6 @@ service_templates:
   - tag: nginx
     factory: docker
     inits: []
-    probes: []
     start: null
     containers:
       - image: nginx:latest
@@ -101,7 +100,6 @@ service_templates:
   - tag: postgres
     factory: docker
     inits: []
-    probes: []
     start: null
     containers:
       - image: postgres:14
@@ -134,7 +132,6 @@ envs:
         tag: web
         factory: docker
         inits: []
-        probes: []
         start: null
         containers:
           - image: nginx:latest
@@ -168,7 +165,6 @@ envs:
       - template: postgres
         upstreams: []
         inits: []
-        probes: []
         start: null
         factory: docker
         tag: db
@@ -200,6 +196,7 @@ envs:
           active: true
           archived: false
           triggered_config: null
+    probes: []
     networks:
       - tag: "#{env.tag}"
         name: "#{net.tag}"

@@ -31,7 +31,6 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-status: null
 envs:
   - template: default
     factory: docker-compose
@@ -41,7 +40,6 @@ envs:
         factory: docker
         tag: test-1
         inits: []
-        probes: []
         start: null
         containers:
           - image: busybox:stable-glibc
@@ -75,7 +73,6 @@ envs:
         factory: docker
         tag: test-2
         inits: []
-        probes: []
         start: null
         containers:
           - image: busybox:stable-glibc
@@ -124,7 +121,6 @@ envs:
         factory: docker
         tag: test-1
         inits: []
-        probes: []
         start: null
         containers:
           - image: busybox:stable-glibc
@@ -157,7 +153,6 @@ envs:
         factory: docker
         tag: test-2
         inits: []
-        probes: []
         start: null
         containers:
           - image: busybox:stable-glibc
@@ -186,6 +181,7 @@ envs:
           active: true
           archived: false
           triggered_config: null
+    probes: []
     networks:
       - tag: internal_net
         external: false

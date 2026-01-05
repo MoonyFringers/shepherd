@@ -1,0 +1,206 @@
+shpd_registry:
+  ftp_server: ${shpd_registry}
+  ftp_user: ${shpd_registry_ftp_usr}
+  ftp_psw: ${shpd_registry_ftp_psw}
+  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
+  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+host_inet_ip: ${host_inet_ip}
+domain: ${domain}
+dns_type: ${dns_type}
+ca:
+  country: ${ca_country}
+  state: ${ca_state}
+  locality: ${ca_locality}
+  organization: ${ca_org}
+  organizational_unit: ${ca_org_unit}
+  common_name: ${ca_cn}
+  email: ${ca_email}
+  passphrase: ${ca_passphrase}
+cert:
+  country: ${cert_country}
+  state: ${cert_state}
+  locality: ${cert_locality}
+  organization: ${cert_org}
+  organizational_unit: ${cert_org_unit}
+  common_name: ${cert_cn}
+  email: ${cert_email}
+  subject_alternative_names: []
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates:
+  - tag: default
+    factory: docker-compose
+    service_templates:
+      - template: default
+        tag: service-default
+    probes:
+      - tag: created
+        container:
+          tag: created
+          image: busybox:1.36
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes:
+            - postgres-data:/var/lib/postgresql/data
+          environment: []
+          ports: []
+          networks: []
+          extra_hosts: []
+          subject_alternative_name: null
+          build: null
+        script: |
+          sh -c '
+            if [ -f /var/lib/postgresql/data/PG_VERSION ]; then
+              exit 0;
+            else
+              exit 1;
+            fi
+          '
+        script_path: null
+      - tag: ready
+        container:
+          tag: ready
+          image: ${pg_image}
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - "#{env.tag}"
+          extra_hosts: []
+          subject_alternative_name: null
+          build: null
+        script: "sh -c 'pg_isready -h db -p 5432 -U sys -d docker'"
+        script_path: null
+      - tag: live
+        container: null
+        script: null
+        script_path: null
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+        driver: null
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes:
+      - tag: app_data
+        external: false
+        name: null
+        driver: local
+        driver_opts:
+          type: none
+          o: bind
+          device: ${volumes_path}/srv/data
+        labels:
+          env: production
+service_templates:
+  - tag: postgres
+    factory: docker
+    labels: []
+    properties: {}
+    empty_env: ${pg_empty_env}
+    ingress: false
+    containers:
+      - tag: pg
+        image: ${pg_image}
+        hostname: db
+        container_name: db
+        workdir: null
+        volumes:
+          - postgres-data:/var/lib/postgresql/data
+        environment:
+          - POSTGRES_PASSWORD=test
+          - POSTGRES_USER=sys
+          - POSTGRES_DB=docker
+        ports:
+          - 5432:${pg_listener_port}
+        networks:
+          - "#{env.tag}"
+        extra_hosts: []
+        subject_alternative_name: null
+        build: null
+    inits:
+      - tag: create-docker-user
+        container:
+          tag: create-docker-user
+          image: ${pg_image}
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes: []
+          environment:
+            - USERNAME=docker
+            - PASSWORD=test
+          ports: []
+          networks:
+            - "#{env.tag}"
+          extra_hosts: []
+          subject_alternative_name: null
+          build: null
+        script: "sh -c 'echo init ok'"
+        script_path: null
+        when_probes:
+          - ready
+    start:
+      when_probes:
+        - sample-1-test-probe
+envs:
+  - template: default
+    factory: docker-compose
+    tag: sample-1
+    services:
+      - template: postgres
+        factory: docker
+        tag: db
+        service_class: null
+        labels: []
+        ingress: null
+        empty_env: null
+        properties: {}
+        upstreams: []
+        containers:
+          - image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
+            tag: pg
+            hostname: null
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: null
+            ports: []
+            networks: []
+            extra_hosts: []
+            subject_alternative_name: null
+            build: null
+        inits: []
+        start:
+          when_probes:
+            - sample-1-test-probe
+        status:
+          active: true
+          archived: false
+          triggered_config: null
+    probes: []
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+        driver: null
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+    volumes: []
+    status:
+      active: true
+      archived: false
+      triggered_config: null

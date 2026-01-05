@@ -81,6 +81,8 @@ services:
   tag: test-1
   service_class: null
   upstreams: []
+  inits: []
+  start: null
   containers:
   - image: busybox:stable-glibc
     build: null
@@ -117,6 +119,8 @@ services:
   tag: test-2
   service_class: null
   upstreams: []
+  inits: []
+  start: null
   containers:
   - image: busybox:stable-glibc
     tag: container-1
@@ -147,6 +151,7 @@ services:
     active: true
     archived: false
     triggered_config: null
+probes: []
 networks:
 - tag: default
   name: envnet
@@ -199,6 +204,8 @@ services:
   tag: test-1
   service_class: null
   upstreams: []
+  inits: []
+  start: null
   containers:
   - image: busybox:stable-glibc
     tag: container-1
@@ -235,6 +242,8 @@ services:
   tag: test-2
   service_class: null
   upstreams: []
+  inits: []
+  start: null
   containers:
   - image: busybox:stable-glibc
     build: null
@@ -265,6 +274,7 @@ services:
     active: true
     archived: false
     triggered_config: null
+probes: []
 networks:
 - tag: default
   name: envnet

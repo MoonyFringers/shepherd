@@ -31,11 +31,11 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-status: null
 envs:
   - template: default
     factory: docker-compose
     tag: test-1
+    probes: []
     services:
       - template: default
         factory: docker
@@ -47,7 +47,6 @@ envs:
         empty_env: null
         properties: {}
         inits: []
-        probes: []
         containers:
           - image: test-image:latest
             build:
@@ -85,7 +84,6 @@ envs:
         empty_env: null
         properties: {}
         inits: []
-        probes: []
         containers:
           - image: test-image:latest
             tag: container-1
@@ -136,7 +134,6 @@ envs:
         empty_env: null
         properties: {}
         inits: []
-        probes: []
         containers:
           - image: test-image:latest
             tag: container-1
@@ -170,7 +167,6 @@ envs:
         empty_env: null
         properties: {}
         inits: []
-        probes: []
         containers:
           - image: test-image:latest
             build:
@@ -204,7 +200,6 @@ envs:
         empty_env: null
         properties: {}
         inits: []
-        probes: []
         containers:
           - image: test-image:latest
             build:

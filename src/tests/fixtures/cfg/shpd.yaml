@@ -31,13 +31,13 @@ cert:
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
-status: null
 env_templates:
   - tag: default
     factory: docker-compose
     service_templates:
       - template: default
         tag: service-default
+    probes: []
     networks:
       - tag: shpdnet
         name: envnet
@@ -62,7 +62,6 @@ service_templates:
   - tag: oracle
     factory: docker
     inits: []
-    probes: []
     start: null
     containers:
       - image: ${ora_image}
@@ -93,7 +92,6 @@ service_templates:
   - tag: postgres
     factory: docker
     inits: []
-    probes: []
     start: null
     containers:
       - image: ${pg_image}
@@ -127,7 +125,6 @@ envs:
       - template: postgres
         factory: docker
         inits: []
-        probes: []
         start: null
         containers:
           - image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
@@ -186,7 +183,6 @@ envs:
         tag: traefik-1
         service_class: null
         inits: []
-        probes: []
         start: null
         containers:
           - image: ""
@@ -215,7 +211,6 @@ envs:
         tag: primary
         service_class: null
         inits: []
-        probes: []
         start: null
         containers:
           - image: ""
@@ -246,7 +241,6 @@ envs:
         tag: poke
         service_class: null
         inits: []
-        probes: []
         start: null
         containers:
           - image: ""
@@ -273,6 +267,7 @@ envs:
           active: true
           archived: false
           triggered_config: null
+    probes: []
     networks:
       - tag: shpdnet
         name: envnet

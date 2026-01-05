@@ -450,3 +450,91 @@ def test_store_config_with_refs_with_real_files():
         for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+
+@pytest.mark.cfg
+def test_load_config_parses_lifecycle_sections(
+    mocker: MockerFixture,
+):
+    """
+    Parse coverage for:
+      - service_templates[].init / start
+      - envs[].services[].start
+    """
+
+    mocker.patch.dict(
+        os.environ,
+        {
+            "ora_container_name": "ora-cnt-1",
+            "ora_hostname": "ora-host",
+        },
+    )
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd_lifecycle.yaml")
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    config: Config = cMng.load_config()
+    config.set_resolved()
+
+    env_templates = config.env_templates
+    assert env_templates
+
+    # probes
+    pg_env_tpl = env_templates[0]
+    assert pg_env_tpl.probes is not None
+    assert len(pg_env_tpl.probes) == 3
+
+    created = next((p for p in pg_env_tpl.probes if p.tag == "created"), None)
+    ready = next((p for p in pg_env_tpl.probes if p.tag == "ready"), None)
+    live = next((p for p in pg_env_tpl.probes if p.tag == "live"), None)
+
+    assert created is not None
+    assert created.container is not None
+    assert created.container.image == "busybox:1.36"
+    assert created.script is not None
+    assert created.script_path is None
+
+    assert ready is not None
+    assert ready.container is not None
+    assert ready.script == "sh -c 'pg_isready -h db -p 5432 -U sys -d docker'"
+
+    assert live is not None
+    assert live.container is None
+    assert live.script is None
+    assert live.script_path is None
+
+    svc_templates = config.service_templates
+    assert svc_templates
+    pg_tpl = next((s for s in svc_templates if s.tag == "postgres"), None)
+    assert pg_tpl is not None
+
+    # inits
+    assert pg_tpl.inits is not None
+    assert len(pg_tpl.inits) == 1
+    init0 = pg_tpl.inits[0]
+    assert init0.tag == "create-docker-user"
+    assert init0.container is not None
+    assert init0.script == "sh -c 'echo init ok'"
+    assert init0.script_path is None
+    assert init0.when_probes == ["ready"]
+
+    # start
+    assert pg_tpl.start is not None
+    assert pg_tpl.start.when_probes == ["sample-1-test-probe"]
+
+    assert config.envs
+    env0 = config.envs[0]
+    assert env0.services
+    db_svc = next((s for s in env0.services if s.tag == "db"), None)
+    assert db_svc is not None
+
+    assert db_svc.start is not None
+    assert db_svc.start.when_probes == ["sample-1-test-probe"]
