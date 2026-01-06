@@ -169,3 +169,9 @@ python3 src/build.py [options]
     ```bash
     python3 src/build.py --version
     ```
+
+## Releasing
+
+For instructions on how to cut a new release, generate changelogs, and publish
+artifacts, please refer to the [Release Process](release-process.md)
+documentation.
