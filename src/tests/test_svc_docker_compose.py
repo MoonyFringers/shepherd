@@ -111,7 +111,7 @@ def test_svc_render_default_compose_service(
         "status:\n"
         "  active: true\n"
         "  archived: false\n"
-        "  triggered_config: null\n\n"
+        "  rendered_config: null\n\n"
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
@@ -174,7 +174,7 @@ def test_svc_render_default_compose_service_resolved(
         "status:\n"
         "  active: true\n"
         "  archived: false\n"
-        "  triggered_config: null\n\n"
+        "  rendered_config: null\n\n"
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)

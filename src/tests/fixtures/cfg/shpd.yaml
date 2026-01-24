@@ -177,7 +177,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: traefik
         factory: docker
         tag: traefik-1
@@ -205,7 +205,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: custom-1
         factory: docker
         tag: primary
@@ -235,7 +235,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: nodejs
         factory: docker
         tag: poke
@@ -266,7 +266,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     probes: []
     networks:
       - tag: shpdnet
@@ -291,4 +291,4 @@ envs:
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

@@ -354,20 +354,40 @@ class Resolvable:
 @dataclass
 class EntityStatus(Resolvable):
     """
-    Represents the status of an entity.
+    Represents the lifecycle and activation status of an entity.
 
-    - `active`: Whether this entity should be considered in
+    This class captures both static flags (e.g. archival state) and
+    runtime-derived information used during orchestration.
+
+    Field semantics:
+
+    - `active`:
+      Indicates whether this entity is eligible to participate in
       start/stop commands.
-      (Note: this is *not* the runtime state, which is queried dynamically.)
-    - `archived`: Marks the entity as archived (e.g., not used anymore).
-    - `triggered_config`: The rendered configuration for the target engine
-      (e.g., Docker Compose). This field is populated on `start` and
-      cleared on `stop`.
+      Note: this flag does *not* represent the actual runtime state,
+      which is evaluated dynamically by the target engine.
+
+    - `archived`:
+      Marks the entity as archived (e.g. deprecated or no longer in use).
+      Archived entities are typically ignored by orchestration logic.
+
+      The special probe identifier `base` is reserved and is guaranteed
+      to be present. It always evaluates to `true` and represents the
+      unconditional activation fallback.
+
+      When a probe evaluates to `true`, the corresponding configuration
+      entry is selected and may be started.
+
+    - `rendered_config`:
+      The rendered, engine-specific configuration (e.g. Docker Compose)
+      associated with the entity. This field is populated during `start`
+      and cleared on `stop`. The rendered configuration reflects the
+      configuration selected by the first successful probe.
     """
 
     active: bool = False
     archived: bool = False
-    triggered_config: Optional[str] = None
+    rendered_config: Optional[dict[str, str]] = None
 
 
 @dataclass
@@ -748,9 +768,9 @@ def parse_config(yaml_str: str) -> Config:
 
     def parse_status(item: Any) -> EntityStatus:
         return EntityStatus(
-            active=item["active"],
-            archived=item["archived"],
-            triggered_config=item.get("triggered_config"),
+            active=item.get("active", False),
+            archived=item.get("archived", False),
+            rendered_config=item.get("rendered_config"),
         )
 
     def parse_upstream(item: Any) -> UpstreamCfg:

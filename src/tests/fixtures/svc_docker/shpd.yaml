@@ -73,7 +73,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-1
@@ -123,7 +123,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-2
@@ -156,7 +156,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-3
@@ -189,7 +189,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-4
@@ -223,8 +223,8 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

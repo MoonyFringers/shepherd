@@ -225,7 +225,7 @@ def test_load_config(mocker: MockerFixture):
     assert config.staging_area.images_path == "${test_path}/sa_images"
     assert config.envs[0].status.archived is False
     assert config.envs[0].status.active is True
-    assert config.envs[0].status.triggered_config is None
+    assert config.envs[0].status.rendered_config is None
 
 
 @pytest.mark.cfg

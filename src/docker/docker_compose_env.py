@@ -76,23 +76,26 @@ class DockerComposeEnv(Environment):
     def start(self):
         """Start the environment."""
         super().start()
-        if self.envCfg.status.triggered_config:
-            run_compose(self.envCfg.status.triggered_config, "up", "-d")
+        rendered_map = self.envCfg.status.rendered_config
+        if rendered_map and "ungated" in rendered_map:
+            run_compose(rendered_map["ungated"], "up", "-d")
 
     @override
     def stop(self):
         """Halt the environment."""
-        if self.envCfg.status.triggered_config:
-            run_compose(self.envCfg.status.triggered_config, "down")
+        rendered_map = self.envCfg.status.rendered_config
+        if rendered_map and "ungated" in rendered_map:
+            run_compose(rendered_map["ungated"], "down")
 
     @override
     def reload(self):
         """Reload the environment."""
-        if self.envCfg.status.triggered_config:
-            run_compose(self.envCfg.status.triggered_config, "restart")
+        rendered_map = self.envCfg.status.rendered_config
+        if rendered_map and "ungated" in rendered_map:
+            run_compose(rendered_map["ungated"], "restart")
 
     @override
-    def render_target(self, resolved: bool = False) -> str:
+    def render_target(self, resolved: bool = False) -> dict[str, str]:
         """
         Render the full docker-compose YAML configuration for the environment.
 
@@ -165,7 +168,11 @@ class DockerComposeEnv(Environment):
 
                     compose_config["volumes"][vol.tag] = vol_config
 
-            return yaml.dump(compose_config, sort_keys=False)
+            rendered_yaml = yaml.dump(compose_config, sort_keys=False)
+
+            # New model: return probe-keyed map
+            return {"ungated": rendered_yaml}
+
         finally:
             if changed_state:
                 if was_resolved:
@@ -173,15 +180,13 @@ class DockerComposeEnv(Environment):
                 else:
                     self.envCfg.set_unresolved()
 
-    @override
     def status(self) -> list[dict[str, str]]:
         """Get environment status (list of services with state)."""
 
-        yaml = (
-            self.envCfg.status.triggered_config
-            if self.envCfg.status.triggered_config
-            else self.render_target()
-        )
+        rendered_map = self.envCfg.status.rendered_config
+        yaml = rendered_map.get("ungated") if rendered_map else None
+        if not yaml:
+            yaml = self.render_target()["ungated"]
 
         result = run_compose(yaml, "ps", "--format", "json", capture=True)
         stdout_str = result.stdout.strip()

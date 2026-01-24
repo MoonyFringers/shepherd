@@ -113,7 +113,7 @@ services:
   status:
     active: true
     archived: false
-    triggered_config: null
+    rendered_config: null
 - template: default
   factory: docker
   tag: test-2
@@ -150,7 +150,7 @@ services:
   status:
     active: true
     archived: false
-    triggered_config: null
+    rendered_config: null
 probes: []
 networks:
 - tag: default
@@ -171,7 +171,7 @@ volumes:
 status:
   active: true
   archived: false
-  triggered_config: null
+  rendered_config: null
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
@@ -236,7 +236,7 @@ services:
   status:
     active: true
     archived: false
-    triggered_config: null
+    rendered_config: null
 - template: default
   factory: docker
   tag: test-2
@@ -273,7 +273,7 @@ services:
   status:
     active: true
     archived: false
-    triggered_config: null
+    rendered_config: null
 probes: []
 networks:
 - tag: default
@@ -294,7 +294,7 @@ volumes:
 status:
   active: true
   archived: false
-  triggered_config: null
+  rendered_config: null
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
@@ -561,7 +561,7 @@ def test_start_env(
     assert env
     assert env.status.active is True
     assert env.status.archived is False
-    assert env.status.triggered_config
+    assert env.status.rendered_config
 
 
 @pytest.mark.docker
@@ -607,7 +607,7 @@ def test_stop_env(
     assert env
     assert env.status.active is True
     assert env.status.archived is False
-    assert env.status.triggered_config is None
+    assert env.status.rendered_config is None
 
 
 @pytest.mark.docker
@@ -653,7 +653,7 @@ def test_reload_env(
     assert env
     assert env.status.active is True
     assert env.status.archived is False
-    assert env.status.triggered_config
+    assert env.status.rendered_config
 
 
 @pytest.mark.docker

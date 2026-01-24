@@ -73,7 +73,7 @@ class Environment(ABC):
         return self.envCfg.get_yaml(resolved)
 
     @abstractmethod
-    def render_target(self, resolved: bool) -> str:
+    def render_target(self, resolved: bool) -> dict[str, str]:
         """
         Render the environment configuration in the target system.
         """
@@ -339,7 +339,7 @@ class EnvironmentMng:
     def start_env(self, envCfg: EnvironmentCfg):
         """Start an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        env.envCfg.status.triggered_config = env.render_target(True)
+        env.envCfg.status.rendered_config = env.render_target(True)
         env.sync_config()
         env.start()
         Util.print(f"Started environment: {env.envCfg.tag}")
@@ -348,14 +348,14 @@ class EnvironmentMng:
         """Halt an environment."""
         env = self.get_environment_from_cfg(envCfg)
         env.stop()
-        env.envCfg.status.triggered_config = None
+        env.envCfg.status.rendered_config = None
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")
 
     def reload_env(self, envCfg: EnvironmentCfg):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        if not env.envCfg.status.triggered_config:
+        if not env.envCfg.status.rendered_config:
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )
@@ -370,7 +370,7 @@ class EnvironmentMng:
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
-                return env.render_target(resolved)
+                return env.render_target(resolved)["ungated"]
             return env.render(resolved)
         return None
 

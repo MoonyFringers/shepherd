@@ -188,7 +188,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     probes: []
     networks:
       - tag: shpdnet
@@ -203,4 +203,4 @@ envs:
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

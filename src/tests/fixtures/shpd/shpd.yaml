@@ -99,8 +99,8 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

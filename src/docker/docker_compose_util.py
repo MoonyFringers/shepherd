@@ -26,7 +26,7 @@ from util import Util
 def run_compose(
     yaml: str, *args: str, capture: bool = False
 ) -> subprocess.CompletedProcess[str]:
-    """Run a docker compose command with the triggered_config YAML."""
+    """Run a docker compose command with the rendered_config YAML."""
 
     with tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False) as tmp:
         tmp.write(yaml)

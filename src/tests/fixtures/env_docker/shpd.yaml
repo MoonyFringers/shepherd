@@ -68,7 +68,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-2
@@ -100,7 +100,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     networks:
       - tag: default
         name: envnet
@@ -112,7 +112,7 @@ envs:
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null
   - template: default
     factory: docker-compose
     tag: test-2
@@ -148,7 +148,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: default
         factory: docker
         tag: test-2
@@ -180,7 +180,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     probes: []
     networks:
       - tag: internal_net
@@ -208,4 +208,4 @@ envs:
     status:
       active: false
       archived: false
-      triggered_config: null
+      rendered_config: null

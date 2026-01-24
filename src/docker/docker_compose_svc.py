@@ -65,30 +65,9 @@ class DockerComposeSvc(Service):
             services_def: dict[str, Any] = {"services": {}}
 
             for container in self.svcCfg.containers:
-                service_def: dict[str, Any] = {}
-                if container.image:
-                    service_def["image"] = container.image
-                if container.run_hostname:
-                    service_def["hostname"] = container.run_hostname
-                if container.run_container_name:
-                    service_def["container_name"] = container.run_container_name
-                if container.workdir:
-                    service_def["working_dir"] = container.workdir
-                if container.volumes:
-                    service_def["volumes"] = container.volumes
-                if container.environment:
-                    service_def["environment"] = container.environment
-                if container.ports:
-                    service_def["ports"] = container.ports
-                if container.networks:
-                    service_def["networks"] = container.networks
-                if container.extra_hosts:
-                    service_def["extra_hosts"] = container.extra_hosts
-                if self.svcCfg.labels:
-                    service_def["labels"] = self.svcCfg.labels
-                services_def["services"][
-                    container.run_container_name
-                ] = service_def
+                services_def["services"][container.run_container_name] = (
+                    self.render_container_target(container)
+                )
 
             return yaml.dump(services_def, sort_keys=False)
 
@@ -98,6 +77,34 @@ class DockerComposeSvc(Service):
                     self.envCfg.set_resolved()
                 else:
                     self.envCfg.set_unresolved()
+
+    @override
+    def render_container_target(self, cnt: ContainerCfg) -> dict[str, Any]:
+        """
+        Render the container configuration in the target system.
+        """
+        container_def: dict[str, Any] = {}
+        if cnt.image:
+            container_def["image"] = cnt.image
+        if cnt.run_hostname:
+            container_def["hostname"] = cnt.run_hostname
+        if cnt.run_container_name:
+            container_def["container_name"] = cnt.run_container_name
+        if cnt.workdir:
+            container_def["working_dir"] = cnt.workdir
+        if cnt.volumes:
+            container_def["volumes"] = cnt.volumes
+        if cnt.environment:
+            container_def["environment"] = cnt.environment
+        if cnt.ports:
+            container_def["ports"] = cnt.ports
+        if cnt.networks:
+            container_def["networks"] = cnt.networks
+        if cnt.extra_hosts:
+            container_def["extra_hosts"] = cnt.extra_hosts
+        if self.svcCfg.labels:
+            container_def["labels"] = self.svcCfg.labels
+        return container_def
 
     def _build_one_container(self, container: ContainerCfg) -> None:
         """Validate config and build a single container."""
@@ -152,7 +159,10 @@ class DockerComposeSvc(Service):
     @override
     def start(self, cnt_tag: Optional[str] = None):
         """Start the service."""
-        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+        rendered_map = self.envCfg.status.rendered_config
+        rendered = rendered_map.get("ungated") if rendered_map else None
+
+        if rendered and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -162,15 +172,16 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        self.envCfg.status.triggered_config,
+                        rendered,
                         "up",
                         "-d",
                         container.run_container_name or "",
                     )
                 return
+
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    self.envCfg.status.triggered_config,
+                    rendered,
                     "up",
                     "-d",
                     container.run_container_name or "",
@@ -183,7 +194,10 @@ class DockerComposeSvc(Service):
     @override
     def stop(self, cnt_tag: Optional[str] = None):
         """Stop the service."""
-        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+        rendered_map = self.envCfg.status.rendered_config
+        rendered = rendered_map.get("ungated") if rendered_map else None
+
+        if rendered and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -193,14 +207,15 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        self.envCfg.status.triggered_config,
+                        rendered,
                         "stop",
                         container.run_container_name or "",
                     )
                 return
+
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    self.envCfg.status.triggered_config,
+                    rendered,
                     "stop",
                     container.run_container_name or "",
                 )
@@ -212,7 +227,10 @@ class DockerComposeSvc(Service):
     @override
     def reload(self, cnt_tag: Optional[str] = None):
         """Reload the service."""
-        if self.envCfg.status.triggered_config and self.svcCfg.containers:
+        rendered_map = self.envCfg.status.rendered_config
+        rendered = rendered_map.get("ungated") if rendered_map else None
+
+        if rendered and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -222,14 +240,15 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        self.envCfg.status.triggered_config,
+                        rendered,
                         "restart",
                         container.run_container_name or "",
                     )
                 return
+
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    self.envCfg.status.triggered_config,
+                    rendered,
                     "restart",
                     container.run_container_name or "",
                 )
@@ -241,7 +260,10 @@ class DockerComposeSvc(Service):
     @override
     def get_stdout(self, cnt_tag: Optional[str] = None):
         """Show the service stdout."""
-        if self.envCfg.status.triggered_config:
+        rendered_map = self.envCfg.status.rendered_config
+        rendered = rendered_map.get("ungated") if rendered_map else None
+
+        if rendered:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -251,13 +273,13 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        self.envCfg.status.triggered_config,
+                        rendered,
                         "logs",
                         container.run_container_name or "",
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
-                    self.envCfg.status.triggered_config,
+                    rendered,
                     "logs",
                     self.svcCfg.containers[0].run_container_name or "",
                 )
@@ -274,7 +296,10 @@ class DockerComposeSvc(Service):
     @override
     def get_shell(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
-        if self.envCfg.status.triggered_config:
+        rendered_map = self.envCfg.status.rendered_config
+        rendered = rendered_map.get("ungated") if rendered_map else None
+
+        if rendered:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -284,14 +309,14 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        self.envCfg.status.triggered_config,
+                        rendered,
                         "exec",
                         container.run_container_name or "",
                         "sh",
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
-                    self.envCfg.status.triggered_config,
+                    rendered,
                     "exec",
                     self.svcCfg.containers[0].run_container_name or "",
                     "sh",

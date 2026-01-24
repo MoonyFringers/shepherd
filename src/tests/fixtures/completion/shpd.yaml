@@ -159,7 +159,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: t1
         factory: docker
         tag: white
@@ -184,11 +184,11 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null
   - template: default
     factory: docker-compose
     tag: test-2
@@ -217,8 +217,8 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     status:
       active: false
       archived: false
-      triggered_config: null
+      rendered_config: null
