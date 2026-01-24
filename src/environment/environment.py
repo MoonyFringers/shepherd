@@ -20,11 +20,22 @@ from __future__ import annotations
 
 import os
 from abc import ABC, abstractmethod
-from typing import Optional
+from dataclasses import dataclass
+from typing import Any, Optional
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
+
+
+@dataclass
+class ProbeRunResult:
+    tag: str
+    exit_code: int
+    stdout: str = ""
+    stderr: str = ""
+    duration_ms: Optional[int] = None
+    timed_out: bool = False
 
 
 class Environment(ABC):
@@ -79,6 +90,53 @@ class Environment(ABC):
         """
         pass
 
+    def render_probes(
+        self, probe_tag: Optional[str], resolved: bool
+    ) -> Optional[str]:
+        """
+        Render the environment probes configuration.
+        """
+        return self.envCfg.get_probes_yaml(probe_tag, resolved)
+
+    @abstractmethod
+    def render_probes_target(
+        self, probe_tag: Optional[str], resolved: bool
+    ) -> Optional[str]:
+        """
+        Render the environment probes configuration in the target system.
+        """
+        pass
+
+    def check_probes(
+        self,
+        probe_tag: Optional[str] = None,
+        fail_fast: bool = True,
+        timeout_seconds: Optional[int] = 120,
+    ) -> list[ProbeRunResult]:
+        """
+        Run environment probes synchronously against the running environment.
+
+        Semantics:
+          - If probe_tag is provided: run only that probe.
+          - Otherwise: run all probes (sequentially).
+          - fail_fast: stop at first failure.
+          - timeout_seconds: per-probe timeout.
+        """
+        return self.check_probes_impl(
+            probe_tag=probe_tag,
+            fail_fast=fail_fast,
+            timeout_seconds=timeout_seconds,
+        )
+
+    @abstractmethod
+    def check_probes_impl(
+        self,
+        probe_tag: Optional[str],
+        fail_fast: bool,
+        timeout_seconds: Optional[int],
+    ) -> list[ProbeRunResult]:
+        pass
+
     @abstractmethod
     def status(self) -> list[dict[str, str]]:
         """Get environment status."""
@@ -97,6 +155,7 @@ class Environment(ABC):
         """Return the directory for the environment with a given tag."""
         return os.path.join(self.configMng.config.envs_path, env_tag)
 
+    @abstractmethod
     def ensure_resources(self):
         """Ensure the environment resources are available."""
         pass
@@ -373,6 +432,176 @@ class EnvironmentMng:
                 return env.render_target(resolved)["ungated"]
             return env.render(resolved)
         return None
+
+    def render_probes(
+        self,
+        envCfg: EnvironmentCfg,
+        probe_tag: Optional[str],
+        target: bool,
+        resolved: bool,
+    ) -> Optional[str]:
+        """Render a probe configuration."""
+        env = self.get_environment_from_cfg(envCfg)
+        if target:
+            return env.render_probes_target(probe_tag, resolved)
+        return env.render_probes(probe_tag, resolved)
+
+    def check_probes(self, envCfg: EnvironmentCfg, probe_tag: Optional[str]):
+        """Check probes."""
+        env = self.get_environment_from_cfg(envCfg)
+
+        if not env.envCfg.status.rendered_config:
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+
+        results = env.check_probes(
+            probe_tag=probe_tag,
+            fail_fast=True,
+            timeout_seconds=120,
+        )
+
+        verbose = bool(self.cli_flags.get("verbose", False))
+        title = f"[white]{envCfg.tag}[/white] probes"
+
+        report = self.build_probe_report(results, verbose=verbose, title=title)
+        self.render_probe_report(report)
+
+        return results
+
+    # --- probe presentation policy ---
+
+    def _probe_status_key(self, r: ProbeRunResult) -> str:
+        if r.timed_out:
+            return "timeout"
+        if r.exit_code == 0:
+            return "ok"
+        return "failed"
+
+    def _probe_status_glyph(self, key: str) -> str:
+        return "✔" if key == "ok" else "✖"
+
+    def _probe_status_color_tag(self, key: str) -> str:
+        if key == "ok":
+            return "bold green"
+        if key == "timeout":
+            return "bold yellow"
+        return "bold red"
+
+    def _fmt_duration_ms(self, ms: Optional[int]) -> str:
+        return "?" if ms is None else f"{ms} ms"
+
+    def probe_exit_code(self, results: list[ProbeRunResult]) -> int:
+        saw_failed = False
+        for r in results:
+            k = self._probe_status_key(r)
+            if k == "timeout":
+                return 2
+            if k == "failed":
+                saw_failed = True
+        return 1 if saw_failed else 0
+
+    def build_probe_report(
+        self,
+        results: list[ProbeRunResult],
+        *,
+        verbose: bool,
+        title: str,
+    ) -> dict[str, Any]:
+        """
+        Returns a probe 'view model' as plain dicts:
+          {
+            "title": str,
+            "rows": [[probe, status_markup, duration], ...],
+            "summary": [("OK","1"), ("FAILED","0"), ("TIMEOUT","0")],
+            "single_ok_stdout": "first line …" | "",
+            "panels": [{"title":..., "body":..., "border_style":...}, ...]
+          }
+        """
+        rows: list[list[str]] = []
+        panels: list[dict[str, Any]] = []
+
+        ok = failed = timeout = 0
+
+        for r in results:
+            key = self._probe_status_key(r)
+            if key == "ok":
+                ok += 1
+            elif key == "timeout":
+                timeout += 1
+            else:
+                failed += 1
+
+            glyph = self._probe_status_glyph(key)
+            label = key.upper()
+            color = self._probe_status_color_tag(key)
+            status_markup = f"[{color}]{glyph} {label}[/{color}]"
+
+            rows.append(
+                [r.tag, status_markup, self._fmt_duration_ms(r.duration_ms)]
+            )
+
+            want_details = verbose or key in ("failed", "timeout")
+            if want_details:
+                out = (r.stdout or "").strip("\n")
+                err = (r.stderr or "").strip("\n")
+
+                body_parts: list[str] = []
+                if out.strip():
+                    body_parts.append("--- stdout ---")
+                    body_parts.append(out)
+
+                if err.strip() and (verbose or key in ("failed", "timeout")):
+                    body_parts.append("--- stderr ---")
+                    body_parts.append(err)
+
+                if key != "ok":
+                    body_parts.append("--- meta ---")
+                    body_parts.append(f"exit_code: {r.exit_code}")
+                    body_parts.append(f"timed_out: {r.timed_out}")
+
+                body = "\n".join(body_parts).strip()
+                if body:
+                    border = (
+                        "green"
+                        if key == "ok"
+                        else ("yellow" if key == "timeout" else "red")
+                    )
+                    panels.append(
+                        {
+                            "title": f"{r.tag} ({label})",
+                            "body": body,
+                            "border_style": border,
+                        }
+                    )
+        return {
+            "title": title,
+            "rows": rows,
+            "summary": [
+                ("OK", str(ok)),
+                ("FAILED", str(failed)),
+                ("TIMEOUT", str(timeout)),
+            ],
+            "panels": panels,
+        }
+
+    def render_probe_report(self, report: dict[str, Any]):
+        Util.render_table(
+            title=report["title"],
+            columns=[
+                {"header": "Probe", "style": "white", "no_wrap": True},
+                {"header": "Status", "no_wrap": True},
+                {
+                    "header": "Duration",
+                    "justify": "right",
+                    "style": "white",
+                    "no_wrap": True,
+                },
+            ],
+            rows=report["rows"],
+        )
+        Util.render_kv_summary(report["summary"])
+        Util.render_panels(panels=report.get("panels") or [])
 
     def status_env(self, envCfg: EnvironmentCfg):
         """Get environment status."""

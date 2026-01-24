@@ -682,6 +682,52 @@ class EnvironmentCfg(Resolvable):
             else:
                 self.set_unresolved()
 
+    def get_probes_yaml(
+        self, probe_tag: Optional[str] = None, resolved: bool = False
+    ) -> Optional[str]:
+        """
+        Return the YAML representation of the environment probes configuration.
+
+        Args:
+            probe_tag: Optional probe tag to filter probes.
+            resolved:  If True, ensure placeholders are resolved before dumping.
+
+        Returns:
+            YAML string or None if no probes (or no matching probes) exist.
+        """
+        if not self.probes:
+            return None
+
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            probes = self.probes
+            if probe_tag is not None:
+                probes = [p for p in probes if p.tag == probe_tag]
+                if not probes:
+                    return None
+
+            data = cfg_asdict(probes)
+            if not data:
+                return None
+
+            config: dict[str, Any] = {
+                "probes": data,
+            }
+
+            return yaml.dump(config, sort_keys=False)
+
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
+
 
 @dataclass
 class StagingAreaCfg(Resolvable):
@@ -1416,6 +1462,16 @@ class ConfigMng:
         """
         if env.services:
             return sorted({svc.tag for svc in env.services if svc.tag})
+        return []
+
+    def get_probe_tags(self, env: EnvironmentCfg) -> list[str]:
+        """
+        Retrieves all unique probe tags from the probe configurations.
+
+        :return: A list of unique probe tags.
+        """
+        if env.probes:
+            return sorted({probe.tag for probe in env.probes if probe.tag})
         return []
 
     def get_service(

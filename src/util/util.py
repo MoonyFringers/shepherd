@@ -22,14 +22,18 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Literal, Optional, Union
 
 import yaml
 from rich import box
 from rich.console import Console
+from rich.panel import Panel
 from rich.table import Table
 
 from .constants import Constants
+
+JustifyMethod = Literal["default", "left", "center", "right", "full"]
+ColumnJustify = Literal["left", "center", "right"]
 
 
 class Util:
@@ -114,9 +118,15 @@ class Util:
     @staticmethod
     def render_table(
         title: Optional[str],
-        columns: list[dict[str, str]],
-        rows: list[list[str]],
-    ):
+        columns: list[dict[str, Any]],
+        rows: list[list[Any]],
+        *,
+        box_style: Any = box.SIMPLE,
+        title_justify: JustifyMethod = "left",
+        title_style: str = "bold",
+        show_lines: bool = False,
+        expand: bool = False,
+    ) -> None:
         """
         Render a table using rich.
 
@@ -125,18 +135,33 @@ class Util:
             columns: list of dicts with keys:
                      - "header" (required): column name
                      - "style" (optional): rich style string
+                     - "justify" (optional): "left" | "right" | "center"
+                     - "no_wrap" (optional): bool (default True)
+                     - "ratio" (optional): int
+                     - "min_width" (optional): int
+                     - "max_width" (optional): int
             rows: list of row values (must match number of columns).
+                  Cells may be strings OR any Rich renderable (e.g., Text).
         """
         table = Table(
             title=title or "",
-            box=box.SIMPLE,
-            title_justify="left",
-            title_style="bold",
+            box=box_style,
+            title_justify=title_justify,
+            title_style=title_style,
+            show_lines=show_lines,
+            expand=expand,
         )
 
         for col in columns:
+            justify: ColumnJustify = col.get("justify", "left")
             table.add_column(
-                col["header"], style=col.get("style", ""), no_wrap=True
+                col["header"],
+                style=col.get("style", ""),
+                justify=justify,
+                no_wrap=col.get("no_wrap", True),
+                ratio=col.get("ratio", None),
+                min_width=col.get("min_width", None),
+                max_width=col.get("max_width", None),
             )
 
         for row in rows:
@@ -229,6 +254,48 @@ class Util:
                     )
 
         Util.console.print(table)
+
+    @staticmethod
+    def render_panels(
+        *,
+        panels: list[dict[str, Any]],
+        padding: tuple[int, int] = (1, 2),
+    ) -> None:
+        """
+        panels: [{ "title": str, "body": str, "border_style": str }]
+        """
+        for p in panels:
+            body = (p.get("body") or "").rstrip()
+            if not body:
+                continue
+            Util.console.print(
+                Panel(
+                    body,
+                    title=p.get("title") or "",
+                    border_style=p.get("border_style") or "white",
+                    padding=padding,
+                )
+            )
+
+    @staticmethod
+    def truncate_lines(s: str, max_lines: int = 1) -> str:
+        s = (s or "").strip("\n")
+        if not s:
+            return ""
+        lines = s.splitlines()
+        if len(lines) <= max_lines:
+            return s
+        return "\n".join(lines[:max_lines]) + " …"
+
+    @staticmethod
+    def render_kv_summary(items: list[tuple[str, str]]) -> None:
+        # generic compact line: "Summary: OK: 1  FAILED: 0  TIMEOUT: 0"
+        parts = ["Summary:"]
+        for k, v in items:
+            parts.append(f"{k}: {v}")
+        Util.console.print("  ".join(parts))
+
+    # Directory management and other utilities
 
     @staticmethod
     def ensure_dir(dir_path: str, desc: str, mode: int = 0o755):

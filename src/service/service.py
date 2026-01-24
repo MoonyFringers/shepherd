@@ -18,10 +18,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Optional
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
-from config.config import ContainerCfg
 
 
 class Service(ABC):
@@ -87,13 +86,6 @@ class Service(ABC):
     def render_target(self, resolved: bool) -> str:
         """
         Render the service configuration in the target system.
-        """
-        pass
-
-    @abstractmethod
-    def render_container_target(self, cnt: ContainerCfg) -> dict[str, Any]:
-        """
-        Render the container configuration in the target system.
         """
         pass
 

@@ -20,6 +20,7 @@ from typing import Optional, override
 
 from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
+from completion.completion_probe import CompletionProbeMng
 from completion.completion_svc import CompletionSvcMng
 from config import ConfigMng
 
@@ -28,7 +29,7 @@ class CompletionMng(AbstractCompletionMng):
 
     # Mapping of verbs to valid categories
     VERB_CATEGORIES = {
-        "get": ["env", "svc"],
+        "get": ["env", "svc", "probe"],
         "add": ["env", "svc"],
         "clone": ["env"],
         "rename": ["env"],
@@ -42,6 +43,7 @@ class CompletionMng(AbstractCompletionMng):
         "logs": ["auto-svc"],
         "shell": ["auto-svc"],
         "build": ["auto-svc"],
+        "check": ["probe"],
     }
 
     def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
@@ -49,6 +51,7 @@ class CompletionMng(AbstractCompletionMng):
         self.configMng = configMng
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
+        self.completionProbeMng = CompletionProbeMng(cli_flags, configMng)
 
     @property
     def VERBS(self) -> list[str]:
@@ -88,6 +91,8 @@ class CompletionMng(AbstractCompletionMng):
             return self.completionEnvMng
         if category == "svc":
             return self.completionSvcMng
+        if category == "probe":
+            return self.completionProbeMng
 
         return None
 

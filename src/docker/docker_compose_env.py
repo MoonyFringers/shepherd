@@ -19,16 +19,19 @@
 from __future__ import annotations
 
 import json
-from typing import Any, override
+import time
+from typing import Any, Optional, override
 
 import yaml
 
 from config import ConfigMng, EnvironmentCfg
+from config.config import ProbeCfg
 from environment import Environment
+from environment.environment import ProbeRunResult
 from service import ServiceFactory
 from util.util import Util
 
-from .docker_compose_util import run_compose
+from .docker_compose_util import render_container, run_compose
 
 
 class DockerComposeEnv(Environment):
@@ -78,21 +81,30 @@ class DockerComposeEnv(Environment):
         super().start()
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
-            run_compose(rendered_map["ungated"], "up", "-d")
+            run_compose(
+                rendered_map["ungated"],
+                "up",
+                "-d",
+                project_name=self.envCfg.tag,
+            )
 
     @override
     def stop(self):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
-            run_compose(rendered_map["ungated"], "down")
+            run_compose(
+                rendered_map["ungated"], "down", project_name=self.envCfg.tag
+            )
 
     @override
     def reload(self):
         """Reload the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
-            run_compose(rendered_map["ungated"], "restart")
+            run_compose(
+                rendered_map["ungated"], "restart", project_name=self.envCfg.tag
+            )
 
     @override
     def render_target(self, resolved: bool = False) -> dict[str, str]:
@@ -114,17 +126,16 @@ class DockerComposeEnv(Environment):
                 self.envCfg.set_unresolved()
                 changed_state = True
 
-            compose_config: dict[str, Any] = {
+            ungated_compose_config: dict[str, Any] = {
                 "name": self.envCfg.tag,
                 "services": {},
                 "networks": {},
                 "volumes": {},
             }
 
-            # --- Services ---
-            for svc in self.services:
-                svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
-                compose_config["services"].update(svc_yaml["services"])
+            gated_compose_config: dict[str, Any] = {
+                "ungated": ungated_compose_config,
+            }
 
             # --- Networks ---
             if self.envCfg.networks:
@@ -147,7 +158,7 @@ class DockerComposeEnv(Environment):
                         if net.ipam:
                             net_config["ipam"] = net.ipam
 
-                    compose_config["networks"][net.tag] = net_config
+                    ungated_compose_config["networks"][net.tag] = net_config
 
             # --- Volumes ---
             if self.envCfg.volumes:
@@ -166,12 +177,99 @@ class DockerComposeEnv(Environment):
                         if vol.labels:
                             vol_config["labels"] = vol.labels
 
-                    compose_config["volumes"][vol.tag] = vol_config
+                    ungated_compose_config["volumes"][vol.tag] = vol_config
 
-            rendered_yaml = yaml.dump(compose_config, sort_keys=False)
+            # --- Services ---
+            for svc in self.services:
+                when_probes = (
+                    svc.svcCfg.start.when_probes
+                    if svc.svcCfg.start and svc.svcCfg.start.when_probes
+                    else None
+                )
 
-            # New model: return probe-keyed map
-            return {"ungated": rendered_yaml}
+                probe_key = "|".join(when_probes) if when_probes else "ungated"
+
+                if probe_key not in gated_compose_config:
+                    gated_compose_config[probe_key] = {
+                        "name": self.envCfg.tag,
+                        "services": {},
+                    }
+                compose_config = gated_compose_config[probe_key]
+
+                svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
+                compose_config["services"].update(svc_yaml["services"])
+
+            # --- Render YAML ---
+            rendered_gated_map: dict[str, str] = {}
+            for probe_key, compose_config in gated_compose_config.items():
+                rendered_yaml = yaml.dump(compose_config, sort_keys=False)
+                rendered_gated_map[probe_key] = rendered_yaml
+
+            return rendered_gated_map
+        finally:
+            if changed_state:
+                if was_resolved:
+                    self.envCfg.set_resolved()
+                else:
+                    self.envCfg.set_unresolved()
+
+    def render_probe_service(
+        self, probe: ProbeCfg, labels: Optional[list[str]] = None
+    ) -> Optional[dict[str, Any]]:
+        """
+        Render a probe as a docker-compose service definition.
+        """
+        if not probe.container:
+            return None
+
+        svc = render_container(probe.container, labels)
+
+        if probe.script:
+            svc["command"] = probe.script
+
+        svc.setdefault("restart", "no")
+
+        return svc
+
+    @override
+    def render_probes_target(
+        self, probe_tag: Optional[str], resolved: bool
+    ) -> Optional[str]:
+        was_resolved = self.envCfg.is_resolved()
+        changed_state = False
+
+        if not self.envCfg.probes:
+            return None
+
+        try:
+            if resolved and not was_resolved:
+                self.envCfg.set_resolved()
+                changed_state = True
+            elif not resolved and was_resolved:
+                self.envCfg.set_unresolved()
+                changed_state = True
+
+            compose_config: dict[str, Any] = {
+                "name": self.envCfg.tag,
+                "services": {},
+            }
+            services_def: dict[str, Any] = compose_config["services"]
+
+            probes = self.envCfg.probes
+            if probe_tag is not None:
+                probes = [p for p in probes if p.tag == probe_tag]
+                if not probes:
+                    return None
+
+            for probe in probes:
+                svc = self.render_probe_service(probe, labels=None)
+                if svc:
+                    services_def[probe.tag] = svc
+
+            if not services_def:
+                return None
+
+            return yaml.dump(compose_config, sort_keys=False)
 
         finally:
             if changed_state:
@@ -179,6 +277,79 @@ class DockerComposeEnv(Environment):
                     self.envCfg.set_resolved()
                 else:
                     self.envCfg.set_unresolved()
+
+    @override
+    def check_probes_impl(
+        self,
+        probe_tag: Optional[str],
+        fail_fast: bool,
+        timeout_seconds: Optional[int],
+    ) -> list[ProbeRunResult]:
+        """Check probes in the environment."""
+        base_yaml = (
+            self.envCfg.status.rendered_config["ungated"]
+            if self.envCfg.status.rendered_config
+            else None
+        )
+        if not base_yaml:
+            return []
+
+        if not self.envCfg.probes:
+            return []
+
+        probes = self.envCfg.probes
+        if probe_tag is not None:
+            probes = [p for p in probes if p.tag == probe_tag]
+        if not probes:
+            return []
+
+        probes_yaml = self.render_probes_target(probe_tag=None, resolved=True)
+        if not probes_yaml:
+            return []
+
+        results: list[ProbeRunResult] = []
+
+        for p in probes:
+            probe_service = p.tag
+
+            started = time.time()
+            timed_out = False
+
+            # Execute probe container and capture its exit code/output
+            # --no-deps: do not start dependencies
+            # --rm: remove container after it exits
+            cp = run_compose(
+                [base_yaml, probes_yaml],
+                "run",
+                "--rm",
+                "--no-deps",
+                probe_service,
+                capture=True,
+                project_name=self.envCfg.tag,
+                timeout_seconds=timeout_seconds,
+            )
+
+            duration_ms = int((time.time() - started) * 1000)
+
+            # Timeout normalization
+            if cp.returncode == 124:
+                timed_out = True
+
+            res = ProbeRunResult(
+                tag=p.tag,
+                exit_code=cp.returncode,
+                stdout=cp.stdout or "",
+                stderr=cp.stderr or "",
+                duration_ms=duration_ms,
+                timed_out=timed_out,
+            )
+            results.append(res)
+
+            ok = (cp.returncode == 0) and not timed_out
+            if fail_fast and not ok:
+                break
+
+        return results
 
     def status(self) -> list[dict[str, str]]:
         """Get environment status (list of services with state)."""
@@ -188,7 +359,14 @@ class DockerComposeEnv(Environment):
         if not yaml:
             yaml = self.render_target()["ungated"]
 
-        result = run_compose(yaml, "ps", "--format", "json", capture=True)
+        result = run_compose(
+            yaml,
+            "ps",
+            "--format",
+            "json",
+            capture=True,
+            project_name=self.envCfg.tag,
+        )
         stdout_str = result.stdout.strip()
 
         services: list[dict[str, str]] = []

@@ -18,17 +18,15 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Optional, override
 
 import yaml
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
-from config.config import ContainerCfg
 from service import Service
 from util import Util
 
-from .docker_compose_util import build_docker_image, run_compose
+from .docker_compose_util import build_container, render_container, run_compose
 
 
 class DockerComposeSvc(Service):
@@ -66,7 +64,7 @@ class DockerComposeSvc(Service):
 
             for container in self.svcCfg.containers:
                 services_def["services"][container.run_container_name] = (
-                    self.render_container_target(container)
+                    render_container(container, self.svcCfg.labels)
                 )
 
             return yaml.dump(services_def, sort_keys=False)
@@ -79,66 +77,6 @@ class DockerComposeSvc(Service):
                     self.envCfg.set_unresolved()
 
     @override
-    def render_container_target(self, cnt: ContainerCfg) -> dict[str, Any]:
-        """
-        Render the container configuration in the target system.
-        """
-        container_def: dict[str, Any] = {}
-        if cnt.image:
-            container_def["image"] = cnt.image
-        if cnt.run_hostname:
-            container_def["hostname"] = cnt.run_hostname
-        if cnt.run_container_name:
-            container_def["container_name"] = cnt.run_container_name
-        if cnt.workdir:
-            container_def["working_dir"] = cnt.workdir
-        if cnt.volumes:
-            container_def["volumes"] = cnt.volumes
-        if cnt.environment:
-            container_def["environment"] = cnt.environment
-        if cnt.ports:
-            container_def["ports"] = cnt.ports
-        if cnt.networks:
-            container_def["networks"] = cnt.networks
-        if cnt.extra_hosts:
-            container_def["extra_hosts"] = cnt.extra_hosts
-        if self.svcCfg.labels:
-            container_def["labels"] = self.svcCfg.labels
-        return container_def
-
-    def _build_one_container(self, container: ContainerCfg) -> None:
-        """Validate config and build a single container."""
-        if not container.build:
-            Util.print_error_and_die(
-                f"Service '{self.svcCfg.tag}' "
-                f"container '{container.tag}' "
-                f"does not have a build configuration."
-            )
-
-        if build := container.build:
-            if not build.dockerfile_path:
-                Util.print_error_and_die(
-                    f"Service '{self.svcCfg.tag}' "
-                    f"container '{container.tag}' "
-                    f"build configuration is missing "
-                    f"a Dockerfile path."
-                )
-            if not build.context_path:
-                Util.print_error_and_die(
-                    f"Service '{self.svcCfg.tag}' "
-                    f"container '{container.tag}' "
-                    f"build configuration is missing "
-                    f"a build context path."
-                )
-
-            if build.dockerfile_path and build.context_path:
-                build_docker_image(
-                    Path(build.dockerfile_path),
-                    Path(build.context_path),
-                    container.image or "",
-                )
-
-    @override
     def build(self, cnt_tag: Optional[str] = None) -> None:
         """Build the service."""
         if cnt_tag:
@@ -149,12 +87,12 @@ class DockerComposeSvc(Service):
                     f"container named '{cnt_tag}'."
                 )
             if container:
-                self._build_one_container(container)
+                build_container(container)
             return
 
         containers = self.svcCfg.containers or []
         for container in containers:
-            self._build_one_container(container)
+            build_container(container)
 
     @override
     def start(self, cnt_tag: Optional[str] = None):
@@ -176,6 +114,7 @@ class DockerComposeSvc(Service):
                         "up",
                         "-d",
                         container.run_container_name or "",
+                        project_name=self.envCfg.tag,
                     )
                 return
 
@@ -185,6 +124,7 @@ class DockerComposeSvc(Service):
                     "up",
                     "-d",
                     container.run_container_name or "",
+                    project_name=self.envCfg.tag,
                 )
         else:
             Util.print_error_and_die(
@@ -210,6 +150,7 @@ class DockerComposeSvc(Service):
                         rendered,
                         "stop",
                         container.run_container_name or "",
+                        project_name=self.envCfg.tag,
                     )
                 return
 
@@ -218,6 +159,7 @@ class DockerComposeSvc(Service):
                     rendered,
                     "stop",
                     container.run_container_name or "",
+                    project_name=self.envCfg.tag,
                 )
         else:
             Util.print_error_and_die(
@@ -243,6 +185,7 @@ class DockerComposeSvc(Service):
                         rendered,
                         "restart",
                         container.run_container_name or "",
+                        project_name=self.envCfg.tag,
                     )
                 return
 
@@ -251,6 +194,7 @@ class DockerComposeSvc(Service):
                     rendered,
                     "restart",
                     container.run_container_name or "",
+                    project_name=self.envCfg.tag,
                 )
         else:
             Util.print_error_and_die(
@@ -276,12 +220,14 @@ class DockerComposeSvc(Service):
                         rendered,
                         "logs",
                         container.run_container_name or "",
+                        project_name=self.envCfg.tag,
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
                     rendered,
                     "logs",
                     self.svcCfg.containers[0].run_container_name or "",
+                    project_name=self.envCfg.tag,
                 )
             else:
                 Util.print_error_and_die(
@@ -313,6 +259,7 @@ class DockerComposeSvc(Service):
                         "exec",
                         container.run_container_name or "",
                         "sh",
+                        project_name=self.envCfg.tag,
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
@@ -320,6 +267,7 @@ class DockerComposeSvc(Service):
                     "exec",
                     self.svcCfg.containers[0].run_container_name or "",
                     "sh",
+                    project_name=self.envCfg.tag,
                 )
             else:
                 Util.print_error_and_die(
