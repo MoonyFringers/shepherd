@@ -464,6 +464,40 @@ class ContainerCfg(Resolvable):
 
 
 @dataclass
+class ProbeCfg(Resolvable):
+    """
+    Represents a service probe configuration.
+    """
+
+    tag: str
+    container: Optional[ContainerCfg] = None
+    script: Optional[str] = None
+    script_path: Optional[str] = None
+
+
+@dataclass
+class InitCfg(Resolvable):
+    """
+    Represents a service init configuration.
+    """
+
+    tag: str
+    container: Optional[ContainerCfg] = None
+    script: Optional[str] = None
+    script_path: Optional[str] = None
+    when_probes: Optional[list[str]] = None
+
+
+@dataclass
+class StartCfg(Resolvable):
+    """
+    Represents a service start blocking condition.
+    """
+
+    when_probes: Optional[list[str]] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -476,6 +510,8 @@ class ServiceTemplateCfg(Resolvable):
     empty_env: Optional[str] = None
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     containers: Optional[list[ContainerCfg]] = None
+    inits: Optional[list[InitCfg]] = None
+    start: Optional[StartCfg] = None
 
     def is_ingress(self) -> bool:
         return str_to_bool(
@@ -509,6 +545,8 @@ class ServiceCfg(Resolvable):
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     upstreams: Optional[list[UpstreamCfg]] = None
     containers: Optional[list[ContainerCfg]] = None
+    inits: Optional[list[InitCfg]] = None
+    start: Optional[StartCfg] = None
     status: EntityStatus = field(
         default_factory=lambda: EntityStatus(active=True)
     )
@@ -568,6 +606,7 @@ class EnvironmentTemplateCfg(Resolvable):
     tag: str
     factory: str
     service_templates: Optional[list[ServiceTemplateRefCfg]]
+    probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
 
@@ -582,6 +621,7 @@ class EnvironmentCfg(Resolvable):
     factory: str
     tag: str
     services: Optional[list[ServiceCfg]]
+    probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
     status: EntityStatus = field(default_factory=EntityStatus)
@@ -747,6 +787,36 @@ def parse_config(yaml_str: str) -> Config:
             build=parse_build(item["build"]) if item.get("build") else None,
         )
 
+    def parse_probe(item: Any) -> ProbeCfg:
+        return ProbeCfg(
+            tag=item["tag"],
+            container=(
+                parse_container(item["container"])
+                if item.get("container")
+                else None
+            ),
+            script=item.get("script"),
+            script_path=item.get("script_path"),
+        )
+
+    def parse_init(item: Any) -> InitCfg:
+        return InitCfg(
+            tag=item["tag"],
+            container=(
+                parse_container(item["container"])
+                if item.get("container")
+                else None
+            ),
+            script=item.get("script"),
+            script_path=item.get("script_path"),
+            when_probes=item.get("when_probes", []),
+        )
+
+    def parse_start(item: Any) -> StartCfg:
+        return StartCfg(
+            when_probes=item.get("when_probes", []),
+        )
+
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
             tag=item["tag"],
@@ -763,6 +833,8 @@ def parse_config(yaml_str: str) -> Config:
                 parse_container(container)
                 for container in item.get("containers", [])
             ],
+            inits=[parse_init(init) for init in item.get("inits", [])],
+            start=parse_start(item["start"]) if item.get("start") else None,
         )
 
     def parse_service(item: Any) -> ServiceCfg:
@@ -787,6 +859,8 @@ def parse_config(yaml_str: str) -> Config:
                 parse_container(container)
                 for container in item.get("containers", [])
             ],
+            inits=[parse_init(init) for init in item.get("inits", [])],
+            start=parse_start(item["start"]) if item.get("start") else None,
             status=parse_status(item["status"]),
         )
 
@@ -839,6 +913,7 @@ def parse_config(yaml_str: str) -> Config:
                 parse_service_template_refs(svc_templ_ref)
                 for svc_templ_ref in item.get("service_templates", [])
             ],
+            probes=[parse_probe(probe) for probe in item.get("probes", [])],
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -861,6 +936,7 @@ def parse_config(yaml_str: str) -> Config:
             services=[
                 parse_service(service) for service in item.get("services", [])
             ],
+            probes=[parse_probe(probe) for probe in item.get("probes", [])],
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -1371,6 +1447,7 @@ class ConfigMng:
             factory=env_tmpl_cfg.factory,
             tag=env_tag,
             services=services,
+            probes=env_tmpl_cfg.probes,
             networks=env_tmpl_cfg.networks,
             volumes=env_tmpl_cfg.volumes,
         )
@@ -1384,6 +1461,7 @@ class ConfigMng:
             factory=other.factory,
             tag=other.tag,
             services=deepcopy(other.services),
+            probes=deepcopy(other.probes),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
         )
@@ -1400,6 +1478,8 @@ class ConfigMng:
             empty_env=other.empty_env,
             properties=deepcopy(other.properties),
             containers=deepcopy(other.containers),
+            inits=deepcopy(other.inits),
+            start=deepcopy(other.start),
         )
 
     def svc_cfg_from_tag(
@@ -1422,6 +1502,8 @@ class ConfigMng:
             properties={},
             upstreams=[],
             containers=[],
+            inits=[],
+            start=None,
         )
 
     def svc_cfg_from_service_template(
@@ -1444,4 +1526,6 @@ class ConfigMng:
             properties=deepcopy(service_template.properties),
             upstreams=[],
             containers=deepcopy(service_template.containers),
+            inits=deepcopy(service_template.inits),
+            start=deepcopy(service_template.start),
         )

@@ -22,520 +22,10 @@ from unittest.mock import mock_open
 import pytest
 import yaml
 from pytest_mock import MockerFixture
-from test_util import values
+from test_util import read_fixture
 
 from config import Config, ConfigMng
 from util import Constants
-
-config_yaml = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-env_templates:
-  - tag: default
-    factory: docker-compose
-    service_templates:
-      - template: default
-        tag: service-default
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-        driver: null
-        attachable: null
-        enable_ipv6: null
-        driver_opts: null
-        ipam: null
-    volumes:
-      - tag: app_data
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: ${volumes_path}/srv/data
-        labels:
-          env: production
-service_templates:
-  - tag: oracle
-    factory: docker
-    containers:
-      - image: ${ora_image}
-        tag: container-ora
-        hostname: ${ora_hostname}
-        container_name: ${ora_container_name}
-        workdir: null
-        environment: []
-        volumes:
-          - app_data:/mnt/test
-        ports:
-          - 1521:${ora_listener_port}
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
-        build: null
-    labels: []
-    ingress: false
-    empty_env: ${ora_empty_env}
-    properties:
-      pump_dir_name: ${ora_pump_dir}
-      root_db_name: ${ora_root_db_name}
-      plug_db_name: ${ora_plug_db_name}
-      sys_user: ${db_sys_usr}
-      sys_psw: ${db_sys_psw}
-      user: ${db_usr}
-      psw: ${db_psw}
-  - tag: postgres
-    factory: docker
-    containers:
-      - image: ${pg_image}
-        tag: container-pg
-        hostname: ${pg_hostname}
-        container_name: ${pg_container_name}
-        workdir: null
-        environment: []
-        volumes: []
-        ports:
-          - 5432:${pg_listener_port}
-        networks: []
-        extra_hosts: []
-        subject_alternative_name: null
-        build:
-          context_path: '#{cfg.envs_path}/#{env.tag}/build'
-          dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-    labels: []
-    ingress: false
-    empty_env: ${pg_empty_env}
-    properties:
-      sys_user: ${db_sys_usr}
-      sys_psw: ${db_sys_psw}
-      user: ${db_usr}
-      psw: ${db_psw}
-envs:
-  - template: default
-    factory: docker-compose
-    tag: sample-1
-    services:
-      - template: postgres
-        factory: docker
-        containers:
-          - image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
-            tag: container-pg
-            hostname: null
-            container_name: null
-            workdir: null
-            volumes: []
-            environment: null
-            ports: []
-            networks: []
-            extra_hosts: []
-            subject_alternative_name: null
-            build:
-              context_path: '#{cfg.envs_path}/#{env.tag}/build'
-              dockerfile_path: '#{cnt.build.context_path}/Dockerfile'
-        tag: pg-1
-        service_class: null
-        labels: []
-        ingress: null
-        empty_env: null
-        properties:
-          sys_user: syspg1
-          sys_psw: syspg1
-          user: pg1
-          psw: pg1
-        upstreams:
-          - type: postgres
-            tag: upstream-1
-            enabled: true
-            properties:
-              user: pg1up
-              psw: pg1up
-              host: localhost
-              port: '5432'
-              database: d_pg1
-              unix_user: postgres
-              dump_dir: /dumps
-          - type: postgres
-            tag: upstream-2
-            enabled: false
-            properties:
-              user: pg2up
-              psw: pg2up
-              host: moon
-              port: '5432'
-              database: d_pg2
-              unix_user: postgres
-              dump_dir: /dumps/2
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: traefik
-        factory: docker
-        tag: traefik-1
-        service_class: null
-        containers:
-          - image: ''
-            tag: 1
-            hostname: null
-            container_name: null
-            workdir: null
-            volumes: []
-            environment: null
-            ports: []
-            networks: []
-            extra_hosts: []
-            subject_alternative_name: null
-            build: null
-        labels: []
-        ingress: true
-        empty_env: null
-        properties: {}
-        upstreams: []
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: custom-1
-        factory: docker
-        tag: primary
-        service_class: null
-        containers:
-          - image: ''
-            tag: 1
-            hostname: null
-            container_name: null
-            workdir: null
-            volumes: []
-            environment: null
-            ports: []
-            networks: []
-            extra_hosts: []
-            subject_alternative_name: null
-            build: null
-        labels: []
-        ingress: true
-        empty_env: null
-        properties:
-          instance.name: primary
-          instance.id: 1
-        upstreams: []
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: nodejs
-        factory: docker
-        tag: poke
-        service_class: null
-        containers:
-          - image: ''
-            build: null
-            tag: 1
-            hostname: null
-            container_name: null
-            workdir: null
-            volumes: []
-            environment:
-              - USER=user
-              - PSW=psw
-            ports:
-              - 3000:3000
-            networks: []
-            extra_hosts: []
-            subject_alternative_name: null
-        labels: []
-        ingress: null
-        empty_env: null
-        properties: {}
-        upstreams: []
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    networks:
-      - tag: shpdnet
-        name: envnet
-        external: true
-        driver: null
-        attachable: null
-        enable_ipv6: null
-        driver_opts: null
-        ipam: null
-    volumes:
-      - tag: app_data
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: /srv/data
-        labels:
-          env: production
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-"""
-
-
-config_yaml_with_refs: str = """
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
-templates_path: ${templates_path}
-envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
-env_templates:
-  - tag: nginx-postgres
-    factory: docker-compose
-    service_templates:
-      - template: nginx
-        tag: web
-      - template: postgres
-        tag: db
-    networks:
-      - tag: '#{env.tag}'
-        name: '#{net.tag}'
-        external: false
-        driver: bridge
-        attachable: null
-        enable_ipv6: null
-        driver_opts: null
-        ipam: null
-    volumes:
-      - tag: nginx
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
-        labels:
-          env: production
-      - tag: postgres
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
-        labels:
-          env: production
-service_templates:
-  - tag: nginx
-    factory: docker
-    containers:
-      - image: nginx:latest
-        tag: nginx
-        hostname: web-instance
-        container_name: web-instance
-        workdir: /usr/share/nginx/html
-        volumes:
-          - nginx:/usr/share/nginx/html
-        environment:
-          - NGINX_PORT=80
-        ports:
-          - 8080:80
-        networks:
-          - '#{env.tag}'
-        extra_hosts: []
-        subject_alternative_name: null
-        build: null
-    labels:
-      - com.example.type=web
-    ingress: true
-    empty_env: ''
-    properties: {}
-  - tag: postgres
-    factory: docker
-    containers:
-      - image: postgres:14
-        tag: postgres
-        hostname: db-instance
-        container_name: db-instance
-        workdir: /var/lib/postgresql/data
-        volumes:
-          - postgres:/var/lib/postgresql/data
-        environment:
-          - POSTGRES_PASSWORD=secret
-        ports:
-          - 5432:5432
-        networks:
-          - '#{env.tag}'
-        extra_hosts: []
-        subject_alternative_name: null
-        build: null
-    labels:
-      - com.example.type=db
-    ingress: false
-    empty_env: ''
-    properties: {}
-envs:
-  - template: nginx-postgres
-    factory: docker-compose
-    tag: foo
-    services:
-      - template: nginx
-        tag: web
-        factory: docker
-        containers:
-          - image: nginx:latest
-            tag: nginx
-            hostname: web-instance
-            container_name: web-instance
-            workdir: /usr/share/nginx/html
-            volumes:
-              - nginx:/usr/share/nginx/html
-            environment:
-              - NGINX_PORT=80
-            ports:
-              - 8080:80
-            networks:
-              - '#{env.tag}'
-            extra_hosts: []
-            subject_alternative_name: null
-            build: null
-        labels:
-          - com.example.type=web
-        ingress: true
-        empty_env: ''
-        service_class: '#{not.exist}'
-        properties:
-          com.example.type: '#{svc.tag}'
-        upstreams: []
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-      - template: postgres
-        upstreams: []
-        factory: docker
-        tag: db
-        service_class: '#{not.exist}'
-        containers:
-          - image: postgres:14
-            tag: postgres
-            hostname: db-instance
-            container_name: db-instance
-            workdir: /var/lib/postgresql/data
-            volumes:
-              - postgres:/var/lib/postgresql/data
-            environment:
-              - POSTGRES_PASSWORD=secret
-            ports:
-              - 5432:5432
-            networks:
-              - '#{env.tag}'
-            extra_hosts: []
-            subject_alternative_name: null
-            build: null
-        labels:
-          - com.example.type=db
-        ingress: false
-        empty_env: ''
-        properties:
-          com.example.type: '#{svc.tag}'
-        status:
-          active: true
-          archived: false
-          triggered_config: null
-    networks:
-      - tag: '#{env.tag}'
-        name: '#{net.tag}'
-        external: false
-        driver: bridge
-        attachable: null
-        enable_ipv6: null
-        driver_opts: null
-        ipam: null
-    volumes:
-      - tag: nginx
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
-        labels:
-          env: production
-      - tag: postgres
-        external: false
-        name: null
-        driver: local
-        driver_opts:
-          type: none
-          o: bind
-          device: '#{cfg.volumes_path}/#{env.tag}/#{vol.tag}'
-        labels:
-          env: production
-    status:
-      active: true
-      archived: false
-      triggered_config: null
-"""
 
 
 @pytest.mark.cfg
@@ -549,6 +39,9 @@ def test_load_config(mocker: MockerFixture):
             "ora_hostname": "ora-host",
         },
     )
+
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd.yaml")
 
     mock_open1 = mock_open(read_data=values)
     mock_open2 = mock_open(read_data=config_yaml)
@@ -777,6 +270,8 @@ def test_store_config_with_real_files():
             open(".shpd.yaml", "w") as config_file,
             open(".shpd.conf", "w") as values_file,
         ):
+            values = read_fixture("cfg", "values.conf")
+            config_yaml = read_fixture("cfg", "shpd.yaml")
             config_file.write(config_yaml)
             values_file.write(values.replace("${test_path}", "."))
 
@@ -808,6 +303,8 @@ def test_load_config_change_resolve_status(mocker: MockerFixture):
         },
     )
 
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd.yaml")
     mock_open1 = mock_open(read_data=values)
     mock_open2 = mock_open(read_data=config_yaml)
 
@@ -833,6 +330,8 @@ def test_load_config_change_resolve_status(mocker: MockerFixture):
 def test_copy_config(mocker: MockerFixture):
     """Test copying config with mock"""
 
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd.yaml")
     mock_open1 = mock_open(read_data=values)
     mock_open2 = mock_open(read_data=config_yaml)
 
@@ -868,6 +367,8 @@ def test_copy_config(mocker: MockerFixture):
 def test_load_config_with_refs(mocker: MockerFixture):
     """Test loading config with references"""
 
+    values = read_fixture("cfg", "values.conf")
+    config_yaml_with_refs = read_fixture("cfg", "shpd_with_refs.yaml")
     mock_open1 = mock_open(read_data=values.replace("${test_path}", "."))
     mock_open2 = mock_open(read_data=config_yaml_with_refs)
 
@@ -928,6 +429,8 @@ def test_store_config_with_refs_with_real_files():
             open(".shpd.yaml", "w") as config_file,
             open(".shpd.conf", "w") as values_file,
         ):
+            values = read_fixture("cfg", "values.conf")
+            config_yaml_with_refs = read_fixture("cfg", "shpd_with_refs.yaml")
             config_file.write(config_yaml_with_refs)
             values_file.write(values.replace("${test_path}", "."))
 
@@ -947,3 +450,91 @@ def test_store_config_with_refs_with_real_files():
         for file_path in (".shpd.yaml", ".shpd.conf"):
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+
+@pytest.mark.cfg
+def test_load_config_parses_lifecycle_sections(
+    mocker: MockerFixture,
+):
+    """
+    Parse coverage for:
+      - service_templates[].init / start
+      - envs[].services[].start
+    """
+
+    mocker.patch.dict(
+        os.environ,
+        {
+            "ora_container_name": "ora-cnt-1",
+            "ora_hostname": "ora-host",
+        },
+    )
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd_lifecycle.yaml")
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    config: Config = cMng.load_config()
+    config.set_resolved()
+
+    env_templates = config.env_templates
+    assert env_templates
+
+    # probes
+    pg_env_tpl = env_templates[0]
+    assert pg_env_tpl.probes is not None
+    assert len(pg_env_tpl.probes) == 3
+
+    created = next((p for p in pg_env_tpl.probes if p.tag == "created"), None)
+    ready = next((p for p in pg_env_tpl.probes if p.tag == "ready"), None)
+    live = next((p for p in pg_env_tpl.probes if p.tag == "live"), None)
+
+    assert created is not None
+    assert created.container is not None
+    assert created.container.image == "busybox:1.36"
+    assert created.script is not None
+    assert created.script_path is None
+
+    assert ready is not None
+    assert ready.container is not None
+    assert ready.script == "sh -c 'pg_isready -h db -p 5432 -U sys -d docker'"
+
+    assert live is not None
+    assert live.container is None
+    assert live.script is None
+    assert live.script_path is None
+
+    svc_templates = config.service_templates
+    assert svc_templates
+    pg_tpl = next((s for s in svc_templates if s.tag == "postgres"), None)
+    assert pg_tpl is not None
+
+    # inits
+    assert pg_tpl.inits is not None
+    assert len(pg_tpl.inits) == 1
+    init0 = pg_tpl.inits[0]
+    assert init0.tag == "create-docker-user"
+    assert init0.container is not None
+    assert init0.script == "sh -c 'echo init ok'"
+    assert init0.script_path is None
+    assert init0.when_probes == ["ready"]
+
+    # start
+    assert pg_tpl.start is not None
+    assert pg_tpl.start.when_probes == ["sample-1-test-probe"]
+
+    assert config.envs
+    env0 = config.envs[0]
+    assert env0.services
+    db_svc = next((s for s in env0.services if s.tag == "db"), None)
+    assert db_svc is not None
+
+    assert db_svc.start is not None
+    assert db_svc.start.when_probes == ["sample-1-test-probe"]
