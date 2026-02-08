@@ -531,7 +531,8 @@ def check_probe(
     """Check probe"""
     if all:
         probe_tag = None
-    shepherd.environmentMng.check_probes(envCfg, probe_tag)
+    exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
+    exit(exit_code)
 
 
 if __name__ == "__main__":

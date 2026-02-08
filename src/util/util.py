@@ -278,16 +278,6 @@ class Util:
             )
 
     @staticmethod
-    def truncate_lines(s: str, max_lines: int = 1) -> str:
-        s = (s or "").strip("\n")
-        if not s:
-            return ""
-        lines = s.splitlines()
-        if len(lines) <= max_lines:
-            return s
-        return "\n".join(lines[:max_lines]) + " …"
-
-    @staticmethod
     def render_kv_summary(items: list[tuple[str, str]]) -> None:
         # generic compact line: "Summary: OK: 1  FAILED: 0  TIMEOUT: 0"
         parts = ["Summary:"]

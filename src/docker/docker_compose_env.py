@@ -301,6 +301,18 @@ class DockerComposeEnv(Environment):
         if probe_tag is not None:
             probes = [p for p in probes if p.tag == probe_tag]
         if not probes:
+            if probe_tag is not None:
+                available = self.configMng.get_probe_tags(self.envCfg)
+                if available:
+                    tags = ", ".join(available)
+                    Util.print_error_and_die(
+                        f"Probe '{probe_tag}' not found in environment "
+                        f"'{self.envCfg.tag}'. Available probes: {tags}."
+                    )
+                Util.print_error_and_die(
+                    f"Probe '{probe_tag}' not found in environment "
+                    f"'{self.envCfg.tag}'."
+                )
             return []
 
         probes_yaml = self.render_probes_target(probe_tag=None, resolved=True)

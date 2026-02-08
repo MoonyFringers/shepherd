@@ -92,6 +92,14 @@ def run_compose(
                 cmd, returncode=124, stdout=stdout, stderr=stderr
             )
 
+        logging.debug(
+            f"docker compose command run:\n"
+            f"CMD: {' '.join(cmd)}\n"
+            f"with exit code {result.returncode}\n"
+            f"STDOUT:\n{result.stdout}\n"
+            f"STDERR:\n{result.stderr}"
+        )
+
         if result.returncode != 0:
             logging.warning(
                 "docker compose command failed "

@@ -467,7 +467,12 @@ class EnvironmentMng:
         report = self.build_probe_report(results, verbose=verbose, title=title)
         self.render_probe_report(report)
 
-        return results
+        # ---- aggregate exit code ----
+        for r in results:
+            if r.exit_code != 0:
+                return r.exit_code
+
+        return 0
 
     # --- probe presentation policy ---
 
@@ -490,16 +495,6 @@ class EnvironmentMng:
 
     def _fmt_duration_ms(self, ms: Optional[int]) -> str:
         return "?" if ms is None else f"{ms} ms"
-
-    def probe_exit_code(self, results: list[ProbeRunResult]) -> int:
-        saw_failed = False
-        for r in results:
-            k = self._probe_status_key(r)
-            if k == "timeout":
-                return 2
-            if k == "failed":
-                saw_failed = True
-        return 1 if saw_failed else 0
 
     def build_probe_report(
         self,

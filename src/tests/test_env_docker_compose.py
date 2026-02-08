@@ -151,7 +151,41 @@ services:
     active: true
     archived: false
     rendered_config: null
-probes: []
+probes:
+  - tag: db-ready
+    container:
+      tag: db-ready
+      image: postgres:17-3.5
+      hostname: null
+      container_name: null
+      workdir: null
+      volumes: []
+      environment: []
+      ports: []
+      networks:
+        - "#{env.tag}"
+      extra_hosts: []
+      subject_alternative_name: null
+      build: null
+    script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+    script_path: null
+  - tag: db-live
+    container:
+      tag: db-live
+      image: postgres:17-3.5
+      hostname: null
+      container_name: null
+      workdir: null
+      volumes: []
+      environment: []
+      ports: []
+      networks:
+        - "#{env.tag}"
+      extra_hosts: []
+      subject_alternative_name: null
+      build: null
+    script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
+    script_path: null
 networks:
 - tag: default
   name: envnet
@@ -274,7 +308,41 @@ services:
     active: true
     archived: false
     rendered_config: null
-probes: []
+probes:
+  - tag: db-ready
+    container:
+      tag: db-ready
+      image: postgres:17-3.5
+      hostname: null
+      container_name: null
+      workdir: null
+      volumes: []
+      environment: []
+      ports: []
+      networks:
+        - test-1
+      extra_hosts: []
+      subject_alternative_name: null
+      build: null
+    script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+    script_path: null
+  - tag: db-live
+    container:
+      tag: db-live
+      image: postgres:17-3.5
+      hostname: null
+      container_name: null
+      workdir: null
+      volumes: []
+      environment: []
+      ports: []
+      networks:
+        - test-1
+      extra_hosts: []
+      subject_alternative_name: null
+      build: null
+    script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
+    script_path: null
 networks:
 - tag: default
   name: envnet
@@ -657,6 +725,33 @@ def test_reload_env(
 
 
 @pytest.mark.docker
+def test_reload_env_env_not_started(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "restart"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["reload", "env"])
+    assert result.exit_code != 0
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
 def test_status_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -680,4 +775,378 @@ def test_status_env(
 
     result = runner.invoke(cli, ["status", "env"])
     assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_probe_render(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml"])
+    assert result.exit_code == 0
+
+    expected = """
+probes:
+- tag: db-ready
+  container:
+    tag: db-ready
+    image: postgres:17-3.5
+    hostname: null
+    container_name: null
+    workdir: null
+    volumes: []
+    environment: []
+    ports: []
+    networks:
+    - '#{env.tag}'
+    extra_hosts: []
+    subject_alternative_name: null
+    build: null
+  script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+  script_path: null
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
+
+@pytest.mark.docker
+def test_probe_render_resolved(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml", "-r"])
+    assert result.exit_code == 0
+
+    expected = """
+probes:
+- tag: db-ready
+  container:
+    tag: db-ready
+    image: postgres:17-3.5
+    hostname: null
+    container_name: null
+    workdir: null
+    volumes: []
+    environment: []
+    ports: []
+    networks:
+    - test-1
+    extra_hosts: []
+    subject_alternative_name: null
+    build: null
+  script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+  script_path: null
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
+
+@pytest.mark.docker
+def test_probe_render_target(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml", "-t"])
+    assert result.exit_code == 0
+
+    expected = """
+name: test-1
+services:
+  db-ready:
+    image: postgres:17-3.5
+    networks:
+    - '#{env.tag}'
+    command: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+    restart: 'no'
+
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
+
+@pytest.mark.docker
+def test_probe_render_target_resolved(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(
+        cli, ["get", "probe", "db-ready", "-oyaml", "-t", "-r"]
+    )
+    assert result.exit_code == 0
+
+    expected = """
+name: test-1
+services:
+  db-ready:
+    image: postgres:17-3.5
+    networks:
+    - test-1
+    command: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+    restart: 'no'
+
+"""
+
+    y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
+    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    assert y1 == y2
+
+
+@pytest.mark.docker
+def test_check_probe(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+    assert result.exit_code == 0
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="db:5432 - accepting connections",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["check", "probe"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called()
+
+
+@pytest.mark.docker
+def test_check_prob_env_not_started(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="db:5432 - accepting connections",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["check", "probe"])
+    assert result.exit_code != 0
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_check_probe_flag_verbose(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+    assert result.exit_code == 0
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="db:5432 - accepting connections",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["-v", "check", "probe"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called()
+
+
+@pytest.mark.docker
+def test_check_probe_with_probe_tag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+    assert result.exit_code == 0
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="db:5432 - accepting connections",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_check_probe_with_missing_probe_tag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+    assert result.exit_code == 0
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose"],
+            returncode=0,
+            stdout="db:5432 - accepting connections",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["check", "probe", "no-such-probe"])
+    assert result.exit_code == 1
+    assert "Probe 'no-such-probe' not found" in result.output
+    mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_check_probe_timeout(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("env_docker", "shpd.yaml"))
+
+    mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "start"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["up", "env"])
+    assert result.exit_code == 0
+
+    # 2) "check probe" triggers timeout
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        side_effect=subprocess.TimeoutExpired(
+            cmd=["sh", "-c", "pg_isready"], timeout=1
+        ),
+    )
+
+    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+
+    assert result.exit_code != 0
     mock_subproc.assert_called_once()

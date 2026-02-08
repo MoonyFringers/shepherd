@@ -720,3 +720,43 @@ def test_completion_status_env(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["status", "env"])
     assert completions == [], "Expected status env completion"
+
+
+@pytest.mark.compl
+def test_completion_get_probe_oyaml(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "probe", "-oyaml"])
+    assert completions == [
+        "db-live",
+        "db-ready",
+    ], "Expected get probe -oyaml completion"
+
+
+@pytest.mark.compl
+def test_completion_get_probe(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "probe"])
+    assert completions == [
+        "db-live",
+        "db-ready",
+    ], "Expected get probe completion"
