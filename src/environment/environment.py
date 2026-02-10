@@ -64,6 +64,12 @@ class Environment(ABC):
             else []
         )
 
+    def _is_verbose(self) -> bool:
+        return bool(self.cli_flags.get("verbose", False))
+
+    def _is_quiet(self) -> bool:
+        return bool(self.cli_flags.get("quiet", False))
+
     @abstractmethod
     def clone_impl(self, dst_env_tag: str) -> Environment:
         """Clone the environment."""

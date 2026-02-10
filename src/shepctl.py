@@ -78,6 +78,7 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
+@click.option("--quiet", is_flag=True, help="Suppress command output.")
 @click.option(
     "-y",
     "--yes",
@@ -85,11 +86,11 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     help="Automatic yes to prompts; run non-interactively.",
 )
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, yes: bool):
+def cli(ctx: click.Context, verbose: bool, quiet: bool, yes: bool):
     """Shepherd CLI:
     A tool to manage your environments, services, and databases.
     """
-    cli_flags = {"verbose": verbose, "yes": yes}
+    cli_flags = {"verbose": verbose, "quiet": quiet, "yes": yes}
 
     if ctx.obj is None:
         ctx.obj = ShepherdMng(cli_flags)

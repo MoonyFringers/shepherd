@@ -86,6 +86,7 @@ class DockerComposeEnv(Environment):
                 "up",
                 "-d",
                 project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override
@@ -94,7 +95,10 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
             run_compose(
-                rendered_map["ungated"], "down", project_name=self.envCfg.tag
+                rendered_map["ungated"],
+                "down",
+                project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override
@@ -103,7 +107,10 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
             run_compose(
-                rendered_map["ungated"], "restart", project_name=self.envCfg.tag
+                rendered_map["ungated"],
+                "restart",
+                project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override

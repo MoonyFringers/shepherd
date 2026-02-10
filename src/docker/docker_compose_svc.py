@@ -83,6 +83,7 @@ class DockerComposeSvc(Service):
     @override
     def build_impl(self, cnt_tag: Optional[str] = None) -> None:
         """Build the service."""
+        verbose = self._is_verbose() or not self._is_quiet()
         if cnt_tag:
             container = self.svcCfg.get_container_by_tag(cnt_tag)
             if not container:
@@ -91,18 +92,19 @@ class DockerComposeSvc(Service):
                     f"container named '{cnt_tag}'."
                 )
             if container:
-                build_container(container)
+                build_container(container, verbose=verbose)
             return
 
         containers = self.svcCfg.containers or []
         for container in containers:
-            build_container(container)
+            build_container(container, verbose=verbose)
 
     @override
     def start_impl(self, cnt_tag: Optional[str] = None):
         """Start the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
+        verbose = self._is_verbose()
 
         if rendered and self.svcCfg.containers:
             if cnt_tag:
@@ -119,6 +121,7 @@ class DockerComposeSvc(Service):
                         "-d",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
+                        capture=not verbose,
                     )
                 return
 
@@ -129,6 +132,7 @@ class DockerComposeSvc(Service):
                     "-d",
                     container.run_container_name or "",
                     project_name=self.envCfg.tag,
+                    capture=not verbose,
                 )
         else:
             Util.print_error_and_die(
@@ -140,6 +144,7 @@ class DockerComposeSvc(Service):
         """Stop the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
+        verbose = self._is_verbose()
 
         if rendered and self.svcCfg.containers:
             if cnt_tag:
@@ -155,6 +160,7 @@ class DockerComposeSvc(Service):
                         "stop",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
+                        capture=not verbose,
                     )
                 return
 
@@ -164,6 +170,7 @@ class DockerComposeSvc(Service):
                     "stop",
                     container.run_container_name or "",
                     project_name=self.envCfg.tag,
+                    capture=not verbose,
                 )
         else:
             Util.print_error_and_die(
@@ -175,6 +182,7 @@ class DockerComposeSvc(Service):
         """Reload the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
+        verbose = self._is_verbose()
 
         if rendered and self.svcCfg.containers:
             if cnt_tag:
@@ -190,6 +198,7 @@ class DockerComposeSvc(Service):
                         "restart",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
+                        capture=not verbose,
                     )
                 return
 
@@ -199,6 +208,7 @@ class DockerComposeSvc(Service):
                     "restart",
                     container.run_container_name or "",
                     project_name=self.envCfg.tag,
+                    capture=not verbose,
                 )
         else:
             Util.print_error_and_die(
@@ -210,6 +220,7 @@ class DockerComposeSvc(Service):
         """Show the service stdout."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
+        capture = self._is_quiet() and not self._is_verbose()
 
         if rendered:
             if cnt_tag:
@@ -225,6 +236,7 @@ class DockerComposeSvc(Service):
                         "logs",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
+                        capture=capture,
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
@@ -232,6 +244,7 @@ class DockerComposeSvc(Service):
                     "logs",
                     self.svcCfg.containers[0].run_container_name or "",
                     project_name=self.envCfg.tag,
+                    capture=capture,
                 )
             else:
                 Util.print_error_and_die(
@@ -248,6 +261,7 @@ class DockerComposeSvc(Service):
         """Get a shell session for the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
+        capture = self._is_quiet() and not self._is_verbose()
 
         if rendered:
             if cnt_tag:
@@ -264,6 +278,7 @@ class DockerComposeSvc(Service):
                         container.run_container_name or "",
                         "sh",
                         project_name=self.envCfg.tag,
+                        capture=capture,
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
@@ -272,6 +287,7 @@ class DockerComposeSvc(Service):
                     self.svcCfg.containers[0].run_container_name or "",
                     "sh",
                     project_name=self.envCfg.tag,
+                    capture=capture,
                 )
             else:
                 Util.print_error_and_die(

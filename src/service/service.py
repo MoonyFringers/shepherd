@@ -39,6 +39,12 @@ class Service(ABC):
         self.name = self.canonical_name()
         self._generate_containers_names()
 
+    def _is_verbose(self) -> bool:
+        return bool(self.cli_flags.get("verbose", False))
+
+    def _is_quiet(self) -> bool:
+        return bool(self.cli_flags.get("quiet", False))
+
     def canonical_name(self) -> str:
         """
         Get the canonical name of the service.

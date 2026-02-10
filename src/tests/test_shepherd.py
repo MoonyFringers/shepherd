@@ -108,7 +108,9 @@ def test_cli_flags_no_flags(
     result = runner.invoke(cli, ["test"])
 
     assert result.exit_code == 0
-    mock_init.assert_called_once_with({"verbose": False, "yes": False})
+    mock_init.assert_called_once_with(
+        {"verbose": False, "quiet": False, "yes": False}
+    )
 
 
 @pytest.mark.shpd
@@ -119,7 +121,7 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {"verbose": True, "yes": False}
+    flags = {"verbose": True, "quiet": False, "yes": False}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -138,7 +140,7 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {"verbose": False, "yes": True}
+    flags = {"verbose": False, "quiet": False, "yes": True}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
