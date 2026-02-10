@@ -41,9 +41,10 @@ class DockerComposeEnv(Environment):
         config: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ):
         """Initialize a Docker Compose environment."""
-        super().__init__(config, svcFactory, envCfg)
+        super().__init__(config, svcFactory, envCfg, cli_flags=cli_flags)
 
     @override
     def ensure_resources_impl(self):
@@ -71,6 +72,7 @@ class DockerComposeEnv(Environment):
             self.configMng,
             self.svcFactory,
             clonedCfg,
+            cli_flags=self.cli_flags,
         )
         return clonedEnv
 

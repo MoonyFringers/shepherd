@@ -32,10 +32,14 @@ from .docker_compose_util import build_container, render_container, run_compose
 class DockerComposeSvc(Service):
 
     def __init__(
-        self, config: ConfigMng, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+        self,
+        config: ConfigMng,
+        envCfg: EnvironmentCfg,
+        svcCfg: ServiceCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ):
         """Initialize a Docker service."""
-        super().__init__(config, envCfg, svcCfg)
+        super().__init__(config, envCfg, svcCfg, cli_flags=cli_flags)
 
     @override
     def render_target_impl(self, resolved: bool) -> str:

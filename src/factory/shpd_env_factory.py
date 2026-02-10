@@ -27,9 +27,15 @@ from util import Constants
 
 class ShpdEnvironmentFactory(EnvironmentFactory):
 
-    def __init__(self, configMng: ConfigMng, svcFactory: ServiceFactory):
+    def __init__(
+        self,
+        configMng: ConfigMng,
+        svcFactory: ServiceFactory,
+        cli_flags: dict[str, bool] | None = None,
+    ):
         self.configMng = configMng
         self.svcFactory = svcFactory
+        self.cli_flags = cli_flags or {}
 
     @override
     def new_environment_impl(
@@ -46,6 +52,7 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
                     self.configMng,
                     self.svcFactory,
                     self.configMng.env_cfg_from_tag(env_tmpl_cfg, env_tag),
+                    cli_flags=self.cli_flags,
                 )
             case _:
                 raise ValueError(
@@ -59,7 +66,12 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
         """
         match envCfg.factory:
             case Constants.ENV_FACTORY_DEFAULT:
-                return DockerComposeEnv(self.configMng, self.svcFactory, envCfg)
+                return DockerComposeEnv(
+                    self.configMng,
+                    self.svcFactory,
+                    envCfg,
+                    cli_flags=self.cli_flags,
+                )
             case _:
                 raise ValueError(
                     f"Unknown environment factory: {envCfg.factory}"

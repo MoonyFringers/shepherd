@@ -53,7 +53,7 @@ class ShepherdMng:
         self.completionMng = CompletionMng(self.cli_flags, self.configMng)
         self.svcFactory = ShpdServiceFactory(self.configMng)
         self.envFactory = ShpdEnvironmentFactory(
-            self.configMng, self.svcFactory
+            self.configMng, self.svcFactory, cli_flags=self.cli_flags
         )
         self.environmentMng = EnvironmentMng(
             self.cli_flags, self.configMng, self.envFactory, self.svcFactory

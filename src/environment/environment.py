@@ -47,13 +47,17 @@ class Environment(ABC):
         configMng: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ):
         self.configMng = configMng
         self.svcFactory = svcFactory
         self.envCfg = envCfg
+        self.cli_flags = cli_flags or {}
         self.services = (
             [
-                self.svcFactory.new_service_from_cfg(envCfg, svcCfg)
+                self.svcFactory.new_service_from_cfg(
+                    envCfg, svcCfg, cli_flags=self.cli_flags
+                )
                 for svcCfg in envCfg.services
             ]
             if envCfg.services
@@ -279,8 +283,11 @@ class EnvironmentFactory(ABC):
     Factory class for environments.
     """
 
-    def __init__(self, config: ConfigMng):
+    def __init__(
+        self, config: ConfigMng, cli_flags: Optional[dict[str, bool]] = None
+    ):
         self.config = config
+        self.cli_flags = cli_flags or {}
 
     def new_environment(
         self,
@@ -743,7 +750,9 @@ class EnvironmentMng:
                 )
 
             try:
-                service = self.svcFactory.new_service_from_cfg(envCfg, svcCfg)
+                service = self.svcFactory.new_service_from_cfg(
+                    envCfg, svcCfg, cli_flags=self.cli_flags
+                )
                 env.add_service(service)
                 Util.print(
                     f"Service '{service.svcCfg.tag}' added to "
