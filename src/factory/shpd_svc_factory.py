@@ -30,11 +30,12 @@ class ShpdServiceFactory(ServiceFactory):
         self.configMng = configMng
 
     @override
-    def get_name() -> str:
+    @classmethod
+    def get_name_impl(cls) -> str:
         return "shpd-svc-factory"
 
     @override
-    def new_service_from_cfg(
+    def new_service_from_cfg_impl(
         self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
     ) -> Service:
         """

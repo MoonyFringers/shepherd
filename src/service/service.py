@@ -82,40 +82,70 @@ class Service(ABC):
         """Render the service configuration."""
         return self.svcCfg.get_yaml(resolved)
 
-    @abstractmethod
     def render_target(self, resolved: bool) -> str:
+        """
+        Render the service configuration in the target system.
+        """
+        return self.render_target_impl(resolved)
+
+    def build(self, cnt_tag: Optional[str] = None):
+        """Build the service."""
+        return self.build_impl(cnt_tag)
+
+    def start(self, cnt_tag: Optional[str] = None):
+        """Start the service."""
+        return self.start_impl(cnt_tag)
+
+    def stop(self, cnt_tag: Optional[str] = None):
+        """Stop the service."""
+        return self.stop_impl(cnt_tag)
+
+    def reload(self, cnt_tag: Optional[str] = None):
+        """Reload the service."""
+        return self.reload_impl(cnt_tag)
+
+    def get_stdout(self, cnt_tag: Optional[str] = None):
+        """Show the service stdout."""
+        return self.get_stdout_impl(cnt_tag)
+
+    def get_shell(self, cnt_tag: Optional[str] = None):
+        """Get a shell session for the service."""
+        return self.get_shell_impl(cnt_tag)
+
+    @abstractmethod
+    def render_target_impl(self, resolved: bool) -> str:
         """
         Render the service configuration in the target system.
         """
         pass
 
     @abstractmethod
-    def build(self, cnt_tag: Optional[str] = None):
+    def build_impl(self, cnt_tag: Optional[str] = None):
         """Build the service."""
         pass
 
     @abstractmethod
-    def start(self, cnt_tag: Optional[str] = None):
+    def start_impl(self, cnt_tag: Optional[str] = None):
         """Start the service."""
         pass
 
     @abstractmethod
-    def stop(self, cnt_tag: Optional[str] = None):
+    def stop_impl(self, cnt_tag: Optional[str] = None):
         """Stop the service."""
         pass
 
     @abstractmethod
-    def reload(self, cnt_tag: Optional[str] = None):
+    def reload_impl(self, cnt_tag: Optional[str] = None):
         """Reload the service."""
         pass
 
     @abstractmethod
-    def get_stdout(self, cnt_tag: Optional[str] = None):
+    def get_stdout_impl(self, cnt_tag: Optional[str] = None):
         """Show the service stdout."""
         pass
 
     @abstractmethod
-    def get_shell(self, cnt_tag: Optional[str] = None):
+    def get_shell_impl(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
         pass
 
@@ -131,12 +161,25 @@ class ServiceFactory(ABC):
     def __init__(self, config: ConfigMng):
         self.config = config
 
+    @classmethod
+    def get_name(cls) -> str:
+        return cls.get_name_impl()
+
+    def new_service_from_cfg(
+        self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+    ) -> Service:
+        """
+        Create a new service.
+        """
+        return self.new_service_from_cfg_impl(envCfg, svcCfg)
+
+    @classmethod
     @abstractmethod
-    def get_name() -> str:
+    def get_name_impl(cls) -> str:
         pass
 
     @abstractmethod
-    def new_service_from_cfg(
+    def new_service_from_cfg_impl(
         self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
     ) -> Service:
         """

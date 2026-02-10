@@ -97,7 +97,7 @@ class CompletionMng(AbstractCompletionMng):
         return None
 
     @override
-    def get_completions(self, args: list[str]) -> list[str]:
+    def get_completions_impl(self, args: list[str]) -> list[str]:
         if not self.is_verb_chosen(args):
             return self.VERBS
 

@@ -38,7 +38,7 @@ class DockerComposeSvc(Service):
         super().__init__(config, envCfg, svcCfg)
 
     @override
-    def render_target(self, resolved: bool) -> str:
+    def render_target_impl(self, resolved: bool) -> str:
         """
         Render the docker-compose service configuration for this service.
 
@@ -77,7 +77,7 @@ class DockerComposeSvc(Service):
                     self.envCfg.set_unresolved()
 
     @override
-    def build(self, cnt_tag: Optional[str] = None) -> None:
+    def build_impl(self, cnt_tag: Optional[str] = None) -> None:
         """Build the service."""
         if cnt_tag:
             container = self.svcCfg.get_container_by_tag(cnt_tag)
@@ -95,7 +95,7 @@ class DockerComposeSvc(Service):
             build_container(container)
 
     @override
-    def start(self, cnt_tag: Optional[str] = None):
+    def start_impl(self, cnt_tag: Optional[str] = None):
         """Start the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
@@ -132,7 +132,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def stop(self, cnt_tag: Optional[str] = None):
+    def stop_impl(self, cnt_tag: Optional[str] = None):
         """Stop the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
@@ -167,7 +167,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def reload(self, cnt_tag: Optional[str] = None):
+    def reload_impl(self, cnt_tag: Optional[str] = None):
         """Reload the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
@@ -202,7 +202,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def get_stdout(self, cnt_tag: Optional[str] = None):
+    def get_stdout_impl(self, cnt_tag: Optional[str] = None):
         """Show the service stdout."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
@@ -240,7 +240,7 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def get_shell(self, cnt_tag: Optional[str] = None):
+    def get_shell_impl(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None

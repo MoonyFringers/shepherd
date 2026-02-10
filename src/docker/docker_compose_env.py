@@ -46,9 +46,8 @@ class DockerComposeEnv(Environment):
         super().__init__(config, svcFactory, envCfg)
 
     @override
-    def ensure_resources(self):
+    def ensure_resources_impl(self):
         """Ensure the environment resources are available."""
-        super().ensure_resources()
         if self.envCfg.volumes:
             for vol in self.envCfg.volumes:
                 # Check if it's a host bind mount,
@@ -64,7 +63,7 @@ class DockerComposeEnv(Environment):
                         Util.ensure_dir(device_path, vol.tag)
 
     @override
-    def clone(self, dst_env_tag: str) -> DockerComposeEnv:
+    def clone_impl(self, dst_env_tag: str) -> DockerComposeEnv:
         """Clone the environment."""
         clonedCfg = self.configMng.env_cfg_from_other(self.to_config())
         clonedCfg.tag = dst_env_tag
@@ -76,9 +75,8 @@ class DockerComposeEnv(Environment):
         return clonedEnv
 
     @override
-    def start(self):
+    def start_impl(self):
         """Start the environment."""
-        super().start()
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
             run_compose(
@@ -89,7 +87,7 @@ class DockerComposeEnv(Environment):
             )
 
     @override
-    def stop(self):
+    def stop_impl(self):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
@@ -98,7 +96,7 @@ class DockerComposeEnv(Environment):
             )
 
     @override
-    def reload(self):
+    def reload_impl(self):
         """Reload the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
@@ -107,7 +105,7 @@ class DockerComposeEnv(Environment):
             )
 
     @override
-    def render_target(self, resolved: bool = False) -> dict[str, str]:
+    def render_target_impl(self, resolved: bool = False) -> dict[str, str]:
         """
         Render the full docker-compose YAML configuration for the environment.
 
@@ -232,7 +230,7 @@ class DockerComposeEnv(Environment):
         return svc
 
     @override
-    def render_probes_target(
+    def render_probes_target_impl(
         self, probe_tag: Optional[str], resolved: bool
     ) -> Optional[str]:
         was_resolved = self.envCfg.is_resolved()
@@ -363,7 +361,7 @@ class DockerComposeEnv(Environment):
 
         return results
 
-    def status(self) -> list[dict[str, str]]:
+    def status_impl(self) -> list[dict[str, str]]:
         """Get environment status (list of services with state)."""
 
         rendered_map = self.envCfg.status.rendered_config
