@@ -18,10 +18,15 @@
 
 from __future__ import annotations
 
+import logging
 import os
+import threading
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+
+from rich.live import Live
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
@@ -343,6 +348,13 @@ class EnvironmentMng:
         self.configMng = configMng
         self.envFactory = envFactory
         self.svcFactory = svcFactory
+        self._status_poll_seconds = 1.0
+
+    def _is_verbose(self) -> bool:
+        return bool(self.cli_flags.get("verbose", False))
+
+    def _is_quiet(self) -> bool:
+        return bool(self.cli_flags.get("quiet", False))
 
     def get_environment_from_tag(
         self, env_tag: Optional[str]
@@ -464,12 +476,22 @@ class EnvironmentMng:
             f"{len(envs)} environment(s) found.", highlight=False
         )
 
-    def start_env(self, envCfg: EnvironmentCfg):
+    def start_env(
+        self, envCfg: EnvironmentCfg, timeout_seconds: Optional[int] = 60
+    ):
         """Start an environment."""
+        if timeout_seconds is not None and timeout_seconds < 0:
+            Util.print_error_and_die(
+                "Timeout must be greater than or equal to 0."
+            )
         env = self.get_environment_from_cfg(envCfg)
         env.envCfg.status.rendered_config = env.render_target(True)
         env.sync_config()
-        env.start()
+        self.wait_for_env_up(
+            env,
+            timeout_seconds=timeout_seconds,
+            start_action=env.start,
+        )
         Util.print(f"Started environment: {env.envCfg.tag}")
 
     def stop_env(self, envCfg: EnvironmentCfg):
@@ -670,18 +692,217 @@ class EnvironmentMng:
     def status_env(self, envCfg: EnvironmentCfg):
         """Get environment status."""
         env = self.get_environment_from_cfg(envCfg)
-        env_status = env.status()
+        grouped, _, has_containers = self._collect_env_status(env)
+        if not has_containers or not grouped:
+            Util.console.print(
+                f"[yellow]No services found for "
+                f"environment '{envCfg.tag}'[/yellow]"
+            )
+            return
+        Util.console.print(self._build_env_status_table(envCfg.tag, grouped))
 
+    def wait_for_env_up(
+        self,
+        env: Environment,
+        timeout_seconds: Optional[int] = None,
+        start_action: Optional[Callable[[], Any]] = None,
+    ):
+        if self._is_quiet():
+            if start_action:
+                start_action()
+            return
+
+        start_error: Optional[BaseException] = None
+        start_done = threading.Event()
+
+        if start_action:
+
+            def run_start():
+                nonlocal start_error
+                try:
+                    start_action()
+                except BaseException as e:
+                    start_error = e
+                finally:
+                    start_done.set()
+
+            threading.Thread(target=run_start, daemon=True).start()
+        else:
+            start_done.set()
+
+        def raise_start_error():
+            if start_error is not None:
+                raise start_error
+
+        def in_startup() -> bool:
+            return not start_done.is_set()
+
+        started = time.monotonic()
+        logging.debug(
+            "wait_for_env_up started for env='%s' (timeout=%s, terminal=%s)",
+            env.envCfg.tag,
+            timeout_seconds,
+            Util.console.is_terminal,
+        )
+        if not Util.console.is_terminal:
+            # In non-interactive mode (tests/CI/pipes) avoid long polling loops:
+            # wait for start to complete, then render one snapshot.
+            while in_startup():
+                raise_start_error()
+                remaining = self._remaining_timeout_seconds(
+                    started, timeout_seconds
+                )
+                if timeout_seconds is not None and remaining is not None:
+                    if remaining <= 0:
+                        Util.print_error_and_die(
+                            "Timed out waiting for environment "
+                            f"'{env.envCfg.tag}' to be up."
+                        )
+                time.sleep(self._status_poll_seconds)
+
+            raise_start_error()
+            grouped, all_running, has_containers = self._collect_env_status(env)
+            remaining = self._remaining_timeout_seconds(
+                started, timeout_seconds
+            )
+            logging.debug(
+                "wait_for_env_up non-terminal snapshot env='%s': "
+                "groups=%d has_containers=%s all_running=%s remaining=%s",
+                env.envCfg.tag,
+                len(grouped),
+                has_containers,
+                all_running,
+                remaining,
+            )
+            if not has_containers or not grouped:
+                Util.console.print(
+                    f"[yellow]No services found for "
+                    f"environment '{env.envCfg.tag}'[/yellow]"
+                )
+                return
+            Util.console.print(
+                self._build_env_status_table(
+                    env.envCfg.tag,
+                    grouped,
+                    remaining_seconds=remaining,
+                )
+            )
+            return
+
+        live_refresh_per_second = max(
+            4, int(1 / max(self._status_poll_seconds, 0.001))
+        )
+        with Live(
+            refresh_per_second=live_refresh_per_second,
+            console=Util.console,
+            transient=True,
+            screen=False,
+        ) as live:
+            while True:
+                raise_start_error()
+                grouped, all_running, has_containers = self._collect_env_status(
+                    env
+                )
+                remaining = self._remaining_timeout_seconds(
+                    started, timeout_seconds
+                )
+                logging.debug(
+                    "wait_for_env_up poll env='%s': groups=%d "
+                    "has_containers=%s all_running=%s in_startup=%s "
+                    "remaining=%s",
+                    env.envCfg.tag,
+                    len(grouped),
+                    has_containers,
+                    all_running,
+                    in_startup(),
+                    remaining,
+                )
+
+                if not has_containers or not grouped:
+                    if in_startup():
+                        title = f"[white]{env.envCfg.tag}[/white]"
+                        if remaining is not None:
+                            title = (
+                                f"{title} "
+                                f"[dim](Time left: {remaining}s)[/dim]"
+                            )
+                        live.update(f"{title} [dim](starting...)[/dim]")
+                    else:
+                        live.stop()
+                        Util.console.print(
+                            f"[yellow]No services found for "
+                            f"environment '{env.envCfg.tag}'[/yellow]"
+                        )
+                        return
+                else:
+                    live.update(
+                        self._build_env_status_table(
+                            env.envCfg.tag,
+                            grouped,
+                            remaining_seconds=remaining,
+                        )
+                    )
+
+                if all_running and not in_startup():
+                    logging.debug(
+                        "wait_for_env_up complete env='%s'", env.envCfg.tag
+                    )
+                    return
+
+                if timeout_seconds is not None and remaining is not None:
+                    if remaining <= 0:
+                        live.stop()
+                        Util.print_error_and_die(
+                            "Timed out waiting for environment "
+                            f"'{env.envCfg.tag}' to be up."
+                        )
+                time.sleep(self._status_poll_seconds)
+
+    def _build_env_status_table(
+        self,
+        env_tag: str,
+        grouped: dict[str, list[list[str]]],
+        remaining_seconds: Optional[int] = None,
+    ):
+        title = f"[white]{env_tag}[/white]"
+        if remaining_seconds is not None:
+            title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
+        return Util.build_grouped_table(
+            title=title,
+            group_column_header="Service",
+            item_columns=[
+                {"header": "Container", "style": "white"},
+                {"header": "State"},
+            ],
+            groups=grouped,
+        )
+
+    def _remaining_timeout_seconds(
+        self, started_at: float, timeout_seconds: Optional[int]
+    ) -> Optional[int]:
+        if timeout_seconds is None:
+            return None
+        elapsed = int(time.monotonic() - started_at)
+        remaining = timeout_seconds - elapsed
+        return remaining if remaining > 0 else 0
+
+    def _collect_env_status(
+        self, env: Environment
+    ) -> tuple[dict[str, list[list[str]]], bool, bool]:
+        env_status = env.status()
         services: list[Service] = env.get_services()
         status_by_service = {
             row.get("Service"): row for row in env_status if row.get("Service")
         }
 
         grouped: dict[str, list[list[str]]] = {}
+        all_running = True
+        has_containers = False
 
         for svc in services:
             rows: list[list[str]] = []
             for container in svc.svcCfg.containers or []:
+                has_containers = True
                 cnt_name = container.run_container_name or ""
                 cnt_info = status_by_service.get(cnt_name)
                 state = (
@@ -697,27 +918,18 @@ class EnvironmentMng:
                 else:
                     state_colored = f"[yellow]● {state}[/yellow]"
 
+                if state != "running":
+                    all_running = False
+
                 rows.append([container.tag, state_colored])
 
             if rows:
                 grouped[svc.svcCfg.tag] = rows
 
-        if not grouped:
-            Util.console.print(
-                f"[yellow]No services found for "
-                f"environment '{envCfg.tag}'[/yellow]"
-            )
-            return
+        if not has_containers:
+            all_running = False
 
-        Util.render_grouped_table(
-            title=f"[white]{envCfg.tag}[/white]",
-            group_column_header="Service",
-            item_columns=[
-                {"header": "Container", "style": "white"},
-                {"header": "State"},
-            ],
-            groups=grouped,
-        )
+        return grouped, all_running, has_containers
 
     def add_service(
         self,

@@ -332,22 +332,44 @@ def list(shepherd: ShepherdMng):
 # UP
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "--timeout",
+    type=int,
+    default=60,
+    show_default=True,
+    help="Maximum seconds to wait for all containers to be running.",
+)
 @click.pass_obj
 @require_active_env
-def up(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def up(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    timeout: Optional[int],
+):
     """Start resources."""
     # If no subcommand is given, default to "env"
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.start_env(envCfg)
+        shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
 @up.command(name="env")
+@click.option(
+    "--timeout",
+    type=int,
+    default=60,
+    show_default=True,
+    help="Maximum seconds to wait for all containers to be running.",
+)
 @click.pass_obj
 @require_active_env
-def up_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def up_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    timeout: Optional[int],
+):
     """Start environment."""
-    shepherd.environmentMng.start_env(envCfg)
+    shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
 @up.command(name="svc")

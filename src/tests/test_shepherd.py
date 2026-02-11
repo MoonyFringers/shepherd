@@ -325,6 +325,23 @@ def test_cli_start_env(
 
 
 @pytest.mark.shpd
+def test_cli_start_env_with_timeout(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_start = mocker.patch.object(EnvironmentMng, "start_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["up", "env", "--timeout", "30"])
+    assert result.exit_code == 0
+    mock_start.assert_called_once()
+    assert mock_start.call_args.kwargs == {"timeout_seconds": 30}
+
+
+@pytest.mark.shpd
 def test_cli_stop_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):

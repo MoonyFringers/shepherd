@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any, Optional, override
 
@@ -398,6 +399,16 @@ class DockerComposeEnv(Environment):
                 if obj:
                     services.append(obj)
             except json.JSONDecodeError:
+                logging.debug(
+                    "Ignoring non-JSON docker compose ps line for env '%s': %r",
+                    self.envCfg.tag,
+                    line,
+                )
                 continue
 
+        logging.debug(
+            "Collected %d docker compose status row(s) for env '%s'.",
+            len(services),
+            self.envCfg.tag,
+        )
         return services
