@@ -161,7 +161,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
       - template: postgres
         upstreams: []
         inits: []
@@ -195,7 +195,7 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
     probes: []
     networks:
       - tag: "#{env.tag}"
@@ -230,4 +230,4 @@ envs:
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

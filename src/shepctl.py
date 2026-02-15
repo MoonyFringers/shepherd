@@ -154,6 +154,40 @@ def get_env(
         click.echo(shepherd.environmentMng.render_env(tag, target, resolved))
 
 
+@get.command(name="probe")
+@click.argument("probe_tag", required=False)
+@click.option(
+    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
+)
+@click.option(
+    "-t", "--target", is_flag=True, help="Get the target configuration."
+)
+@click.option(
+    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
+)
+@click.option("-a", "--all", is_flag=True, help="Get all probes.")
+@click.pass_obj
+@require_active_env
+def get_probe(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    probe_tag: Optional[str],
+    output: Optional[str],
+    target: bool,
+    resolved: bool,
+    all: bool,
+):
+    """Get probe details."""
+    if all:
+        probe_tag = None
+    if output:
+        click.echo(
+            shepherd.environmentMng.render_probes(
+                envCfg, probe_tag, target, resolved
+            )
+        )
+
+
 @get.command(name="svc")
 @click.argument("tag", required=True)
 @click.option(
@@ -472,6 +506,33 @@ def status(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
 def status_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
     """Show environment status."""
     shepherd.environmentMng.status_env(envCfg)
+
+
+# =====================================================
+# CHECK
+# =====================================================
+@cli.group()
+def check():
+    """Check resources."""
+    pass
+
+
+@check.command(name="probe")
+@click.argument("probe_tag", required=False)
+@click.option("-a", "--all", is_flag=True, help="Check all probes.")
+@click.pass_obj
+@require_active_env
+def check_probe(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    probe_tag: Optional[str],
+    all: bool,
+):
+    """Check probe"""
+    if all:
+        probe_tag = None
+    exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
+    exit(exit_code)
 
 
 if __name__ == "__main__":

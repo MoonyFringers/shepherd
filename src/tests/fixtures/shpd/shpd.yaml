@@ -99,8 +99,43 @@ envs:
         status:
           active: true
           archived: false
-          triggered_config: null
+          rendered_config: null
+    probes:
+      - tag: db-ready
+        container:
+          tag: db-ready
+          image: postgres:17-3.5
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - "#{env.tag}"
+          extra_hosts: []
+          subject_alternative_name: null
+          build: null
+        script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
+        script_path: null
+      - tag: db-live
+        container:
+          tag: db-live
+          image: postgres:17-3.5
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - "#{env.tag}"
+          extra_hosts: []
+          subject_alternative_name: null
+          build: null
+        script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
+        script_path: null
     status:
       active: true
       archived: false
-      triggered_config: null
+      rendered_config: null

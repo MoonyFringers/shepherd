@@ -354,20 +354,40 @@ class Resolvable:
 @dataclass
 class EntityStatus(Resolvable):
     """
-    Represents the status of an entity.
+    Represents the lifecycle and activation status of an entity.
 
-    - `active`: Whether this entity should be considered in
+    This class captures both static flags (e.g. archival state) and
+    runtime-derived information used during orchestration.
+
+    Field semantics:
+
+    - `active`:
+      Indicates whether this entity is eligible to participate in
       start/stop commands.
-      (Note: this is *not* the runtime state, which is queried dynamically.)
-    - `archived`: Marks the entity as archived (e.g., not used anymore).
-    - `triggered_config`: The rendered configuration for the target engine
-      (e.g., Docker Compose). This field is populated on `start` and
-      cleared on `stop`.
+      Note: this flag does *not* represent the actual runtime state,
+      which is evaluated dynamically by the target engine.
+
+    - `archived`:
+      Marks the entity as archived (e.g. deprecated or no longer in use).
+      Archived entities are typically ignored by orchestration logic.
+
+      The special probe identifier `base` is reserved and is guaranteed
+      to be present. It always evaluates to `true` and represents the
+      unconditional activation fallback.
+
+      When a probe evaluates to `true`, the corresponding configuration
+      entry is selected and may be started.
+
+    - `rendered_config`:
+      The rendered, engine-specific configuration (e.g. Docker Compose)
+      associated with the entity. This field is populated during `start`
+      and cleared on `stop`. The rendered configuration reflects the
+      configuration selected by the first successful probe.
     """
 
     active: bool = False
     archived: bool = False
-    triggered_config: Optional[str] = None
+    rendered_config: Optional[dict[str, str]] = None
 
 
 @dataclass
@@ -662,6 +682,52 @@ class EnvironmentCfg(Resolvable):
             else:
                 self.set_unresolved()
 
+    def get_probes_yaml(
+        self, probe_tag: Optional[str] = None, resolved: bool = False
+    ) -> Optional[str]:
+        """
+        Return the YAML representation of the environment probes configuration.
+
+        Args:
+            probe_tag: Optional probe tag to filter probes.
+            resolved:  If True, ensure placeholders are resolved before dumping.
+
+        Returns:
+            YAML string or None if no probes (or no matching probes) exist.
+        """
+        if not self.probes:
+            return None
+
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            probes = self.probes
+            if probe_tag is not None:
+                probes = [p for p in probes if p.tag == probe_tag]
+                if not probes:
+                    return None
+
+            data = cfg_asdict(probes)
+            if not data:
+                return None
+
+            config: dict[str, Any] = {
+                "probes": data,
+            }
+
+            return yaml.dump(config, sort_keys=False)
+
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
+
 
 @dataclass
 class StagingAreaCfg(Resolvable):
@@ -748,9 +814,9 @@ def parse_config(yaml_str: str) -> Config:
 
     def parse_status(item: Any) -> EntityStatus:
         return EntityStatus(
-            active=item["active"],
-            archived=item["archived"],
-            triggered_config=item.get("triggered_config"),
+            active=item.get("active", False),
+            archived=item.get("archived", False),
+            rendered_config=item.get("rendered_config"),
         )
 
     def parse_upstream(item: Any) -> UpstreamCfg:
@@ -1396,6 +1462,16 @@ class ConfigMng:
         """
         if env.services:
             return sorted({svc.tag for svc in env.services if svc.tag})
+        return []
+
+    def get_probe_tags(self, env: EnvironmentCfg) -> list[str]:
+        """
+        Retrieves all unique probe tags from the probe configurations.
+
+        :return: A list of unique probe tags.
+        """
+        if env.probes:
+            return sorted({probe.tag for probe in env.probes if probe.tag})
         return []
 
     def get_service(
