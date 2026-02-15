@@ -82,20 +82,16 @@ class Util:
                 else:
                     os.link(src_item, dest_item)
         except OSError as e:
-            Util.print_error_and_die(
-                f"""Failed to copy directory:
-                {src_path} to {dest_path}\nError: {e}"""
-            )
+            Util.print_error_and_die(f"""Failed to copy directory:
+                {src_path} to {dest_path}\nError: {e}""")
 
     @staticmethod
     def move_dir(src_path: str, dest_path: str):
         try:
             os.rename(src_path, dest_path)
         except OSError as e:
-            Util.print_error_and_die(
-                f"""Failed to move directory:
-                {src_path} to {dest_path}\nError: {e}"""
-            )
+            Util.print_error_and_die(f"""Failed to move directory:
+                {src_path} to {dest_path}\nError: {e}""")
 
     @staticmethod
     def remove_dir(dir_path: str):

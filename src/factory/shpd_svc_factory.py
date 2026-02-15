@@ -50,7 +50,5 @@ class ShpdServiceFactory(ServiceFactory):
                     self.configMng, envCfg, svcCfg, cli_flags=cli_flags
                 )
             case _:
-                raise ValueError(
-                    f"""Unknown service type: {svcCfg.template},
-                    plugins not supported yet!"""
-                )
+                raise ValueError(f"""Unknown service type: {svcCfg.template},
+                    plugins not supported yet!""")
