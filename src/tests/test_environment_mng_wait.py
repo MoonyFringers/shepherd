@@ -72,16 +72,23 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
 
-    status_samples: list[tuple[dict[str, list[list[str]]], bool, bool]] = [
-        ({}, False, False),
-        ({}, False, False),
-        ({"svc": [["cnt", "[bold green]● running[/bold green]"]]}, True, True),
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        ({}, False, False, False),
+        ({}, False, False, False),
+        (
+            {"svc": [["cnt", "[bold green]● running[/bold green]"]]},
+            True,
+            True,
+            True,
+        ),
     ]
     status_idx = {"value": 0}
 
     def collect_status(
         _env: Any,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool]:
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         idx = min(status_idx["value"], len(status_samples) - 1)
         status_idx["value"] += 1
         return status_samples[idx]

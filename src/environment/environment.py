@@ -497,7 +497,7 @@ class EnvironmentMng:
     def stop_env(self, envCfg: EnvironmentCfg):
         """Halt an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        env.stop()
+        self.wait_for_env_down(env, stop_action=env.stop)
         env.envCfg.status.rendered_config = None
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")
@@ -692,7 +692,7 @@ class EnvironmentMng:
     def status_env(self, envCfg: EnvironmentCfg):
         """Get environment status."""
         env = self.get_environment_from_cfg(envCfg)
-        grouped, _, has_containers = self._collect_env_status(env)
+        grouped, _, _, has_containers = self._collect_env_status(env)
         if not has_containers or not grouped:
             Util.console.print(
                 f"[yellow]No services found for "
@@ -707,48 +707,83 @@ class EnvironmentMng:
         timeout_seconds: Optional[int] = None,
         start_action: Optional[Callable[[], Any]] = None,
     ):
+        self._wait_for_env_state(
+            env,
+            timeout_seconds=timeout_seconds,
+            action=start_action,
+            wait_until_up=True,
+        )
+
+    def wait_for_env_down(
+        self,
+        env: Environment,
+        timeout_seconds: Optional[int] = None,
+        stop_action: Optional[Callable[[], Any]] = None,
+    ):
+        self._wait_for_env_state(
+            env,
+            timeout_seconds=timeout_seconds,
+            action=stop_action,
+            wait_until_up=False,
+        )
+
+    def _wait_for_env_state(
+        self,
+        env: Environment,
+        timeout_seconds: Optional[int],
+        action: Optional[Callable[[], Any]],
+        wait_until_up: bool,
+    ):
+        phase = "up" if wait_until_up else "down"
+        phase_gerund = "starting" if wait_until_up else "stopping"
+        timeout_target = "up" if wait_until_up else "down"
+
         if self._is_quiet():
-            if start_action:
-                start_action()
+            if action:
+                action()
             return
 
-        start_error: Optional[BaseException] = None
-        start_done = threading.Event()
+        action_error: Optional[BaseException] = None
+        action_done = threading.Event()
 
-        if start_action:
+        if action:
 
-            def run_start():
-                nonlocal start_error
+            def run_action():
+                nonlocal action_error
                 try:
-                    start_action()
+                    action()
                 except BaseException as e:
-                    start_error = e
+                    action_error = e
                 finally:
-                    start_done.set()
+                    action_done.set()
 
-            threading.Thread(target=run_start, daemon=True).start()
+            threading.Thread(target=run_action, daemon=True).start()
         else:
-            start_done.set()
+            action_done.set()
 
-        def raise_start_error():
-            if start_error is not None:
-                raise start_error
+        def raise_action_error():
+            if action_error is not None:
+                raise action_error
 
-        def in_startup() -> bool:
-            return not start_done.is_set()
+        def in_action() -> bool:
+            return not action_done.is_set()
+
+        def condition_met(all_running: bool, any_running: bool) -> bool:
+            if wait_until_up:
+                return all_running and not in_action()
+            return (not any_running) and not in_action()
 
         started = time.monotonic()
         logging.debug(
-            "wait_for_env_up started for env='%s' (timeout=%s, terminal=%s)",
+            "wait_for_env_%s started for env='%s' (timeout=%s, terminal=%s)",
+            phase,
             env.envCfg.tag,
             timeout_seconds,
             Util.console.is_terminal,
         )
         if not Util.console.is_terminal:
-            # In non-interactive mode (tests/CI/pipes) avoid long polling loops:
-            # wait for start to complete, then render one snapshot.
-            while in_startup():
-                raise_start_error()
+            while in_action():
+                raise_action_error()
                 remaining = self._remaining_timeout_seconds(
                     started, timeout_seconds
                 )
@@ -756,22 +791,27 @@ class EnvironmentMng:
                     if remaining <= 0:
                         Util.print_error_and_die(
                             "Timed out waiting for environment "
-                            f"'{env.envCfg.tag}' to be up."
+                            f"'{env.envCfg.tag}' to be {timeout_target}."
                         )
                 time.sleep(self._status_poll_seconds)
 
-            raise_start_error()
-            grouped, all_running, has_containers = self._collect_env_status(env)
+            raise_action_error()
+            grouped, all_running, any_running, has_containers = (
+                self._collect_env_status(env)
+            )
             remaining = self._remaining_timeout_seconds(
                 started, timeout_seconds
             )
             logging.debug(
-                "wait_for_env_up non-terminal snapshot env='%s': "
-                "groups=%d has_containers=%s all_running=%s remaining=%s",
+                "wait_for_env_%s non-terminal snapshot env='%s': "
+                "groups=%d has_containers=%s all_running=%s any_running=%s "
+                "remaining=%s",
+                phase,
                 env.envCfg.tag,
                 len(grouped),
                 has_containers,
                 all_running,
+                any_running,
                 remaining,
             )
             if not has_containers or not grouped:
@@ -799,34 +839,36 @@ class EnvironmentMng:
             screen=False,
         ) as live:
             while True:
-                raise_start_error()
-                grouped, all_running, has_containers = self._collect_env_status(
-                    env
+                raise_action_error()
+                grouped, all_running, any_running, has_containers = (
+                    self._collect_env_status(env)
                 )
                 remaining = self._remaining_timeout_seconds(
                     started, timeout_seconds
                 )
                 logging.debug(
-                    "wait_for_env_up poll env='%s': groups=%d "
-                    "has_containers=%s all_running=%s in_startup=%s "
-                    "remaining=%s",
+                    "wait_for_env_%s poll env='%s': groups=%d "
+                    "has_containers=%s all_running=%s any_running=%s "
+                    "in_action=%s remaining=%s",
+                    phase,
                     env.envCfg.tag,
                     len(grouped),
                     has_containers,
                     all_running,
-                    in_startup(),
+                    any_running,
+                    in_action(),
                     remaining,
                 )
 
                 if not has_containers or not grouped:
-                    if in_startup():
+                    if in_action():
                         title = f"[white]{env.envCfg.tag}[/white]"
                         if remaining is not None:
                             title = (
                                 f"{title} "
                                 f"[dim](Time left: {remaining}s)[/dim]"
                             )
-                        live.update(f"{title} [dim](starting...)[/dim]")
+                        live.update(f"{title} [dim]({phase_gerund}...)[/dim]")
                     else:
                         live.stop()
                         Util.console.print(
@@ -843,9 +885,11 @@ class EnvironmentMng:
                         )
                     )
 
-                if all_running and not in_startup():
+                if condition_met(all_running, any_running):
                     logging.debug(
-                        "wait_for_env_up complete env='%s'", env.envCfg.tag
+                        "wait_for_env_%s complete env='%s'",
+                        phase,
+                        env.envCfg.tag,
                     )
                     return
 
@@ -854,7 +898,7 @@ class EnvironmentMng:
                         live.stop()
                         Util.print_error_and_die(
                             "Timed out waiting for environment "
-                            f"'{env.envCfg.tag}' to be up."
+                            f"'{env.envCfg.tag}' to be {timeout_target}."
                         )
                 time.sleep(self._status_poll_seconds)
 
@@ -888,7 +932,7 @@ class EnvironmentMng:
 
     def _collect_env_status(
         self, env: Environment
-    ) -> tuple[dict[str, list[list[str]]], bool, bool]:
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         env_status = env.status()
         services: list[Service] = env.get_services()
         status_by_service = {
@@ -897,6 +941,7 @@ class EnvironmentMng:
 
         grouped: dict[str, list[list[str]]] = {}
         all_running = True
+        any_running = False
         has_containers = False
 
         for svc in services:
@@ -912,6 +957,7 @@ class EnvironmentMng:
                 )
 
                 if state == "running":
+                    any_running = True
                     state_colored = "[bold green]● running[/bold green]"
                 elif state == "stopped":
                     state_colored = "[bold red]● stopped[/bold red]"
@@ -929,7 +975,7 @@ class EnvironmentMng:
         if not has_containers:
             all_running = False
 
-        return grouped, all_running, has_containers
+        return grouped, all_running, any_running, has_containers
 
     def add_service(
         self,

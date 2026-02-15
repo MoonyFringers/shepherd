@@ -17,6 +17,7 @@
 
 
 import functools
+import builtins
 import logging
 import os
 from typing import Any, Callable, List, Optional
@@ -109,7 +110,7 @@ def empty():
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_obj
-def complete(shepherd: ShepherdMng, args: list[str]):
+def complete(shepherd: ShepherdMng, args: Any):
     """
     Internal shell completion entrypoint.
     Usage: shepctl __complete <args...>
@@ -117,7 +118,9 @@ def complete(shepherd: ShepherdMng, args: list[str]):
     This command disables Click’s usual option parsing
     to treat all arguments as raw strings.
     """
-    completions = shepherd.completionMng.get_completions(args)
+    completions = shepherd.completionMng.get_completions(
+        builtins.list(args)
+    )
     for c in completions:
         click.echo(c)
 
