@@ -31,6 +31,9 @@ class AbstractCompletionMng(ABC):
         self.cli_flags = cli_flags
         self.configMng = configMng
 
-    @abstractmethod
     def get_completions(self, args: list[str]) -> list[str]:
+        return self.get_completions_impl(args)
+
+    @abstractmethod
+    def get_completions_impl(self, args: list[str]) -> list[str]:
         pass

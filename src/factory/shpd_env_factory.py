@@ -32,7 +32,7 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
         self.svcFactory = svcFactory
 
     @override
-    def new_environment(
+    def new_environment_impl(
         self,
         env_tmpl_cfg: EnvironmentTemplateCfg,
         env_tag: str,
@@ -53,7 +53,7 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
                 )
 
     @override
-    def new_environment_cfg(self, envCfg: EnvironmentCfg) -> Environment:
+    def new_environment_cfg_impl(self, envCfg: EnvironmentCfg) -> Environment:
         """
         Get an environment.
         """

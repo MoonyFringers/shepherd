@@ -29,7 +29,7 @@ class CompletionEnvMng(AbstractCompletionMng):
         self.configMng = configMng
 
     @override
-    def get_completions(self, args: list[str]) -> list[str]:
+    def get_completions_impl(self, args: list[str]) -> list[str]:
         command = args[0]
         match command:
             case "add":

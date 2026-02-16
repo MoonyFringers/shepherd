@@ -61,34 +61,36 @@ class Environment(ABC):
         )
 
     @abstractmethod
-    def clone(self, dst_env_tag: str) -> Environment:
+    def clone_impl(self, dst_env_tag: str) -> Environment:
         """Clone the environment."""
         pass
+
+    def clone(self, dst_env_tag: str) -> Environment:
+        """Clone the environment."""
+        return self.clone_impl(dst_env_tag)
 
     def start(self):
         """Start the environment."""
         self.ensure_resources()
+        return self.start_impl()
 
-    @abstractmethod
     def stop(self):
         """Halt the environment."""
-        pass
+        return self.stop_impl()
 
-    @abstractmethod
     def reload(self):
         """Reload the environment."""
-        pass
+        return self.reload_impl()
 
     def render(self, resolved: bool) -> str:
         """Render the environment configuration."""
         return self.envCfg.get_yaml(resolved)
 
-    @abstractmethod
-    def render_target(self, resolved: bool) -> dict[str, str]:
+    def render_target(self, resolved: bool = False) -> dict[str, str]:
         """
         Render the environment configuration in the target system.
         """
-        pass
+        return self.render_target_impl(resolved)
 
     def render_probes(
         self, probe_tag: Optional[str], resolved: bool
@@ -98,14 +100,13 @@ class Environment(ABC):
         """
         return self.envCfg.get_probes_yaml(probe_tag, resolved)
 
-    @abstractmethod
     def render_probes_target(
         self, probe_tag: Optional[str], resolved: bool
     ) -> Optional[str]:
         """
         Render the environment probes configuration in the target system.
         """
-        pass
+        return self.render_probes_target_impl(probe_tag, resolved)
 
     def check_probes(
         self,
@@ -137,10 +138,9 @@ class Environment(ABC):
     ) -> list[ProbeRunResult]:
         pass
 
-    @abstractmethod
     def status(self) -> list[dict[str, str]]:
         """Get environment status."""
-        pass
+        return self.status_impl()
 
     def to_config(self) -> EnvironmentCfg:
         """To config"""
@@ -155,8 +155,48 @@ class Environment(ABC):
         """Return the directory for the environment with a given tag."""
         return os.path.join(self.configMng.config.envs_path, env_tag)
 
-    @abstractmethod
     def ensure_resources(self):
+        """Ensure the environment resources are available."""
+        return self.ensure_resources_impl()
+
+    @abstractmethod
+    def stop_impl(self):
+        """Halt the environment."""
+        pass
+
+    @abstractmethod
+    def start_impl(self):
+        """Start the environment."""
+        pass
+
+    @abstractmethod
+    def reload_impl(self):
+        """Reload the environment."""
+        pass
+
+    @abstractmethod
+    def render_target_impl(self, resolved: bool = False) -> dict[str, str]:
+        """
+        Render the environment configuration in the target system.
+        """
+        pass
+
+    @abstractmethod
+    def render_probes_target_impl(
+        self, probe_tag: Optional[str], resolved: bool
+    ) -> Optional[str]:
+        """
+        Render the environment probes configuration in the target system.
+        """
+        pass
+
+    @abstractmethod
+    def status_impl(self) -> list[dict[str, str]]:
+        """Get environment status."""
+        pass
+
+    @abstractmethod
+    def ensure_resources_impl(self):
         """Ensure the environment resources are available."""
         pass
 
@@ -242,8 +282,24 @@ class EnvironmentFactory(ABC):
     def __init__(self, config: ConfigMng):
         self.config = config
 
-    @abstractmethod
     def new_environment(
+        self,
+        env_tmpl_cfg: EnvironmentTemplateCfg,
+        env_tag: str,
+    ) -> Environment:
+        """
+        Create an environment.
+        """
+        return self.new_environment_impl(env_tmpl_cfg, env_tag)
+
+    def new_environment_cfg(self, envCfg: EnvironmentCfg) -> Environment:
+        """
+        Create an environment.
+        """
+        return self.new_environment_cfg_impl(envCfg)
+
+    @abstractmethod
+    def new_environment_impl(
         self,
         env_tmpl_cfg: EnvironmentTemplateCfg,
         env_tag: str,
@@ -254,7 +310,7 @@ class EnvironmentFactory(ABC):
         pass
 
     @abstractmethod
-    def new_environment_cfg(self, envCfg: EnvironmentCfg) -> Environment:
+    def new_environment_cfg_impl(self, envCfg: EnvironmentCfg) -> Environment:
         """
         Create an environment.
         """
