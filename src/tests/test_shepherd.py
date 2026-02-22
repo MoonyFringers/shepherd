@@ -109,7 +109,7 @@ def test_cli_flags_no_flags(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        {"verbose": False, "quiet": False, "yes": False}
+        {"verbose": False, "quiet": False, "details": False, "yes": False}
     )
 
 
@@ -121,7 +121,7 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {"verbose": True, "quiet": False, "yes": False}
+    flags = {"verbose": True, "quiet": False, "details": False, "yes": False}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -140,7 +140,7 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {"verbose": False, "quiet": False, "yes": True}
+    flags = {"verbose": False, "quiet": False, "details": False, "yes": True}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -149,6 +149,20 @@ def test_cli_flags_yes(
 
     assert result.exit_code == 0
     mock_init.assert_called_with(flags)
+
+
+@pytest.mark.shpd
+def test_cli_flags_details(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["--details", "test"])
+
+    flags = {"verbose": False, "quiet": False, "details": True, "yes": False}
+
+    assert result.exit_code == 0
+    mock_init.assert_called_once_with(flags)
 
 
 # completion tests

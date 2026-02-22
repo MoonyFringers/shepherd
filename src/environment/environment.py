@@ -26,7 +26,9 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from rich import box
 from rich.live import Live
+from rich.table import Table
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
@@ -74,6 +76,9 @@ class Environment(ABC):
 
     def _is_quiet(self) -> bool:
         return bool(self.cli_flags.get("quiet", False))
+
+    def _is_details(self) -> bool:
+        return bool(self.cli_flags.get("details", False))
 
     @abstractmethod
     def clone_impl(self, dst_env_tag: str) -> Environment:
@@ -355,6 +360,9 @@ class EnvironmentMng:
 
     def _is_quiet(self) -> bool:
         return bool(self.cli_flags.get("quiet", False))
+
+    def _is_details(self) -> bool:
+        return bool(self.cli_flags.get("details", False))
 
     def get_environment_from_tag(
         self, env_tag: Optional[str]
@@ -773,6 +781,26 @@ class EnvironmentMng:
                 return all_running and not in_action()
             return (not any_running) and not in_action()
 
+        required_gate_tags = self._get_required_gate_tags(env)
+        gate_status: dict[str, Optional[bool]] = {
+            tag: None for tag in required_gate_tags
+        }
+        next_gate_eval_at = time.monotonic() + max(
+            1.0, self._status_poll_seconds * 2
+        )
+
+        def get_gate_status() -> Optional[dict[str, Optional[bool]]]:
+            nonlocal gate_status, next_gate_eval_at
+            if not wait_until_up or not required_gate_tags:
+                return None
+            now = time.monotonic()
+            if now < next_gate_eval_at:
+                return gate_status
+            gate_status = self._evaluate_gate_status(env, required_gate_tags)
+            # Avoid running probes on every visual refresh tick.
+            next_gate_eval_at = now + max(1.0, self._status_poll_seconds * 2)
+            return gate_status
+
         started = time.monotonic()
         logging.debug(
             "wait_for_env_%s started for env='%s' (timeout=%s, terminal=%s)",
@@ -796,8 +824,12 @@ class EnvironmentMng:
                 time.sleep(self._status_poll_seconds)
 
             raise_action_error()
+            current_gate_status = get_gate_status()
             grouped, all_running, any_running, has_containers = (
-                self._collect_env_status(env)
+                self._collect_env_status(
+                    env,
+                    gate_status=current_gate_status,
+                )
             )
             remaining = self._remaining_timeout_seconds(
                 started, timeout_seconds
@@ -840,8 +872,12 @@ class EnvironmentMng:
         ) as live:
             while True:
                 raise_action_error()
+                current_gate_status = get_gate_status()
                 grouped, all_running, any_running, has_containers = (
-                    self._collect_env_status(env)
+                    self._collect_env_status(
+                        env,
+                        gate_status=current_gate_status,
+                    )
                 )
                 remaining = self._remaining_timeout_seconds(
                     started, timeout_seconds
@@ -911,15 +947,39 @@ class EnvironmentMng:
         title = f"[white]{env_tag}[/white]"
         if remaining_seconds is not None:
             title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
-        return Util.build_grouped_table(
+        table = Table(
             title=title,
-            group_column_header="Service",
-            item_columns=[
-                {"header": "Container", "style": "white"},
-                {"header": "State"},
-            ],
-            groups=grouped,
+            box=box.SIMPLE,
+            title_justify="left",
+            title_style="bold",
         )
+        table.add_column("Gates", style="cyan", no_wrap=True)
+        table.add_column("Service", style="cyan", no_wrap=True)
+        table.add_column("Container", style="white", no_wrap=True)
+        table.add_column("State", no_wrap=True)
+        if self._is_details():
+            table.add_column("Probes", style="white")
+
+        for service, items in grouped.items():
+            for idx, item in enumerate(items):
+                gate_details = ""
+                if self._is_details():
+                    gates, container, state, gate_details = item
+                else:
+                    gates, container, state = item
+                is_last = idx == len(items) - 1
+                branch = "└─" if is_last else "├─"
+                row: list[str] = [
+                    gates if idx == 0 else "",
+                    f"[bold]{service}[/bold]" if idx == 0 else "",
+                    f"{branch} {container}",
+                    state,
+                ]
+                if self._is_details():
+                    row.append(gate_details if idx == 0 else "")
+                table.add_row(*row)
+
+        return table
 
     def _remaining_timeout_seconds(
         self, started_at: float, timeout_seconds: Optional[int]
@@ -931,7 +991,9 @@ class EnvironmentMng:
         return remaining if remaining > 0 else 0
 
     def _collect_env_status(
-        self, env: Environment
+        self,
+        env: Environment,
+        gate_status: Optional[dict[str, Optional[bool]]] = None,
     ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         env_status = env.status()
         services: list[Service] = env.get_services()
@@ -946,7 +1008,15 @@ class EnvironmentMng:
 
         for svc in services:
             rows: list[list[str]] = []
-            for container in svc.svcCfg.containers or []:
+            service_gates = self._format_service_gate_glyphs(
+                svc,
+                gate_status=gate_status,
+            )
+            service_gate_details = self._format_service_gate_details(
+                svc,
+                gate_status=gate_status,
+            )
+            for idx, container in enumerate(svc.svcCfg.containers or []):
                 has_containers = True
                 cnt_name = container.run_container_name or ""
                 cnt_info = status_by_service.get(cnt_name)
@@ -967,7 +1037,11 @@ class EnvironmentMng:
                 if state != "running":
                     all_running = False
 
-                rows.append([container.tag, state_colored])
+                gates_cell = service_gates if idx == 0 else ""
+                row = [gates_cell, container.tag, state_colored]
+                if self._is_details():
+                    row.append(service_gate_details if idx == 0 else "")
+                rows.append(row)
 
             if rows:
                 grouped[svc.svcCfg.tag] = rows
@@ -976,6 +1050,99 @@ class EnvironmentMng:
             all_running = False
 
         return grouped, all_running, any_running, has_containers
+
+    def _format_service_gate_glyphs(
+        self,
+        svc: Service,
+        gate_status: Optional[dict[str, Optional[bool]]] = None,
+    ) -> str:
+        when_probes = (
+            svc.svcCfg.start.when_probes
+            if svc.svcCfg.start and svc.svcCfg.start.when_probes
+            else None
+        )
+        if not when_probes:
+            return "[dim]-[/dim]"
+        if gate_status is None:
+            return "".join("[dim]○[/dim]" for _ in when_probes)
+
+        glyphs: list[str] = []
+        for probe_tag in when_probes:
+            probe_ok = gate_status.get(probe_tag)
+            if probe_ok is True:
+                glyphs.append("[bold green]●[/bold green]")
+            elif probe_ok is False:
+                glyphs.append("[bold red]●[/bold red]")
+            else:
+                glyphs.append("[dim]○[/dim]")
+        return "".join(glyphs)
+
+    def _format_service_gate_details(
+        self,
+        svc: Service,
+        gate_status: Optional[dict[str, Optional[bool]]] = None,
+    ) -> str:
+        when_probes = (
+            svc.svcCfg.start.when_probes
+            if svc.svcCfg.start and svc.svcCfg.start.when_probes
+            else None
+        )
+        if not when_probes:
+            return "[dim]-[/dim]"
+
+        probe_tags = sorted(when_probes)
+        parts: list[str] = []
+        for probe_tag in probe_tags:
+            if gate_status is None:
+                parts.append(f"[dim]{probe_tag}[/dim]")
+                continue
+            probe_ok = gate_status.get(probe_tag)
+            if probe_ok is True:
+                parts.append(f"[bold green]{probe_tag}[/bold green]")
+            elif probe_ok is False:
+                parts.append(f"[bold red]{probe_tag}[/bold red]")
+            else:
+                parts.append(f"[dim]{probe_tag}[/dim]")
+        return ", ".join(parts)
+
+    def _get_required_gate_tags(self, env: Environment) -> set[str]:
+        required: set[str] = set()
+        for svc in env.get_services():
+            when_probes = (
+                svc.svcCfg.start.when_probes
+                if svc.svcCfg.start and svc.svcCfg.start.when_probes
+                else None
+            )
+            if when_probes:
+                required.update(when_probes)
+        return required
+
+    def _evaluate_gate_status(
+        self,
+        env: Environment,
+        required_gate_tags: set[str],
+    ) -> dict[str, Optional[bool]]:
+        status: dict[str, Optional[bool]] = {
+            tag: None for tag in required_gate_tags
+        }
+        if not required_gate_tags:
+            return status
+        try:
+            results = env.check_probes(
+                probe_tag=None,
+                fail_fast=False,
+                timeout_seconds=10,
+            )
+        except Exception as e:
+            logging.debug(
+                "Gate evaluation failed for env '%s': %s", env.envCfg.tag, e
+            )
+            return status
+
+        for r in results:
+            if r.tag in status:
+                status[r.tag] = (r.exit_code == 0) and not r.timed_out
+        return status
 
     def add_service(
         self,

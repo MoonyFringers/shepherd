@@ -16,8 +16,8 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-import functools
 import builtins
+import functools
 import logging
 import os
 from typing import Any, Callable, List, Optional
@@ -81,17 +81,33 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
 @click.option("--quiet", is_flag=True, help="Suppress command output.")
 @click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
     "-y",
     "--yes",
     is_flag=True,
     help="Automatic yes to prompts; run non-interactively.",
 )
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, quiet: bool, yes: bool):
+def cli(
+    ctx: click.Context,
+    verbose: bool,
+    quiet: bool,
+    details: bool,
+    yes: bool,
+):
     """Shepherd CLI:
     A tool to manage your environments, services, and databases.
     """
-    cli_flags = {"verbose": verbose, "quiet": quiet, "yes": yes}
+    cli_flags = {
+        "verbose": verbose,
+        "quiet": quiet,
+        "details": details,
+        "yes": yes,
+    }
 
     if ctx.obj is None:
         ctx.obj = ShepherdMng(cli_flags)
@@ -118,9 +134,7 @@ def complete(shepherd: ShepherdMng, args: Any):
     This command disables Click’s usual option parsing
     to treat all arguments as raw strings.
     """
-    completions = shepherd.completionMng.get_completions(
-        builtins.list(args)
-    )
+    completions = shepherd.completionMng.get_completions(builtins.list(args))
     for c in completions:
         click.echo(c)
 
