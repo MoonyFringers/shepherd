@@ -129,28 +129,12 @@ service_templates:
         extra_hosts: []
         subject_alternative_name: null
         build: null
-    inits:
-      - tag: create-docker-user
-        container:
-          tag: create-docker-user
-          image: ${pg_image}
-          hostname: null
-          container_name: null
-          workdir: null
-          volumes: []
-          environment:
-            - USERNAME=docker
-            - PASSWORD=test
-          ports: []
-          networks:
-            - "#{env.tag}"
-          extra_hosts: []
-          subject_alternative_name: null
-          build: null
-        script: "sh -c 'echo init ok'"
-        script_path: null
-        when_probes:
-          - ready
+        inits:
+          - tag: create-docker-user
+            script: sh -c 'echo init ok'
+            script_path: null
+            when_probes:
+              - ready
     start:
       when_probes:
         - sample-1-test-probe
@@ -181,7 +165,7 @@ envs:
             extra_hosts: []
             subject_alternative_name: null
             build: null
-        inits: []
+            inits: null
         start:
           when_probes:
             - sample-1-test-probe

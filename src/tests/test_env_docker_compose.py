@@ -81,7 +81,6 @@ services:
   tag: test-1
   service_class: null
   upstreams: []
-  inits: []
   start: null
   containers:
   - image: busybox:stable-glibc
@@ -103,6 +102,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     subject_alternative_name: null
+    inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -119,7 +119,6 @@ services:
   tag: test-2
   service_class: null
   upstreams: []
-  inits: []
   start: null
   containers:
   - image: busybox:stable-glibc
@@ -141,6 +140,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     subject_alternative_name: null
+    inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -166,6 +166,7 @@ probes:
         - "#{env.tag}"
       extra_hosts: []
       subject_alternative_name: null
+      inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
     script_path: null
@@ -183,6 +184,7 @@ probes:
         - "#{env.tag}"
       extra_hosts: []
       subject_alternative_name: null
+      inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
     script_path: null
@@ -238,7 +240,6 @@ services:
   tag: test-1
   service_class: null
   upstreams: []
-  inits: []
   start: null
   containers:
   - image: busybox:stable-glibc
@@ -260,6 +261,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     subject_alternative_name: null
+    inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -276,7 +278,6 @@ services:
   tag: test-2
   service_class: null
   upstreams: []
-  inits: []
   start: null
   containers:
   - image: busybox:stable-glibc
@@ -298,6 +299,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     subject_alternative_name: null
+    inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -323,6 +325,7 @@ probes:
         - test-1
       extra_hosts: []
       subject_alternative_name: null
+      inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
     script_path: null
@@ -340,6 +343,7 @@ probes:
         - test-1
       extra_hosts: []
       subject_alternative_name: null
+      inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
     script_path: null
@@ -817,6 +821,7 @@ probes:
     - '#{env.tag}'
     extra_hosts: []
     subject_alternative_name: null
+    inits: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
   script_path: null
@@ -858,6 +863,7 @@ probes:
     - test-1
     extra_hosts: []
     subject_alternative_name: null
+    inits: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
   script_path: null

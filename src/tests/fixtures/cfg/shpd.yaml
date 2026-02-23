@@ -61,7 +61,6 @@ env_templates:
 service_templates:
   - tag: oracle
     factory: docker
-    inits: []
     start: null
     containers:
       - image: ${ora_image}
@@ -78,6 +77,7 @@ service_templates:
         extra_hosts: []
         subject_alternative_name: null
         build: null
+        inits: null
     labels: []
     ingress: false
     empty_env: ${ora_empty_env}
@@ -91,7 +91,6 @@ service_templates:
       psw: ${db_psw}
   - tag: postgres
     factory: docker
-    inits: []
     start: null
     containers:
       - image: ${pg_image}
@@ -109,6 +108,7 @@ service_templates:
         build:
           context_path: "#{cfg.envs_path}/#{env.tag}/build"
           dockerfile_path: "#{cnt.build.context_path}/Dockerfile"
+        inits: null
     labels: []
     ingress: false
     empty_env: ${pg_empty_env}
@@ -124,7 +124,6 @@ envs:
     services:
       - template: postgres
         factory: docker
-        inits: []
         start: null
         containers:
           - image: ghcr.io/MoonyFringers/shepherd/postgres:17-3.5
@@ -141,6 +140,7 @@ envs:
             build:
               context_path: "#{cfg.envs_path}/#{env.tag}/build"
               dockerfile_path: "#{cnt.build.context_path}/Dockerfile"
+            inits: null
         tag: pg-1
         service_class: null
         labels: []
@@ -182,7 +182,6 @@ envs:
         factory: docker
         tag: traefik-1
         service_class: null
-        inits: []
         start: null
         containers:
           - image: ""
@@ -197,6 +196,7 @@ envs:
             extra_hosts: []
             subject_alternative_name: null
             build: null
+            inits: null
         labels: []
         ingress: true
         empty_env: null
@@ -210,7 +210,6 @@ envs:
         factory: docker
         tag: primary
         service_class: null
-        inits: []
         start: null
         containers:
           - image: ""
@@ -225,6 +224,7 @@ envs:
             extra_hosts: []
             subject_alternative_name: null
             build: null
+            inits: null
         labels: []
         ingress: true
         empty_env: null
@@ -240,7 +240,6 @@ envs:
         factory: docker
         tag: poke
         service_class: null
-        inits: []
         start: null
         containers:
           - image: ""
@@ -258,6 +257,7 @@ envs:
             networks: []
             extra_hosts: []
             subject_alternative_name: null
+            inits: null
         labels: []
         ingress: null
         empty_env: null
