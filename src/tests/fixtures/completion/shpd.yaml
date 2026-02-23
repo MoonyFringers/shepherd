@@ -61,6 +61,7 @@ service_templates:
         extra_hosts:
           - host.docker.internal:host-gateway
         subject_alternative_name: null
+        inits: null
       - image: test-image:latest
         tag: container-2
         workdir: /test
@@ -77,6 +78,7 @@ service_templates:
         extra_hosts:
           - host.docker.internal:host-gateway
         subject_alternative_name: null
+        inits: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
@@ -102,6 +104,7 @@ service_templates:
         extra_hosts:
           - host.docker.internal:host-gateway
         subject_alternative_name: null
+        inits: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
@@ -134,6 +137,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
           - image: test-image:latest
             tag: container-2
             workdir: /test
@@ -150,6 +154,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -180,6 +185,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         ingress: false
         status:
           active: true
@@ -205,6 +211,7 @@ envs:
           extra_hosts: []
           subject_alternative_name: null
           build: null
+          inits: null
         script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
         script_path: null
       - tag: db-live
@@ -222,6 +229,7 @@ envs:
           extra_hosts: []
           subject_alternative_name: null
           build: null
+          inits: null
         script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
         script_path: null
   - template: default
@@ -248,6 +256,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         ingress: false
         status:
           active: true

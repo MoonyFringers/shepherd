@@ -65,6 +65,7 @@ service_templates:
     extra_hosts:
       - host.docker.internal:host-gateway
     subject_alternative_name: null
+    inits: null
 envs:
   - template: default
     factory: docker-compose
@@ -90,6 +91,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         labels:
           - com.example.label1=value1
           - com.example.label2=value2
@@ -116,6 +118,7 @@ envs:
           extra_hosts: []
           subject_alternative_name: null
           build: null
+          inits: null
         script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
         script_path: null
       - tag: db-live
@@ -133,6 +136,7 @@ envs:
           extra_hosts: []
           subject_alternative_name: null
           build: null
+          inits: null
         script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
         script_path: null
     status:

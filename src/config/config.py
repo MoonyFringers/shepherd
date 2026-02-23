@@ -462,6 +462,18 @@ class BuildCfg(Resolvable):
 
 
 @dataclass
+class InitCfg(Resolvable):
+    """
+    Represents a service init configuration.
+    """
+
+    tag: str
+    script: Optional[str] = None
+    script_path: Optional[str] = None
+    when_probes: Optional[list[str]] = None
+
+
+@dataclass
 class ContainerCfg(Resolvable):
     tag: str
     image: Optional[str] = None
@@ -481,6 +493,7 @@ class ContainerCfg(Resolvable):
     extra_hosts: Optional[list[str]] = None
     subject_alternative_name: Optional[str] = None
     build: Optional[BuildCfg] = None
+    inits: Optional[list[InitCfg]] = None
 
 
 @dataclass
@@ -493,19 +506,6 @@ class ProbeCfg(Resolvable):
     container: Optional[ContainerCfg] = None
     script: Optional[str] = None
     script_path: Optional[str] = None
-
-
-@dataclass
-class InitCfg(Resolvable):
-    """
-    Represents a service init configuration.
-    """
-
-    tag: str
-    container: Optional[ContainerCfg] = None
-    script: Optional[str] = None
-    script_path: Optional[str] = None
-    when_probes: Optional[list[str]] = None
 
 
 @dataclass
@@ -530,7 +530,6 @@ class ServiceTemplateCfg(Resolvable):
     empty_env: Optional[str] = None
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     containers: Optional[list[ContainerCfg]] = None
-    inits: Optional[list[InitCfg]] = None
     start: Optional[StartCfg] = None
 
     def is_ingress(self) -> bool:
@@ -565,7 +564,6 @@ class ServiceCfg(Resolvable):
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     upstreams: Optional[list[UpstreamCfg]] = None
     containers: Optional[list[ContainerCfg]] = None
-    inits: Optional[list[InitCfg]] = None
     start: Optional[StartCfg] = None
     status: EntityStatus = field(
         default_factory=lambda: EntityStatus(active=True)
@@ -838,6 +836,11 @@ def parse_config(yaml_str: str) -> Config:
         )
 
     def parse_container(item: Any) -> ContainerCfg:
+        inits = (
+            [parse_init(init) for init in item.get("inits", [])]
+            if item.get("inits") is not None
+            else None
+        )
         return ContainerCfg(
             tag=item.get("tag"),
             image=item.get("image"),
@@ -851,6 +854,7 @@ def parse_config(yaml_str: str) -> Config:
             extra_hosts=item.get("extra_hosts", []),
             subject_alternative_name=item.get("subject_alternative_name"),
             build=parse_build(item["build"]) if item.get("build") else None,
+            inits=inits,
         )
 
     def parse_probe(item: Any) -> ProbeCfg:
@@ -868,11 +872,6 @@ def parse_config(yaml_str: str) -> Config:
     def parse_init(item: Any) -> InitCfg:
         return InitCfg(
             tag=item["tag"],
-            container=(
-                parse_container(item["container"])
-                if item.get("container")
-                else None
-            ),
             script=item.get("script"),
             script_path=item.get("script_path"),
             when_probes=item.get("when_probes", []),
@@ -899,7 +898,6 @@ def parse_config(yaml_str: str) -> Config:
                 parse_container(container)
                 for container in item.get("containers", [])
             ],
-            inits=[parse_init(init) for init in item.get("inits", [])],
             start=parse_start(item["start"]) if item.get("start") else None,
         )
 
@@ -925,7 +923,6 @@ def parse_config(yaml_str: str) -> Config:
                 parse_container(container)
                 for container in item.get("containers", [])
             ],
-            inits=[parse_init(init) for init in item.get("inits", [])],
             start=parse_start(item["start"]) if item.get("start") else None,
             status=parse_status(item["status"]),
         )
@@ -1554,7 +1551,6 @@ class ConfigMng:
             empty_env=other.empty_env,
             properties=deepcopy(other.properties),
             containers=deepcopy(other.containers),
-            inits=deepcopy(other.inits),
             start=deepcopy(other.start),
         )
 
@@ -1578,7 +1574,6 @@ class ConfigMng:
             properties={},
             upstreams=[],
             containers=[],
-            inits=[],
             start=None,
         )
 
@@ -1602,6 +1597,5 @@ class ConfigMng:
             properties=deepcopy(service_template.properties),
             upstreams=[],
             containers=deepcopy(service_template.containers),
-            inits=deepcopy(service_template.inits),
             start=deepcopy(service_template.start),
         )

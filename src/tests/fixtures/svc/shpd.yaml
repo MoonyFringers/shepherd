@@ -50,6 +50,7 @@ service_templates:
         ports: []
         subject_alternative_name: null
         environment: []
+        inits: null
     ingress: false
     empty_env: null
     properties: {}
@@ -62,6 +63,7 @@ service_templates:
         ports:
           - net_listener_port:${pg_listener_port}
         subject_alternative_name: null
+        inits: null
     ingress: false
     empty_env: ${pg_empty_env}
     properties:

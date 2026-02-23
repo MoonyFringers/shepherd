@@ -517,11 +517,12 @@ def test_load_config_parses_lifecycle_sections(
     assert pg_tpl is not None
 
     # inits
-    assert pg_tpl.inits is not None
-    assert len(pg_tpl.inits) == 1
-    init0 = pg_tpl.inits[0]
+    assert pg_tpl.containers is not None
+    assert len(pg_tpl.containers) == 1
+    assert pg_tpl.containers[0].inits is not None
+    assert len(pg_tpl.containers[0].inits) == 1
+    init0 = pg_tpl.containers[0].inits[0]
     assert init0.tag == "create-docker-user"
-    assert init0.container is not None
     assert init0.script == "sh -c 'echo init ok'"
     assert init0.script_path is None
     assert init0.when_probes == ["ready"]

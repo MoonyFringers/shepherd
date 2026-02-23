@@ -46,7 +46,6 @@ envs:
         ingress: false
         empty_env: null
         properties: {}
-        inits: []
         containers:
           - image: test-image:latest
             build:
@@ -70,6 +69,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         status:
           active: true
           archived: false
@@ -83,7 +83,6 @@ envs:
         ingress: false
         empty_env: null
         properties: {}
-        inits: []
         containers:
           - image: test-image:latest
             tag: container-1
@@ -101,6 +100,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
           - image: test-image:latest
             build:
               context_path: "#{cfg.envs_path}/#{env.tag}/build"
@@ -120,6 +120,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         status:
           active: true
           archived: false
@@ -133,7 +134,6 @@ envs:
         ingress: false
         empty_env: null
         properties: {}
-        inits: []
         containers:
           - image: test-image:latest
             tag: container-1
@@ -153,6 +153,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         status:
           active: true
           archived: false
@@ -166,7 +167,6 @@ envs:
         ingress: false
         empty_env: null
         properties: {}
-        inits: []
         containers:
           - image: test-image:latest
             build:
@@ -186,6 +186,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         status:
           active: true
           archived: false
@@ -199,7 +200,6 @@ envs:
         ingress: false
         empty_env: null
         properties: {}
-        inits: []
         containers:
           - image: test-image:latest
             build:
@@ -220,6 +220,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         status:
           active: true
           archived: false
