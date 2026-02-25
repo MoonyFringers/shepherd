@@ -78,17 +78,45 @@ class DockerComposeEnv(Environment):
         return clonedEnv
 
     @override
-    def start_impl(self):
-        """Start the environment."""
-        rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
+    def start_impl(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]] = None,
+    ) -> set[str]:
+        """Start the environment according to probe-gate availability."""
+        rendered_map = self.envCfg.status.rendered_config or {}
+        if not rendered_map:
+            return set()
+
+        probe_status: dict[str, bool] = {"base": True}
+        if probe_results:
+            for result in probe_results:
+                probe_status[result.tag] = (
+                    result.exit_code == 0
+                ) and not result.timed_out
+
+        started_now: set[str] = set()
+        for gate_key, rendered_yaml in rendered_map.items():
+            if gate_key in started_gate_keys:
+                continue
+
+            if gate_key != "ungated":
+                required_tags = [tag for tag in gate_key.split("|") if tag]
+                if not required_tags:
+                    continue
+                if not all(probe_status.get(tag, False) for tag in required_tags):
+                    continue
+
             run_compose(
-                rendered_map["ungated"],
+                rendered_yaml,
                 "up",
                 "-d",
                 project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
             )
+            started_now.add(gate_key)
+
+        return started_now
 
     @override
     def stop_impl(self):

@@ -89,10 +89,47 @@ class Environment(ABC):
         """Clone the environment."""
         return self.clone_impl(dst_env_tag)
 
-    def start(self):
+    def start(self, timeout_seconds: Optional[int] = 60):
         """Start the environment."""
+        self.envCfg.status.rendered_config = self.render_target(True)
+        self.sync_config()
         self.ensure_resources()
-        return self.start_impl()
+
+        rendered_config = self.envCfg.status.rendered_config or {}
+        pending_gate_keys = set(rendered_config.keys())
+        started_gate_keys: set[str] = set()
+
+        started_now = self.start_impl(
+            started_gate_keys=started_gate_keys,
+            probe_results=None,
+        )
+        started_gate_keys.update(started_now)
+        pending_gate_keys -= started_now
+
+        started_at = time.monotonic()
+        while pending_gate_keys:
+            probe_results = self.check_probes(
+                probe_tag=None,
+                fail_fast=False,
+                timeout_seconds=120,
+            )
+            if not probe_results:
+                break
+
+            started_now = self.start_impl(
+                started_gate_keys=started_gate_keys,
+                probe_results=probe_results,
+            )
+            if not started_now:
+                if timeout_seconds is not None:
+                    elapsed = int(time.monotonic() - started_at)
+                    if elapsed >= timeout_seconds:
+                        break
+                time.sleep(1.0)
+                continue
+
+            started_gate_keys.update(started_now)
+            pending_gate_keys -= started_now
 
     def stop(self):
         """Halt the environment."""
@@ -185,7 +222,11 @@ class Environment(ABC):
         pass
 
     @abstractmethod
-    def start_impl(self):
+    def start_impl(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]] = None,
+    ) -> set[str]:
         """Start the environment."""
         pass
 
@@ -493,12 +534,10 @@ class EnvironmentMng:
                 "Timeout must be greater than or equal to 0."
             )
         env = self.get_environment_from_cfg(envCfg)
-        env.envCfg.status.rendered_config = env.render_target(True)
-        env.sync_config()
         self.wait_for_env_up(
             env,
             timeout_seconds=timeout_seconds,
-            start_action=env.start,
+            start_action=lambda: env.start(timeout_seconds=timeout_seconds),
         )
         Util.print(f"Started environment: {env.envCfg.tag}")
 

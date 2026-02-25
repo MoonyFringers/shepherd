@@ -39,35 +39,6 @@ def _new_environment_mng(
     )
 
 
-def test_start_env_wraps_start_with_wait_loop(mocker: MockerFixture):
-    mng = _new_environment_mng(mocker)
-
-    env_cfg = cast(
-        Any,
-        SimpleNamespace(
-            tag="test-env",
-            status=SimpleNamespace(rendered_config=None),
-        ),
-    )
-    env = mocker.Mock()
-    env.envCfg = env_cfg
-    env.render_target.return_value = {"ungated": "yaml"}
-
-    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
-    wait_for_env_up = mocker.patch.object(mng, "wait_for_env_up")
-
-    mng.start_env(env_cfg, timeout_seconds=15)
-
-    assert env.start.call_count == 0
-    wait_for_env_up.assert_called_once_with(
-        env,
-        timeout_seconds=15,
-        start_action=env.start,
-    )
-    env.sync_config.assert_called_once()
-    assert env.envCfg.status.rendered_config == {"ungated": "yaml"}
-
-
 def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     setattr(mng, "_status_poll_seconds", 0.001)
