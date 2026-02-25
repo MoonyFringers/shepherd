@@ -23,6 +23,9 @@ from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
 
 from environment.environment import EnvironmentMng, ProbeRunResult
 from util.util import Util
@@ -253,6 +256,69 @@ def test_build_env_status_table_includes_details_column_when_enabled(
     table = mng_any._build_env_status_table("env-1", grouped)
     headers = [c.header for c in table.columns]
     assert headers == ["Gates", "Service", "Container", "State", "Probes"]
+
+
+def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]● running[/bold green]",
+            ]
+        ]
+    }
+
+    renderable = mng_any._build_env_status_table(
+        "env-1",
+        grouped,
+        command_log=["[green]ok[/green]", "[red]fail[/red]"],
+        command_log_limit=4,
+    )
+    assert isinstance(renderable, Group)
+    assert isinstance(renderable.renderables[0], Table)
+    assert isinstance(renderable.renderables[1], Panel)
+    panel = renderable.renderables[1]
+    assert panel.title == "Recent Commands"
+    assert panel.border_style == "blue"
+    assert panel.expand is True
+    assert panel.box is not None
+    assert len(str(panel.renderable).splitlines()) == 4
+
+
+def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]● running[/bold green]",
+            ]
+        ]
+    }
+
+    renderable = mng_any._build_env_status_table(
+        "env-1",
+        grouped,
+        command_log=["[green]ok[/green]"],
+        command_log_limit=2,
+        command_error={
+            "title": "Command start:db failed",
+            "body": "--- stderr ---\nboom",
+        },
+        command_error_limit=2,
+    )
+    assert isinstance(renderable, Group)
+    assert len(renderable.renderables) == 3
+    error_panel = renderable.renderables[2]
+    assert isinstance(error_panel, Panel)
+    assert error_panel.title == "Command start:db failed"
+    assert error_panel.border_style == "red"
+    assert len(str(error_panel.renderable).splitlines()) == 2
 
 
 def test_collect_env_status_details_row_shape(mocker: MockerFixture):

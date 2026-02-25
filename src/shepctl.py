@@ -30,10 +30,11 @@ from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from service import ServiceMng
 from util import Util, setup_logging
+from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 
 class ShepherdMng:
-    def __init__(self, cli_flags: dict[str, bool] = {}):
+    def __init__(self, cli_flags: dict[str, Any] = {}):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
         setup_logging(
@@ -86,6 +87,18 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     help="Show additional details in status tables.",
 )
 @click.option(
+    "--logs",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--log-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
     "-y",
     "--yes",
     is_flag=True,
@@ -97,6 +110,8 @@ def cli(
     verbose: bool,
     quiet: bool,
     details: bool,
+    logs: bool,
+    log_limit: int,
     yes: bool,
 ):
     """Shepherd CLI:
@@ -106,6 +121,8 @@ def cli(
         "verbose": verbose,
         "quiet": quiet,
         "details": details,
+        "logs": logs,
+        "log_limit": log_limit,
         "yes": yes,
     }
 

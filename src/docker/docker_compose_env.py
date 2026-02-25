@@ -21,7 +21,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Optional, override
+from typing import Any, Optional, cast, override
 
 import yaml
 
@@ -36,13 +36,14 @@ from .docker_compose_util import render_container, run_compose
 
 
 class DockerComposeEnv(Environment):
+    _command_category_width = 16
 
     def __init__(
         self,
         config: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ):
         """Initialize a Docker Compose environment."""
         super().__init__(config, svcFactory, envCfg, cli_flags=cli_flags)
@@ -104,15 +105,17 @@ class DockerComposeEnv(Environment):
                 required_tags = [tag for tag in gate_key.split("|") if tag]
                 if not required_tags:
                     continue
-                if not all(probe_status.get(tag, False) for tag in required_tags):
+                if not all(
+                    probe_status.get(tag, False) for tag in required_tags
+                ):
                     continue
 
-            run_compose(
+            self._run_compose(
                 rendered_yaml,
                 "up",
                 "-d",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category=f"start:{gate_key}",
             )
             started_now.add(gate_key)
 
@@ -123,11 +126,11 @@ class DockerComposeEnv(Environment):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
-            run_compose(
+            self._run_compose(
                 rendered_map["ungated"],
                 "down",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category="stop",
             )
 
     @override
@@ -135,11 +138,11 @@ class DockerComposeEnv(Environment):
         """Reload the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
-            run_compose(
+            self._run_compose(
                 rendered_map["ungated"],
                 "restart",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category="reload",
             )
 
     @override
@@ -366,15 +369,15 @@ class DockerComposeEnv(Environment):
             # Execute probe container and capture its exit code/output
             # --no-deps: do not start dependencies
             # --rm: remove container after it exits
-            cp = run_compose(
+            cp = self._run_compose(
                 [base_yaml, probes_yaml],
                 "run",
                 "--rm",
                 "--no-deps",
                 probe_service,
                 capture=True,
-                project_name=self.envCfg.tag,
                 timeout_seconds=timeout_seconds,
+                category=f"probe:{probe_service}",
             )
 
             duration_ms = int((time.time() - started) * 1000)
@@ -407,13 +410,13 @@ class DockerComposeEnv(Environment):
         if not yaml:
             yaml = self.render_target()["ungated"]
 
-        result = run_compose(
+        result = self._run_compose(
             yaml,
             "ps",
             "--format",
             "json",
             capture=True,
-            project_name=self.envCfg.tag,
+            log_command=False,
         )
         stdout_str = result.stdout.strip()
 
@@ -440,3 +443,84 @@ class DockerComposeEnv(Environment):
             self.envCfg.tag,
         )
         return services
+
+    def _run_compose(
+        self,
+        yamls: str | list[str],
+        *args: str,
+        capture: bool = False,
+        timeout_seconds: Optional[int] = None,
+        log_command: bool = True,
+        category: Optional[str] = None,
+    ):
+        should_log = log_command and self.is_command_log_enabled()
+        result = run_compose(
+            yamls,
+            *args,
+            capture=capture,
+            project_name=self.envCfg.tag,
+            timeout_seconds=timeout_seconds,
+            log_command=False,
+            on_command=None,
+        )
+        if should_log:
+            self._log_compose_result(result, category=category)
+        if (
+            category
+            and category.startswith("start:")
+            and result.returncode != 0
+        ):
+            self._record_compose_failure(result, category=category)
+        return result
+
+    def _log_compose_result(
+        self,
+        result: Any,
+        *,
+        category: Optional[str],
+    ) -> None:
+        if not self.is_command_log_enabled():
+            return
+        exit_code = getattr(result, "returncode", None)
+        if exit_code == 0:
+            dot = "[bold green]●[/bold green]"
+        elif exit_code == 124:
+            dot = "[bold yellow]●[/bold yellow]"
+        else:
+            dot = "[bold red]●[/bold red]"
+
+        cmd = getattr(result, "args", None)
+        if isinstance(cmd, list):
+            cmd_str = " ".join(cast(list[str], cmd))
+        else:
+            cmd_str = str(cmd) if cmd is not None else ""
+
+        category_label = (category or "-").ljust(self._command_category_width)
+        prefix = f"[cyan]{category_label}[/cyan] "
+        suffix = (
+            f" [dim](exit {exit_code})[/dim]" if exit_code is not None else ""
+        )
+        self.add_command_log(f"{dot} {prefix}{cmd_str}{suffix}")
+
+    def _record_compose_failure(
+        self,
+        result: Any,
+        *,
+        category: str,
+    ) -> None:
+        stdout = (getattr(result, "stdout", "") or "").strip()
+        stderr = (getattr(result, "stderr", "") or "").strip()
+        parts: list[str] = []
+        if stdout:
+            parts.append("--- stdout ---")
+            parts.append(stdout)
+        if stderr:
+            parts.append("--- stderr ---")
+            parts.append(stderr)
+        if not parts:
+            return
+        body = "\n".join(parts)
+        self.set_command_error(
+            f"Docker compose {category} failed",
+            body,
+        )

@@ -36,7 +36,7 @@ class DockerComposeSvc(Service):
         config: ConfigMng,
         envCfg: EnvironmentCfg,
         svcCfg: ServiceCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ):
         """Initialize a Docker service."""
         super().__init__(config, envCfg, svcCfg, cli_flags=cli_flags)

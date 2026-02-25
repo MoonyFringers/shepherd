@@ -109,7 +109,14 @@ def test_cli_flags_no_flags(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        {"verbose": False, "quiet": False, "details": False, "yes": False}
+        {
+            "verbose": False,
+            "quiet": False,
+            "details": False,
+            "logs": False,
+            "log_limit": 5,
+            "yes": False,
+        }
     )
 
 
@@ -121,7 +128,14 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {"verbose": True, "quiet": False, "details": False, "yes": False}
+    flags = {
+        "verbose": True,
+        "quiet": False,
+        "details": False,
+        "logs": False,
+        "log_limit": 5,
+        "yes": False,
+    }
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -140,7 +154,14 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {"verbose": False, "quiet": False, "details": False, "yes": True}
+    flags = {
+        "verbose": False,
+        "quiet": False,
+        "details": False,
+        "logs": False,
+        "log_limit": 5,
+        "yes": True,
+    }
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -159,7 +180,56 @@ def test_cli_flags_details(
 
     result = runner.invoke(cli, ["--details", "test"])
 
-    flags = {"verbose": False, "quiet": False, "details": True, "yes": False}
+    flags = {
+        "verbose": False,
+        "quiet": False,
+        "details": True,
+        "logs": False,
+        "log_limit": 5,
+        "yes": False,
+    }
+
+    assert result.exit_code == 0
+    mock_init.assert_called_once_with(flags)
+
+
+@pytest.mark.shpd
+def test_cli_flags_logs(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["--logs", "test"])
+
+    flags = {
+        "verbose": False,
+        "quiet": False,
+        "details": False,
+        "logs": True,
+        "log_limit": 5,
+        "yes": False,
+    }
+
+    assert result.exit_code == 0
+    mock_init.assert_called_once_with(flags)
+
+
+@pytest.mark.shpd
+def test_cli_flags_log_limit(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["--log-limit", "8", "test"])
+
+    flags = {
+        "verbose": False,
+        "quiet": False,
+        "details": False,
+        "logs": False,
+        "log_limit": 8,
+        "yes": False,
+    }
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)

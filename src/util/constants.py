@@ -20,6 +20,8 @@ import os
 from dataclasses import dataclass
 from typing import Any
 
+DEFAULT_COMPOSE_COMMAND_LOG_LIMIT = 5
+
 
 @dataclass(frozen=True)
 class Constants:
