@@ -25,6 +25,7 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
+from config import EnvironmentCfg
 from environment import EnvironmentMng
 from service import ServiceMng
 from shepctl import ShepherdMng, cli
@@ -109,7 +110,14 @@ def test_cli_flags_no_flags(
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(
-        {"verbose": False, "quiet": False, "details": False, "yes": False}
+        {
+            "verbose": False,
+            "quiet": False,
+            "details": False,
+            "show_commands": False,
+            "show_commands_limit": 5,
+            "yes": False,
+        }
     )
 
 
@@ -121,7 +129,14 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {"verbose": True, "quiet": False, "details": False, "yes": False}
+    flags = {
+        "verbose": True,
+        "quiet": False,
+        "details": False,
+        "show_commands": False,
+        "show_commands_limit": 5,
+        "yes": False,
+    }
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -140,7 +155,14 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {"verbose": False, "quiet": False, "details": False, "yes": True}
+    flags = {
+        "verbose": False,
+        "quiet": False,
+        "details": False,
+        "show_commands": False,
+        "show_commands_limit": 5,
+        "yes": True,
+    }
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -152,17 +174,65 @@ def test_cli_flags_yes(
 
 
 @pytest.mark.shpd
-def test_cli_flags_details(
+def test_status_flags_details(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+        assert env_mng.cli_flags["details"] is True
 
-    result = runner.invoke(cli, ["--details", "test"])
+    mocker.patch.object(
+        EnvironmentMng, "status_env", autospec=True, side_effect=assert_flags
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
 
-    flags = {"verbose": False, "quiet": False, "details": True, "yes": False}
-
+    result = runner.invoke(cli, ["status", "--details"])
     assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
+
+
+@pytest.mark.shpd
+def test_status_flags_show_commands(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+        assert env_mng.cli_flags["show_commands"] is True
+        assert env_mng.cli_flags["show_commands_limit"] == 5
+
+    mocker.patch.object(
+        EnvironmentMng, "status_env", autospec=True, side_effect=assert_flags
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["status", "--show-commands"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.shpd
+def test_reload_flags_show_commands_limit(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+        assert env_mng.cli_flags["show_commands"] is False
+        assert env_mng.cli_flags["show_commands_limit"] == 8
+
+    mocker.patch.object(
+        EnvironmentMng, "reload_env", autospec=True, side_effect=assert_flags
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["reload", "env", "--show-commands-limit", "8"])
+    assert result.exit_code == 0
 
 
 # completion tests

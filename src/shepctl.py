@@ -30,10 +30,11 @@ from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from service import ServiceMng
 from util import Util, setup_logging
+from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 
 class ShepherdMng:
-    def __init__(self, cli_flags: dict[str, bool] = {}):
+    def __init__(self, cli_flags: dict[str, Any] = {}):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
         setup_logging(
@@ -81,11 +82,6 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
 @click.option("--quiet", is_flag=True, help="Suppress command output.")
 @click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
-@click.option(
     "-y",
     "--yes",
     is_flag=True,
@@ -96,7 +92,6 @@ def cli(
     ctx: click.Context,
     verbose: bool,
     quiet: bool,
-    details: bool,
     yes: bool,
 ):
     """Shepherd CLI:
@@ -105,7 +100,9 @@ def cli(
     cli_flags = {
         "verbose": verbose,
         "quiet": quiet,
-        "details": details,
+        "details": False,
+        "show_commands": False,
+        "show_commands_limit": DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
         "yes": yes,
     }
 
@@ -117,6 +114,17 @@ def cli(
 def empty():
     """Empty testing purpose stub."""
     pass
+
+
+def _apply_show_commands_flags(
+    shepherd: ShepherdMng, show_commands: bool, show_commands_limit: int
+) -> None:
+    shepherd.cli_flags["show_commands"] = show_commands
+    shepherd.cli_flags["show_commands_limit"] = show_commands_limit
+
+
+def _apply_details_flag(shepherd: ShepherdMng, details: bool) -> None:
+    shepherd.cli_flags["details"] = details
 
 
 @cli.command(
@@ -350,6 +358,23 @@ def list(shepherd: ShepherdMng):
 # =====================================================
 @cli.group(invoke_without_command=True)
 @click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
     "--timeout",
     type=int,
     default=60,
@@ -361,16 +386,38 @@ def list(shepherd: ShepherdMng):
 def up(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
     timeout: Optional[int],
 ):
     """Start resources."""
     # If no subcommand is given, default to "env"
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
+        _apply_details_flag(shepherd, details)
+        _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
         shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
 @up.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.option(
     "--timeout",
     type=int,
@@ -383,9 +430,14 @@ def up(
 def up_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
     timeout: Optional[int],
 ):
     """Start environment."""
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
@@ -451,10 +503,35 @@ def reload():
 
 
 @reload.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.pass_obj
 @require_active_env
-def reload_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def reload_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+):
     """Reload environment."""
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.reload_env(envCfg)
 
 
@@ -531,20 +608,70 @@ def shell(
 # STATUS
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.pass_obj
 @require_active_env
-def status(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+):
     """Show status of resources."""
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
+        _apply_details_flag(shepherd, details)
+        _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
         shepherd.environmentMng.status_env(envCfg)
 
 
 @status.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.pass_obj
 @require_active_env
-def status_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+):
     """Show environment status."""
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.status_env(envCfg)
 
 

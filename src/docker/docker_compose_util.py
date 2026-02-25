@@ -19,7 +19,7 @@ import logging
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional
 
 from config.config import ContainerCfg
 from util import Util
@@ -31,6 +31,8 @@ def run_compose(
     capture: bool = False,
     project_name: Optional[str] = None,
     timeout_seconds: Optional[int] = None,
+    log_command: bool = True,
+    on_command: Optional[Callable[[str], None]] = None,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a docker compose command with one or more YAML definitions.
@@ -67,6 +69,12 @@ def run_compose(
         for p in tmp_paths:
             cmd += ["-f", str(p)]
         cmd += list(args)
+
+        if log_command and on_command:
+            try:
+                on_command(" ".join(cmd))
+            except Exception as e:
+                logging.debug("Failed to record docker compose command: %s", e)
 
         try:
             result = subprocess.run(

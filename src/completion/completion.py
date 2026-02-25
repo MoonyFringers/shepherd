@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from typing import Optional, override
+from typing import Any, Optional, override
 
 from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
@@ -46,7 +46,7 @@ class CompletionMng(AbstractCompletionMng):
         "check": ["probe"],
     }
 
-    def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
+    def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)

@@ -18,7 +18,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from typing import Any, Optional
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
 
@@ -30,7 +30,7 @@ class Service(ABC):
         configMng: ConfigMng,
         envCfg: EnvironmentCfg,
         svcCfg: ServiceCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ):
         self.configMng = configMng
         self.envCfg = envCfg
@@ -180,7 +180,7 @@ class ServiceFactory(ABC):
         self,
         envCfg: EnvironmentCfg,
         svcCfg: ServiceCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ) -> Service:
         """
         Create a new service.
@@ -197,7 +197,7 @@ class ServiceFactory(ABC):
         self,
         envCfg: EnvironmentCfg,
         svcCfg: ServiceCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ) -> Service:
         """
         Create a new service.
@@ -209,7 +209,7 @@ class ServiceMng:
 
     def __init__(
         self,
-        cli_flags: dict[str, bool],
+        cli_flags: dict[str, Any],
         configMng: ConfigMng,
         svcFactory: ServiceFactory,
     ):
