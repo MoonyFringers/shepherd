@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -29,6 +30,8 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
+from docker.docker_compose_env import DockerComposeEnv
+from environment.environment import ProbeRunResult
 from shepctl import ShepherdMng, cli
 
 docker_compose_ps_output = """
@@ -638,6 +641,140 @@ def test_start_env(
     assert env.status.active is True
     assert env.status.archived is False
     assert env.status.rendered_config
+
+
+@pytest.mark.docker
+def test_start_impl_starts_only_available_gates(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="gated-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(
+            rendered_config={
+                "ungated": "name: gated-env\nservices: {}\n",
+                "db-ready": "name: gated-env\nservices:\n  db: {}\n",
+                "db-ready|db-live": "name: gated-env\nservices:\n  api: {}\n",
+            }
+        ),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    started = env.start_impl(started_gate_keys=set(), probe_results=None)
+    assert started == {"ungated"}
+    assert run_compose_mock.call_count == 1
+    assert run_compose_mock.call_args_list[0].args[0] == "name: gated-env\nservices: {}\n"
+
+    started = env.start_impl(
+        started_gate_keys={"ungated"},
+        probe_results=[
+            ProbeRunResult(tag="db-ready", exit_code=0),
+            ProbeRunResult(tag="db-live", exit_code=1),
+        ],
+    )
+    assert started == {"db-ready"}
+    assert run_compose_mock.call_count == 2
+    assert run_compose_mock.call_args_list[1].args[0] == (
+        "name: gated-env\nservices:\n  db: {}\n"
+    )
+
+
+@pytest.mark.docker
+def test_start_loops_and_unblocks_gated_compose(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="loop-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    config_mng = mocker.Mock()
+    env = DockerComposeEnv(config_mng, mocker.Mock(), env_cfg)
+
+    rendered_map = {
+        "ungated": "name: loop-env\nservices: {}\n",
+        "db-ready": "name: loop-env\nservices:\n  db: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    mocker.patch.object(env, "check_probes").return_value = [
+        ProbeRunResult(tag="db-ready", exit_code=0),
+    ]
+    mocker.patch.object(env, "ensure_resources_impl")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    env.start()
+
+    assert env_cfg.status.rendered_config == rendered_map
+    assert run_compose_mock.call_count == 2
+    assert run_compose_mock.call_args_list[0].args[0] == rendered_map["ungated"]
+    assert run_compose_mock.call_args_list[1].args[0] == rendered_map["db-ready"]
+    env.check_probes.assert_called_once_with(
+        probe_tag=None,
+        fail_fast=False,
+        timeout_seconds=120,
+    )
+
+
+@pytest.mark.docker
+def test_start_retries_gates_until_probe_turns_true(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="retry-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    rendered_map = {
+        "ungated": "name: retry-env\nservices: {}\n",
+        "db-ready": "name: retry-env\nservices:\n  db: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    check_probes_mock = mocker.patch.object(
+        env,
+        "check_probes",
+        side_effect=[
+            [ProbeRunResult(tag="db-ready", exit_code=1)],
+            [ProbeRunResult(tag="db-ready", exit_code=0)],
+        ],
+    )
+    mocker.patch.object(env, "ensure_resources_impl")
+    sleep_mock = mocker.patch("environment.environment.time.sleep")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    env.start(timeout_seconds=5)
+
+    assert run_compose_mock.call_count == 2
+    assert run_compose_mock.call_args_list[0].args[0] == rendered_map["ungated"]
+    assert run_compose_mock.call_args_list[1].args[0] == rendered_map["db-ready"]
+    assert check_probes_mock.call_count == 2
+    sleep_mock.assert_called_once_with(1.0)
 
 
 @pytest.mark.docker
