@@ -97,7 +97,7 @@ class DockerComposeEnv(Environment):
                 ) and not result.timed_out
 
         started_now: set[str] = set()
-        for gate_key, rendered_yaml in rendered_map.items():
+        for gate_key, _ in rendered_map.items():
             if gate_key in started_gate_keys:
                 continue
 
@@ -110,8 +110,13 @@ class DockerComposeEnv(Environment):
                 ):
                     continue
 
+            compose_stack = [
+                rendered_map[k]
+                for k in rendered_map.keys()
+                if k in started_gate_keys or k == gate_key
+            ]
             self._run_compose(
-                rendered_yaml,
+                compose_stack,
                 "up",
                 "-d",
                 capture=not self._is_verbose(),
@@ -125,9 +130,9 @@ class DockerComposeEnv(Environment):
     def stop_impl(self):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
+        if rendered_map:
             self._run_compose(
-                rendered_map["ungated"],
+                list(rendered_map.values()),
                 "down",
                 capture=not self._is_verbose(),
                 category="stop",
@@ -137,9 +142,9 @@ class DockerComposeEnv(Environment):
     def reload_impl(self):
         """Reload the environment."""
         rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
+        if rendered_map:
             self._run_compose(
-                rendered_map["ungated"],
+                list(rendered_map.values()),
                 "restart",
                 capture=not self._is_verbose(),
                 category="reload",
