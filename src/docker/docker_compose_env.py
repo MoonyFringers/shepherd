@@ -235,7 +235,9 @@ class DockerComposeEnv(Environment):
                     }
                 compose_config = gated_compose_config[probe_key]
 
-                svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
+                svc_yaml = yaml.safe_load(
+                    svc.render_target_impl(resolved=resolved)
+                )
                 compose_config["services"].update(svc_yaml["services"])
 
             # --- Render YAML ---
@@ -251,6 +253,32 @@ class DockerComposeEnv(Environment):
                     self.envCfg.set_resolved()
                 else:
                     self.envCfg.set_unresolved()
+
+    @override
+    def render_target_merged(self, resolved: bool = False) -> str:
+        rendered = self.render_target(resolved)
+        base_yaml = rendered.get("ungated")
+        if not base_yaml:
+            return ""
+
+        base_cfg = cast(dict[str, Any], yaml.safe_load(base_yaml) or {})
+        base_services = cast(
+            dict[str, Any], base_cfg.setdefault("services", {})
+        )
+        base_networks = cast(
+            dict[str, Any], base_cfg.setdefault("networks", {})
+        )
+        base_volumes = cast(dict[str, Any], base_cfg.setdefault("volumes", {}))
+
+        for gate_key, gate_yaml in rendered.items():
+            if gate_key == "ungated":
+                continue
+            gate_cfg = cast(dict[str, Any], yaml.safe_load(gate_yaml) or {})
+            base_services.update(gate_cfg.get("services") or {})
+            base_networks.update(gate_cfg.get("networks") or {})
+            base_volumes.update(gate_cfg.get("volumes") or {})
+
+        return yaml.dump(base_cfg, sort_keys=False)
 
     def render_probe_service(
         self, probe: ProbeCfg, labels: Optional[list[str]] = None
@@ -408,7 +436,7 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         yaml = rendered_map.get("ungated") if rendered_map else None
         if not yaml:
-            yaml = self.render_target()["ungated"]
+            yaml = self.render_target_impl()["ungated"]
 
         result = self._run_compose(
             yaml,

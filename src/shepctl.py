@@ -174,6 +174,11 @@ def get():
     "-t", "--target", is_flag=True, help="Get the target configuration."
 )
 @click.option(
+    "--by-gate",
+    is_flag=True,
+    help="Return target configuration grouped by gate.",
+)
+@click.option(
     "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
 )
 @click.pass_obj
@@ -182,11 +187,18 @@ def get_env(
     tag: str,
     output: Optional[str],
     target: bool,
+    by_gate: bool,
     resolved: bool,
 ):
     """Get environment details or config."""
+    if by_gate and not target:
+        raise click.UsageError("--by-gate requires --target")
     if output:
-        click.echo(shepherd.environmentMng.render_env(tag, target, resolved))
+        click.echo(
+            shepherd.environmentMng.render_env(
+                tag, target, resolved, grouped=by_gate
+            )
+        )
 
 
 @get.command(name="probe")

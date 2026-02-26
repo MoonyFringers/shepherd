@@ -25,8 +25,9 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
+import yaml
 from rich import box
 from rich.console import Group
 from rich.live import Live
@@ -202,6 +203,22 @@ class Environment(ABC):
         Render the environment configuration in the target system.
         """
         return self.render_target_impl(resolved)
+
+    def render_target_merged(self, resolved: bool = False) -> str:
+        """
+        Render the environment configuration in the target system as a single
+        merged config.
+        """
+        rendered = self.render_target(resolved)
+        return rendered.get("ungated", "")
+
+    def render_target_grouped(self, resolved: bool = False) -> str:
+        """
+        Render the environment configuration in the target system
+        grouped by gate.
+        """
+        rendered = self.render_target(resolved)
+        return _dump_grouped_yaml(rendered)
 
     def render_probes(
         self, probe_tag: Optional[str], resolved: bool
@@ -615,13 +632,15 @@ class EnvironmentMng:
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
     def render_env(
-        self, env_tag: str, target: bool, resolved: bool
+        self, env_tag: str, target: bool, resolved: bool, grouped: bool = False
     ) -> Optional[str]:
         """Render an environment configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
-                return env.render_target(resolved)["ungated"]
+                if grouped:
+                    return env.render_target_grouped(resolved)
+                return env.render_target_merged(resolved)
             return env.render(resolved)
         return None
 
@@ -1373,3 +1392,25 @@ class EnvironmentMng:
                 )
             except ValueError as e:
                 Util.print_error_and_die(f"Failed to create service: {e}")
+
+
+class _LiteralDumper(yaml.SafeDumper):
+    pass
+
+
+def _repr_str(dumper: _LiteralDumper, data: str) -> yaml.ScalarNode:
+    style = "|" if "\n" in data else None
+    data_str: str = str(data)
+    return cast(
+        yaml.ScalarNode,
+        cast(Any, dumper).represent_scalar(
+            "tag:yaml.org,2002:str", data_str, style=style
+        ),
+    )
+
+
+_LiteralDumper.add_representer(str, _repr_str)
+
+
+def _dump_grouped_yaml(data: dict[str, str]) -> str:
+    return yaml.dump(data, Dumper=_LiteralDumper, sort_keys=False)
