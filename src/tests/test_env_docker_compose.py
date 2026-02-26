@@ -767,6 +767,50 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
 
 
 @pytest.mark.docker
+def test_render_target_merged_includes_gated_services(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="merge-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+
+    rendered_map = {
+        "ungated": "name: merge-env\nservices: {base: {}}\n",
+        "db-ready": "name: merge-env\nservices: {db: {}}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+
+    merged_yaml = env.render_target_merged()
+    merged = yaml.safe_load(merged_yaml)
+    assert "services" in merged
+    assert "base" in merged["services"]
+    assert "db" in merged["services"]
+
+
+@pytest.mark.docker
+def test_render_target_grouped_uses_literal_blocks(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="group-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+
+    rendered_map = {
+        "ungated": "name: group-env\nservices: {base: {}}\n",
+        "db-ready": "name: group-env\nservices: {db: {}}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+
+    grouped_yaml = env.render_target_grouped()
+    assert "ungated: |" in grouped_yaml
+    assert "\\n" not in grouped_yaml
+
+
+@pytest.mark.docker
 def test_start_loops_and_unblocks_gated_compose(mocker: MockerFixture):
     env_cfg = SimpleNamespace(
         tag="loop-env",

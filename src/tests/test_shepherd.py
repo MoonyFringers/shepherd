@@ -235,6 +235,18 @@ def test_reload_flags_show_commands_limit(
     assert result.exit_code == 0
 
 
+@pytest.mark.shpd
+def test_cli_get_env_by_gate_requires_target(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["get", "env", "--by-gate"])
+
+    assert result.exit_code != 0
+    assert "--by-gate requires --target" in result.output
+
+
 # completion tests
 
 
