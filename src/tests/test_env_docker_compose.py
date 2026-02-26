@@ -673,10 +673,9 @@ def test_start_impl_starts_only_available_gates(mocker: MockerFixture):
     started = env.start_impl(started_gate_keys=set(), probe_results=None)
     assert started == {"ungated"}
     assert run_compose_mock.call_count == 1
-    assert (
-        run_compose_mock.call_args_list[0].args[0]
-        == "name: gated-env\nservices: {}\n"
-    )
+    assert run_compose_mock.call_args_list[0].args[0] == [
+        "name: gated-env\nservices: {}\n"
+    ]
 
     started = env.start_impl(
         started_gate_keys={"ungated"},
@@ -687,9 +686,10 @@ def test_start_impl_starts_only_available_gates(mocker: MockerFixture):
     )
     assert started == {"db-ready"}
     assert run_compose_mock.call_count == 2
-    assert run_compose_mock.call_args_list[1].args[0] == (
-        "name: gated-env\nservices:\n  db: {}\n"
-    )
+    assert run_compose_mock.call_args_list[1].args[0] == [
+        "name: gated-env\nservices: {}\n",
+        "name: gated-env\nservices:\n  db: {}\n",
+    ]
 
 
 @pytest.mark.docker
@@ -846,10 +846,13 @@ def test_start_loops_and_unblocks_gated_compose(mocker: MockerFixture):
 
     assert env_cfg.status.rendered_config == rendered_map
     assert run_compose_mock.call_count == 2
-    assert run_compose_mock.call_args_list[0].args[0] == rendered_map["ungated"]
-    assert (
-        run_compose_mock.call_args_list[1].args[0] == rendered_map["db-ready"]
-    )
+    assert run_compose_mock.call_args_list[0].args[0] == [
+        rendered_map["ungated"]
+    ]
+    assert run_compose_mock.call_args_list[1].args[0] == [
+        rendered_map["ungated"],
+        rendered_map["db-ready"],
+    ]
     check_probes_mock.assert_called_once_with(
         probe_tag=None,
         fail_fast=False,
@@ -896,10 +899,13 @@ def test_start_retries_gates_until_probe_turns_true(mocker: MockerFixture):
     env.start(timeout_seconds=5)
 
     assert run_compose_mock.call_count == 2
-    assert run_compose_mock.call_args_list[0].args[0] == rendered_map["ungated"]
-    assert (
-        run_compose_mock.call_args_list[1].args[0] == rendered_map["db-ready"]
-    )
+    assert run_compose_mock.call_args_list[0].args[0] == [
+        rendered_map["ungated"]
+    ]
+    assert run_compose_mock.call_args_list[1].args[0] == [
+        rendered_map["ungated"],
+        rendered_map["db-ready"],
+    ]
     assert check_probes_mock.call_count == 2
     sleep_mock.assert_called_once_with(1.0)
 

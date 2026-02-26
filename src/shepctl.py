@@ -393,6 +393,12 @@ def list(shepherd: ShepherdMng):
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def up(
@@ -402,6 +408,7 @@ def up(
     show_commands: bool,
     show_commands_limit: int,
     timeout: Optional[int],
+    watch: bool,
 ):
     """Start resources."""
     # If no subcommand is given, default to "env"
@@ -409,7 +416,9 @@ def up(
     if ctx.invoked_subcommand is None:
         _apply_details_flag(shepherd, details)
         _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-        shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
+        shepherd.environmentMng.start_env(
+            envCfg, timeout_seconds=timeout, watch=watch
+        )
 
 
 @up.command(name="env")
@@ -437,6 +446,12 @@ def up(
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def up_env(
@@ -446,11 +461,14 @@ def up_env(
     show_commands: bool,
     show_commands_limit: int,
     timeout: Optional[int],
+    watch: bool,
 ):
     """Start environment."""
     _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-    shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
+    shepherd.environmentMng.start_env(
+        envCfg, timeout_seconds=timeout, watch=watch
+    )
 
 
 @up.command(name="svc")
@@ -532,6 +550,12 @@ def reload():
     show_default=True,
     help="Number of recent commands to display.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def reload_env(
@@ -540,11 +564,12 @@ def reload_env(
     details: bool,
     show_commands: bool,
     show_commands_limit: int,
+    watch: bool,
 ):
     """Reload environment."""
     _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-    shepherd.environmentMng.reload_env(envCfg)
+    shepherd.environmentMng.reload_env(envCfg, watch=watch)
 
 
 @reload.command(name="svc")
@@ -637,6 +662,12 @@ def shell(
     show_default=True,
     help="Number of recent commands to display.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def status(
@@ -645,12 +676,24 @@ def status(
     details: bool,
     show_commands: bool,
     show_commands_limit: int,
+    watch: bool,
 ):
     """Show status of resources."""
     ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
-        _apply_details_flag(shepherd, details)
-        _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+    if ctx.invoked_subcommand is not None:
+        return
+
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+
+    if watch:
+        shepherd.environmentMng.wait_for_env_up(
+            shepherd.environmentMng.get_environment_from_cfg(envCfg),
+            timeout_seconds=None,
+            start_action=None,
+            watch_after=True,
+        )
+    else:
         shepherd.environmentMng.status_env(envCfg)
 
 
@@ -672,6 +715,12 @@ def status(
     show_default=True,
     help="Number of recent commands to display.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def status_env(
@@ -680,11 +729,20 @@ def status_env(
     details: bool,
     show_commands: bool,
     show_commands_limit: int,
+    watch: bool,
 ):
     """Show environment status."""
     _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-    shepherd.environmentMng.status_env(envCfg)
+    if watch:
+        shepherd.environmentMng.wait_for_env_up(
+            shepherd.environmentMng.get_environment_from_cfg(envCfg),
+            timeout_seconds=None,
+            start_action=None,
+            watch_after=True,
+        )
+    else:
+        shepherd.environmentMng.status_env(envCfg)
 
 
 # =====================================================

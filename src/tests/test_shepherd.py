@@ -218,7 +218,11 @@ def test_status_flags_show_commands(
 def test_reload_flags_show_commands_limit(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+    def assert_flags(
+        env_mng: EnvironmentMng,
+        env_cfg: EnvironmentCfg,
+        **kwargs: object,
+    ) -> None:
         assert env_mng.cli_flags["show_commands"] is False
         assert env_mng.cli_flags["show_commands_limit"] == 8
 
@@ -417,7 +421,27 @@ def test_cli_start_env(
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
-    mock_start.assert_called_once()
+    mock_start.assert_called_once_with(
+        mocker.ANY, timeout_seconds=60, watch=False
+    )
+
+
+@pytest.mark.shpd
+def test_cli_start_env_watch(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_start = mocker.patch.object(EnvironmentMng, "start_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["up", "env", "--watch"])
+    assert result.exit_code == 0
+    mock_start.assert_called_once_with(
+        mocker.ANY, timeout_seconds=60, watch=True
+    )
 
 
 @pytest.mark.shpd
@@ -434,7 +458,10 @@ def test_cli_start_env_with_timeout(
     result = runner.invoke(cli, ["up", "env", "--timeout", "30"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
-    assert mock_start.call_args.kwargs == {"timeout_seconds": 30}
+    assert mock_start.call_args.kwargs == {
+        "timeout_seconds": 30,
+        "watch": False,
+    }
 
 
 @pytest.mark.shpd
@@ -466,7 +493,23 @@ def test_cli_reload_env(
 
     result = runner.invoke(cli, ["reload", "env"])
     assert result.exit_code == 0
-    mock_reload.assert_called_once()
+    mock_reload.assert_called_once_with(mocker.ANY, watch=False)
+
+
+@pytest.mark.shpd
+def test_cli_reload_env_watch(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_reload = mocker.patch.object(EnvironmentMng, "reload_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["reload", "env", "--watch"])
+    assert result.exit_code == 0
+    mock_reload.assert_called_once_with(mocker.ANY, watch=True)
 
 
 @pytest.mark.shpd
@@ -483,6 +526,42 @@ def test_cli_status_env(
     result = runner.invoke(cli, ["status", "env"])
     assert result.exit_code == 0
     mock_status.assert_called_once()
+
+
+@pytest.mark.shpd
+def test_cli_status_env_watch(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_status = mocker.patch.object(EnvironmentMng, "status_env")
+    mock_wait = mocker.patch.object(EnvironmentMng, "wait_for_env_up")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["status", "env", "--watch"])
+    assert result.exit_code == 0
+    mock_wait.assert_called_once()
+    mock_status.assert_not_called()
+
+
+@pytest.mark.shpd
+def test_cli_status_watch_default(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_status = mocker.patch.object(EnvironmentMng, "status_env")
+    mock_wait = mocker.patch.object(EnvironmentMng, "wait_for_env_up")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["status", "--watch"])
+    assert result.exit_code == 0
+    mock_wait.assert_called_once()
+    mock_status.assert_not_called()
 
 
 # probe tests
