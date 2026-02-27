@@ -597,7 +597,10 @@ class EnvironmentMng:
         )
 
     def start_env(
-        self, envCfg: EnvironmentCfg, timeout_seconds: Optional[int] = 60
+        self,
+        envCfg: EnvironmentCfg,
+        timeout_seconds: Optional[int] = 60,
+        watch: bool = False,
     ):
         """Start an environment."""
         if timeout_seconds is not None and timeout_seconds < 0:
@@ -609,6 +612,7 @@ class EnvironmentMng:
             env,
             timeout_seconds=timeout_seconds,
             start_action=lambda: env.start(timeout_seconds=timeout_seconds),
+            watch_after=watch,
         )
         Util.print(f"Started environment: {env.envCfg.tag}")
 
@@ -620,7 +624,7 @@ class EnvironmentMng:
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")
 
-    def reload_env(self, envCfg: EnvironmentCfg):
+    def reload_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
         if not env.envCfg.status.rendered_config:
@@ -629,6 +633,13 @@ class EnvironmentMng:
             )
 
         env.reload()
+        if watch:
+            self.wait_for_env_up(
+                env,
+                timeout_seconds=None,
+                start_action=None,
+                watch_after=True,
+            )
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
     def render_env(
@@ -826,12 +837,14 @@ class EnvironmentMng:
         env: Environment,
         timeout_seconds: Optional[int] = None,
         start_action: Optional[Callable[[], Any]] = None,
+        watch_after: bool = False,
     ):
         self._wait_for_env_state(
             env,
             timeout_seconds=timeout_seconds,
             action=start_action,
             wait_until_up=True,
+            watch_after=watch_after,
         )
 
     def wait_for_env_down(
@@ -839,12 +852,14 @@ class EnvironmentMng:
         env: Environment,
         timeout_seconds: Optional[int] = None,
         stop_action: Optional[Callable[[], Any]] = None,
+        watch_after: bool = False,
     ):
         self._wait_for_env_state(
             env,
             timeout_seconds=timeout_seconds,
             action=stop_action,
             wait_until_up=False,
+            watch_after=watch_after,
         )
 
     def _wait_for_env_state(
@@ -853,6 +868,7 @@ class EnvironmentMng:
         timeout_seconds: Optional[int],
         action: Optional[Callable[[], Any]],
         wait_until_up: bool,
+        watch_after: bool = False,
     ):
         phase = "up" if wait_until_up else "down"
         phase_gerund = "starting" if wait_until_up else "stopping"
@@ -998,6 +1014,7 @@ class EnvironmentMng:
             transient=True,
             screen=False,
         ) as live:
+            completed = False
             while True:
                 raise_action_error()
                 current_gate_status = get_gate_status()
@@ -1071,9 +1088,15 @@ class EnvironmentMng:
                         phase,
                         env.envCfg.tag,
                     )
-                    return
+                    if not watch_after:
+                        return
+                    completed = True
 
-                if timeout_seconds is not None and remaining is not None:
+                if (
+                    not completed
+                    and timeout_seconds is not None
+                    and remaining is not None
+                ):
                     if remaining <= 0:
                         live.stop()
                         Util.print_error_and_die(

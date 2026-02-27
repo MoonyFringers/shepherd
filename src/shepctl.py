@@ -385,18 +385,27 @@ def list(shepherd: ShepherdMng):
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def up(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
     timeout: Optional[int],
+    watch: bool,
 ):
     """Start resources."""
     # If no subcommand is given, default to "env"
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
+        shepherd.environmentMng.start_env(
+            envCfg, timeout_seconds=timeout, watch=watch
+        )
 
 
 @up.command(name="env")
@@ -407,15 +416,24 @@ def up(
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def up_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
     timeout: Optional[int],
+    watch: bool,
 ):
     """Start environment."""
-    shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
+    shepherd.environmentMng.start_env(
+        envCfg, timeout_seconds=timeout, watch=watch
+    )
 
 
 @up.command(name="svc")
@@ -480,11 +498,17 @@ def reload():
 
 
 @reload.command(name="env")
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def reload_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def reload_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, watch: bool):
     """Reload environment."""
-    shepherd.environmentMng.reload_env(envCfg)
+    shepherd.environmentMng.reload_env(envCfg, watch=watch)
 
 
 @reload.command(name="svc")
@@ -560,21 +584,49 @@ def shell(
 # STATUS
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def status(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status(shepherd: ShepherdMng, envCfg: EnvironmentCfg, watch: bool):
     """Show status of resources."""
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.status_env(envCfg)
+        if watch:
+            shepherd.environmentMng.wait_for_env_up(
+                shepherd.environmentMng.get_environment_from_cfg(envCfg),
+                timeout_seconds=None,
+                start_action=None,
+                watch_after=True,
+            )
+        else:
+            shepherd.environmentMng.status_env(envCfg)
 
 
 @status.command(name="env")
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def status_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, watch: bool):
     """Show environment status."""
-    shepherd.environmentMng.status_env(envCfg)
+    if watch:
+        shepherd.environmentMng.wait_for_env_up(
+            shepherd.environmentMng.get_environment_from_cfg(envCfg),
+            timeout_seconds=None,
+            start_action=None,
+            watch_after=True,
+        )
+    else:
+        shepherd.environmentMng.status_env(envCfg)
 
 
 # =====================================================
