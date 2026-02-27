@@ -26,13 +26,24 @@ from config import ConfigMng, EnvironmentCfg, ServiceCfg
 class Service(ABC):
 
     def __init__(
-        self, configMng: ConfigMng, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+        self,
+        configMng: ConfigMng,
+        envCfg: EnvironmentCfg,
+        svcCfg: ServiceCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ):
         self.configMng = configMng
         self.envCfg = envCfg
         self.svcCfg = svcCfg
+        self.cli_flags = cli_flags or {}
         self.name = self.canonical_name()
         self._generate_containers_names()
+
+    def _is_verbose(self) -> bool:
+        return bool(self.cli_flags.get("verbose", False))
+
+    def _is_quiet(self) -> bool:
+        return bool(self.cli_flags.get("quiet", False))
 
     def canonical_name(self) -> str:
         """
@@ -166,12 +177,15 @@ class ServiceFactory(ABC):
         return cls.get_name_impl()
 
     def new_service_from_cfg(
-        self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+        self,
+        envCfg: EnvironmentCfg,
+        svcCfg: ServiceCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ) -> Service:
         """
         Create a new service.
         """
-        return self.new_service_from_cfg_impl(envCfg, svcCfg)
+        return self.new_service_from_cfg_impl(envCfg, svcCfg, cli_flags)
 
     @classmethod
     @abstractmethod
@@ -180,7 +194,10 @@ class ServiceFactory(ABC):
 
     @abstractmethod
     def new_service_from_cfg_impl(
-        self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+        self,
+        envCfg: EnvironmentCfg,
+        svcCfg: ServiceCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ) -> Service:
         """
         Create a new service.
@@ -205,7 +222,9 @@ class ServiceMng:
     ) -> Optional[Service]:
         """Get a service by environment tag and service tag."""
         if svcCfg := envCfg.get_service(svc_tag):
-            return self.svcFactory.new_service_from_cfg(envCfg, svcCfg)
+            return self.svcFactory.new_service_from_cfg(
+                envCfg, svcCfg, cli_flags=self.cli_flags
+            )
         else:
             return None
 

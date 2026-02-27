@@ -622,7 +622,11 @@ def test_start_env(
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
-    mock_subproc.assert_called_once()
+    assert mock_subproc.call_count == 2
+    assert any(
+        "ps" in (call.args[0] if call.args else [])
+        for call in mock_subproc.call_args_list
+    )
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
@@ -668,7 +672,11 @@ def test_stop_env(
 
     result = runner.invoke(cli, ["halt", "env"])
     assert result.exit_code == 0
-    mock_subproc.assert_called_once()
+    assert mock_subproc.call_count == 2
+    assert any(
+        "ps" in (call.args[0] if call.args else [])
+        for call in mock_subproc.call_args_list
+    )
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")

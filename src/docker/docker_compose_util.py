@@ -120,7 +120,11 @@ def run_compose(
 
 
 def build_docker_image(
-    dockerfile_path: Path, context_path: Path, tag: str
+    dockerfile_path: Path,
+    context_path: Path,
+    tag: str,
+    *,
+    verbose: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """
     Build a Docker image using the specified Dockerfile and context
@@ -158,13 +162,22 @@ def build_docker_image(
     logging.info(f"Building Docker image '{tag}'")
     logging.debug(f"Docker build command: {' '.join(cmd)}")
 
-    process = subprocess.run(
-        cmd,
-        check=False,
-        text=True,
-        stdout=None,
-        stderr=None,
-    )
+    if verbose:
+        process = subprocess.run(
+            cmd,
+            check=False,
+            text=True,
+            stdout=None,
+            stderr=None,
+        )
+    else:
+        process = subprocess.run(
+            cmd,
+            check=False,
+            text=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
 
     if process.returncode != 0:
         logging.warning(
@@ -206,7 +219,7 @@ def render_container(
     return container_def
 
 
-def build_container(container: ContainerCfg) -> None:
+def build_container(container: ContainerCfg, *, verbose: bool = False) -> None:
     """Build a container."""
     if not container.build:
         Util.print_error_and_die(
@@ -233,4 +246,5 @@ def build_container(container: ContainerCfg) -> None:
                 Path(build.dockerfile_path),
                 Path(build.context_path),
                 container.image or "",
+                verbose=verbose,
             )

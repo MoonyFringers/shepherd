@@ -36,16 +36,19 @@ class ShpdServiceFactory(ServiceFactory):
 
     @override
     def new_service_from_cfg_impl(
-        self, envCfg: EnvironmentCfg, svcCfg: ServiceCfg
+        self,
+        envCfg: EnvironmentCfg,
+        svcCfg: ServiceCfg,
+        cli_flags: dict[str, bool] | None = None,
     ) -> Service:
         """
         Get a service.
         """
         match svcCfg.factory:
             case Constants.SVC_FACTORY_DEFAULT:
-                return DockerComposeSvc(self.configMng, envCfg, svcCfg)
-            case _:
-                raise ValueError(
-                    f"""Unknown service type: {svcCfg.template},
-                    plugins not supported yet!"""
+                return DockerComposeSvc(
+                    self.configMng, envCfg, svcCfg, cli_flags=cli_flags
                 )
+            case _:
+                raise ValueError(f"""Unknown service type: {svcCfg.template},
+                    plugins not supported yet!""")

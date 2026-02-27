@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+import builtins
 import functools
 import logging
 import os
@@ -53,7 +54,7 @@ class ShepherdMng:
         self.completionMng = CompletionMng(self.cli_flags, self.configMng)
         self.svcFactory = ShpdServiceFactory(self.configMng)
         self.envFactory = ShpdEnvironmentFactory(
-            self.configMng, self.svcFactory
+            self.configMng, self.svcFactory, cli_flags=self.cli_flags
         )
         self.environmentMng = EnvironmentMng(
             self.cli_flags, self.configMng, self.envFactory, self.svcFactory
@@ -78,6 +79,12 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
 
 @click.group()
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
+@click.option("--quiet", is_flag=True, help="Suppress command output.")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
 @click.option(
     "-y",
     "--yes",
@@ -85,11 +92,22 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     help="Automatic yes to prompts; run non-interactively.",
 )
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, yes: bool):
+def cli(
+    ctx: click.Context,
+    verbose: bool,
+    quiet: bool,
+    details: bool,
+    yes: bool,
+):
     """Shepherd CLI:
     A tool to manage your environments, services, and databases.
     """
-    cli_flags = {"verbose": verbose, "yes": yes}
+    cli_flags = {
+        "verbose": verbose,
+        "quiet": quiet,
+        "details": details,
+        "yes": yes,
+    }
 
     if ctx.obj is None:
         ctx.obj = ShepherdMng(cli_flags)
@@ -108,7 +126,7 @@ def empty():
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_obj
-def complete(shepherd: ShepherdMng, args: list[str]):
+def complete(shepherd: ShepherdMng, args: Any):
     """
     Internal shell completion entrypoint.
     Usage: shepctl __complete <args...>
@@ -116,7 +134,7 @@ def complete(shepherd: ShepherdMng, args: list[str]):
     This command disables Click’s usual option parsing
     to treat all arguments as raw strings.
     """
-    completions = shepherd.completionMng.get_completions(args)
+    completions = shepherd.completionMng.get_completions(builtins.list(args))
     for c in completions:
         click.echo(c)
 
@@ -331,22 +349,44 @@ def list(shepherd: ShepherdMng):
 # UP
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "--timeout",
+    type=int,
+    default=60,
+    show_default=True,
+    help="Maximum seconds to wait for all containers to be running.",
+)
 @click.pass_obj
 @require_active_env
-def up(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def up(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    timeout: Optional[int],
+):
     """Start resources."""
     # If no subcommand is given, default to "env"
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.start_env(envCfg)
+        shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
 @up.command(name="env")
+@click.option(
+    "--timeout",
+    type=int,
+    default=60,
+    show_default=True,
+    help="Maximum seconds to wait for all containers to be running.",
+)
 @click.pass_obj
 @require_active_env
-def up_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def up_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    timeout: Optional[int],
+):
     """Start environment."""
-    shepherd.environmentMng.start_env(envCfg)
+    shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
 
 
 @up.command(name="svc")

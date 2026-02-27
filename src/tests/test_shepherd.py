@@ -108,7 +108,9 @@ def test_cli_flags_no_flags(
     result = runner.invoke(cli, ["test"])
 
     assert result.exit_code == 0
-    mock_init.assert_called_once_with({"verbose": False, "yes": False})
+    mock_init.assert_called_once_with(
+        {"verbose": False, "quiet": False, "details": False, "yes": False}
+    )
 
 
 @pytest.mark.shpd
@@ -119,7 +121,7 @@ def test_cli_flags_verbose(
 
     result = runner.invoke(cli, ["--verbose", "test"])
 
-    flags = {"verbose": True, "yes": False}
+    flags = {"verbose": True, "quiet": False, "details": False, "yes": False}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -138,7 +140,7 @@ def test_cli_flags_yes(
 
     result = runner.invoke(cli, ["--yes", "test"])
 
-    flags = {"verbose": False, "yes": True}
+    flags = {"verbose": False, "quiet": False, "details": False, "yes": True}
 
     assert result.exit_code == 0
     mock_init.assert_called_once_with(flags)
@@ -147,6 +149,20 @@ def test_cli_flags_yes(
 
     assert result.exit_code == 0
     mock_init.assert_called_with(flags)
+
+
+@pytest.mark.shpd
+def test_cli_flags_details(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["--details", "test"])
+
+    flags = {"verbose": False, "quiet": False, "details": True, "yes": False}
+
+    assert result.exit_code == 0
+    mock_init.assert_called_once_with(flags)
 
 
 # completion tests
@@ -320,6 +336,23 @@ def test_cli_start_env(
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
+
+
+@pytest.mark.shpd
+def test_cli_start_env_with_timeout(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_start = mocker.patch.object(EnvironmentMng, "start_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["up", "env", "--timeout", "30"])
+    assert result.exit_code == 0
+    mock_start.assert_called_once()
+    assert mock_start.call_args.kwargs == {"timeout_seconds": 30}
 
 
 @pytest.mark.shpd

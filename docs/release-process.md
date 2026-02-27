@@ -9,7 +9,7 @@ versions of Shepherd.
   - **Binary Download (Recommended)**: Download the pre-built binary from the
       [GitHub Releases page](https://github.com/orhun/git-cliff/releases) and add
       it to your PATH.
-  - **Pip**: `pip install git-cliff` (convenient if you are already in a Python environment).
+  - **Pip**: `pip install git-cliff` (if you are already in a Python environment).
   - **Cargo**: `cargo install git-cliff` (if you have Rust installed).
   - **npm**: `npm install -g git-cliff` (if you have Node.js installed).
 - **Push Access**: You need write access to the main repository to push tags.

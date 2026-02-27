@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 from typing import Any, Optional, override
 
@@ -41,9 +42,10 @@ class DockerComposeEnv(Environment):
         config: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
+        cli_flags: Optional[dict[str, bool]] = None,
     ):
         """Initialize a Docker Compose environment."""
-        super().__init__(config, svcFactory, envCfg)
+        super().__init__(config, svcFactory, envCfg, cli_flags=cli_flags)
 
     @override
     def ensure_resources_impl(self):
@@ -71,6 +73,7 @@ class DockerComposeEnv(Environment):
             self.configMng,
             self.svcFactory,
             clonedCfg,
+            cli_flags=self.cli_flags,
         )
         return clonedEnv
 
@@ -84,6 +87,7 @@ class DockerComposeEnv(Environment):
                 "up",
                 "-d",
                 project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override
@@ -92,7 +96,10 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
             run_compose(
-                rendered_map["ungated"], "down", project_name=self.envCfg.tag
+                rendered_map["ungated"],
+                "down",
+                project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override
@@ -101,7 +108,10 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map and "ungated" in rendered_map:
             run_compose(
-                rendered_map["ungated"], "restart", project_name=self.envCfg.tag
+                rendered_map["ungated"],
+                "restart",
+                project_name=self.envCfg.tag,
+                capture=not self._is_verbose(),
             )
 
     @override
@@ -389,6 +399,16 @@ class DockerComposeEnv(Environment):
                 if obj:
                     services.append(obj)
             except json.JSONDecodeError:
+                logging.debug(
+                    "Ignoring non-JSON docker compose ps line for env '%s': %r",
+                    self.envCfg.tag,
+                    line,
+                )
                 continue
 
+        logging.debug(
+            "Collected %d docker compose status row(s) for env '%s'.",
+            len(services),
+            self.envCfg.tag,
+        )
         return services

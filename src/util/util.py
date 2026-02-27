@@ -82,20 +82,16 @@ class Util:
                 else:
                     os.link(src_item, dest_item)
         except OSError as e:
-            Util.print_error_and_die(
-                f"""Failed to copy directory:
-                {src_path} to {dest_path}\nError: {e}"""
-            )
+            Util.print_error_and_die(f"""Failed to copy directory:
+                {src_path} to {dest_path}\nError: {e}""")
 
     @staticmethod
     def move_dir(src_path: str, dest_path: str):
         try:
             os.rename(src_path, dest_path)
         except OSError as e:
-            Util.print_error_and_die(
-                f"""Failed to move directory:
-                {src_path} to {dest_path}\nError: {e}"""
-            )
+            Util.print_error_and_die(f"""Failed to move directory:
+                {src_path} to {dest_path}\nError: {e}""")
 
     @staticmethod
     def remove_dir(dir_path: str):
@@ -170,7 +166,7 @@ class Util:
         Util.console.print(table)
 
     @staticmethod
-    def render_grouped_table(
+    def build_grouped_table(
         title: Optional[str],
         group_column_header: str,
         item_columns: list[dict[str, str]],
@@ -181,9 +177,9 @@ class Util:
         group_style: str = "bold",
         group_col_style: str = "cyan",
         box_style: box.Box = box.SIMPLE,
-    ) -> None:
+    ) -> Table:
         """
-        Render a grouped table using rich.
+        Build a grouped table using rich.
 
         Args:
             title: Table title (None for no title).
@@ -222,8 +218,7 @@ class Util:
             )
 
         if not groups:
-            Util.console.print("[yellow]No data.[/yellow]")
-            return
+            return table
 
         for group_label in sorted(groups.keys()):
             items = groups[group_label] or []
@@ -252,6 +247,60 @@ class Util:
                         *[""] * (len(item_columns) - 1),
                         end_section=is_last,
                     )
+
+        return table
+
+    @staticmethod
+    def render_grouped_table(
+        title: Optional[str],
+        group_column_header: str,
+        item_columns: list[dict[str, str]],
+        groups: dict[str, list[list[str]]],
+        *,
+        branch_glyph_mid: str = "├─",
+        branch_glyph_last: str = "└─",
+        group_style: str = "bold",
+        group_col_style: str = "cyan",
+        box_style: box.Box = box.SIMPLE,
+    ) -> None:
+        """
+        Render a grouped table using rich.
+
+        Args:
+            title: Table title (None for no title).
+            group_column_header: header for the left-most "group"
+            column (e.g., "Service").
+
+            item_columns: like in render_table, list of dicts with keys:
+                         - "header" (required)
+                         - "style" (optional)
+
+            groups: mapping from group label -> list of item rows
+            (each list[str] must match item_columns length)
+
+            branch_glyph_mid: glyph used before non-last items
+            (visual nesting).
+
+            branch_glyph_last: glyph used before the last item in a group.
+            group_style: style applied to the group label row.
+            group_col_style: style for the group column.
+            box_style: rich box style.
+        """
+        table = Util.build_grouped_table(
+            title,
+            group_column_header,
+            item_columns,
+            groups,
+            branch_glyph_mid=branch_glyph_mid,
+            branch_glyph_last=branch_glyph_last,
+            group_style=group_style,
+            group_col_style=group_col_style,
+            box_style=box_style,
+        )
+
+        if not groups:
+            Util.console.print("[yellow]No data.[/yellow]")
+            return
 
         Util.console.print(table)
 
