@@ -109,6 +109,7 @@ class Environment(ABC):
         """Start the environment."""
         self.clear_command_log()
         self.clear_command_error()
+        self.on_start_cycle_begin()
         self.envCfg.status.rendered_config = self.render_target(True)
         self.sync_config()
         self.ensure_resources()
@@ -123,6 +124,10 @@ class Environment(ABC):
         )
         started_gate_keys.update(started_now)
         pending_gate_keys -= started_now
+        self.run_inits(
+            started_gate_keys=started_gate_keys,
+            probe_results=None,
+        )
 
         started_at = time.monotonic()
         while pending_gate_keys:
@@ -138,6 +143,12 @@ class Environment(ABC):
                 started_gate_keys=started_gate_keys,
                 probe_results=probe_results,
             )
+            started_gate_keys.update(started_now)
+            pending_gate_keys -= started_now
+            self.run_inits(
+                started_gate_keys=started_gate_keys,
+                probe_results=probe_results,
+            )
             if not started_now:
                 if timeout_seconds is not None:
                     elapsed = int(time.monotonic() - started_at)
@@ -145,9 +156,6 @@ class Environment(ABC):
                         break
                 time.sleep(1.0)
                 continue
-
-            started_gate_keys.update(started_now)
-            pending_gate_keys -= started_now
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""
@@ -271,6 +279,18 @@ class Environment(ABC):
     def status(self) -> list[dict[str, str]]:
         """Get environment status."""
         return self.status_impl()
+
+    def on_start_cycle_begin(self) -> None:
+        """Hook called once at the beginning of environment start."""
+        return None
+
+    def run_inits(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]],
+    ) -> None:
+        """Hook for running service/container init flows during start."""
+        return None
 
     def to_config(self) -> EnvironmentCfg:
         """To config"""

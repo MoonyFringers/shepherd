@@ -767,6 +767,359 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
 
 
 @pytest.mark.docker
+def test_start_runs_init_when_probe_turns_true(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="init-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env.services = cast(
+        list[Any],
+        [
+            SimpleNamespace(
+                svcCfg=SimpleNamespace(
+                    tag="db",
+                    start=None,
+                    containers=[
+                        SimpleNamespace(
+                            tag="pg",
+                            run_container_name="db-init-env",
+                            inits=[
+                                SimpleNamespace(
+                                    tag="create-user",
+                                    script="echo init ok",
+                                    script_path=None,
+                                    when_probes=["ready"],
+                                )
+                            ],
+                        )
+                    ],
+                )
+            )
+        ],
+    )
+    rendered_map = {
+        "ungated": "name: init-env\nservices:\n  db-init-env: {}\n",
+        "ready": "name: init-env\nservices:\n  ready-svc: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    mocker.patch.object(
+        env,
+        "check_probes",
+        return_value=[
+            ProbeRunResult(tag="ready", exit_code=0),
+        ],
+    )
+    mocker.patch.object(env, "ensure_resources_impl")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        side_effect=[
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ],
+    )
+
+    env.start(timeout_seconds=5)
+    assert run_compose_mock.call_count == 3
+    assert run_compose_mock.call_args_list[2].args[1:] == (
+        "exec",
+        "-T",
+        "db-init-env",
+        "sh",
+        "-lc",
+        "echo init ok",
+    )
+
+
+@pytest.mark.docker
+def test_start_runs_init_in_enclosing_container(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="enclosing-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env.services = cast(
+        list[Any],
+        [
+            SimpleNamespace(
+                svcCfg=SimpleNamespace(
+                    tag="svc",
+                    start=None,
+                    containers=[
+                        SimpleNamespace(
+                            tag="api",
+                            run_container_name="api-enclosing-env",
+                            inits=[
+                                SimpleNamespace(
+                                    tag="init-api",
+                                    script="echo api",
+                                    script_path=None,
+                                    when_probes=[],
+                                )
+                            ],
+                        ),
+                        SimpleNamespace(
+                            tag="worker",
+                            run_container_name="worker-enclosing-env",
+                            inits=[
+                                SimpleNamespace(
+                                    tag="init-worker",
+                                    script="echo worker",
+                                    script_path=None,
+                                    when_probes=[],
+                                )
+                            ],
+                        ),
+                    ],
+                )
+            )
+        ],
+    )
+    rendered_map = {
+        "ungated": (
+            "name: enclosing-env\n"
+            "services:\n"
+            "  api-enclosing-env: {}\n"
+            "  worker-enclosing-env: {}\n"
+        ),
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    mocker.patch.object(env, "ensure_resources_impl")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        side_effect=[
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ],
+    )
+
+    env.start(timeout_seconds=5)
+    assert run_compose_mock.call_count == 3
+    assert run_compose_mock.call_args_list[1].args[1:4] == (
+        "exec",
+        "-T",
+        "api-enclosing-env",
+    )
+    assert run_compose_mock.call_args_list[2].args[1:4] == (
+        "exec",
+        "-T",
+        "worker-enclosing-env",
+    )
+
+
+@pytest.mark.docker
+def test_start_records_init_compose_failure_output(mocker: MockerFixture):
+    env_cfg = SimpleNamespace(
+        tag="init-fail-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(
+        mocker.Mock(),
+        mocker.Mock(),
+        cast(Any, env_cfg),
+        cli_flags={"show_commands": True, "show_commands_limit": 5},
+    )
+    env.services = cast(
+        list[Any],
+        [
+            SimpleNamespace(
+                svcCfg=SimpleNamespace(
+                    tag="svc",
+                    start=None,
+                    containers=[
+                        SimpleNamespace(
+                            tag="api",
+                            run_container_name="api-init-fail-env",
+                            inits=[
+                                SimpleNamespace(
+                                    tag="seed",
+                                    script="echo seed",
+                                    script_path=None,
+                                    when_probes=[],
+                                )
+                            ],
+                        )
+                    ],
+                )
+            )
+        ],
+    )
+    rendered_map = {
+        "ungated": "name: init-fail-env\nservices:\n  api-init-fail-env: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    mocker.patch.object(env, "ensure_resources_impl")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        side_effect=[
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=1,
+                stdout="init-out",
+                stderr="init-err",
+            ),
+        ],
+    )
+
+    env.start(timeout_seconds=5)
+
+    assert run_compose_mock.call_count == 2
+    err = env.get_command_error()
+    assert err is not None
+    assert "Docker compose init:svc|api|seed failed" == err["title"]
+    assert "--- stdout ---" in err["body"]
+    assert "init-out" in err["body"]
+    assert "--- stderr ---" in err["body"]
+    assert "init-err" in err["body"]
+
+
+@pytest.mark.docker
+def test_start_does_not_rerun_init_across_probe_poll_cycles(
+    mocker: MockerFixture,
+):
+    env_cfg = SimpleNamespace(
+        tag="init-dedup-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env.services = cast(
+        list[Any],
+        [
+            SimpleNamespace(
+                svcCfg=SimpleNamespace(
+                    tag="svc",
+                    start=SimpleNamespace(when_probes=["ready"]),
+                    containers=[
+                        SimpleNamespace(
+                            tag="api",
+                            run_container_name="api-init-dedup-env",
+                            inits=[
+                                SimpleNamespace(
+                                    tag="seed",
+                                    script="echo seed once",
+                                    script_path=None,
+                                    when_probes=["ready"],
+                                )
+                            ],
+                        )
+                    ],
+                )
+            )
+        ],
+    )
+    rendered_map = {
+        "ungated": "name: init-dedup-env\nservices:\n  base: {}\n",
+        "ready": "name: init-dedup-env\nservices:\n  api-init-dedup-env: {}\n",
+        "never": "name: init-dedup-env\nservices:\n  never-up: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    check_probes_mock = mocker.patch.object(
+        env,
+        "check_probes",
+        side_effect=[
+            [
+                ProbeRunResult(tag="ready", exit_code=0),
+                ProbeRunResult(tag="never", exit_code=1),
+            ],
+            [
+                ProbeRunResult(tag="ready", exit_code=0),
+                ProbeRunResult(tag="never", exit_code=1),
+            ],
+            [],
+        ],
+    )
+    mocker.patch.object(env, "ensure_resources_impl")
+    sleep_mock = mocker.patch("environment.environment.time.sleep")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        side_effect=[
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "exec", "-T"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ],
+    )
+
+    env.start(timeout_seconds=5)
+
+    assert check_probes_mock.call_count == 3
+    sleep_mock.assert_called_once_with(1.0)
+    assert run_compose_mock.call_count == 3
+    assert run_compose_mock.call_args_list[2].args[1:] == (
+        "exec",
+        "-T",
+        "api-init-dedup-env",
+        "sh",
+        "-lc",
+        "echo seed once",
+    )
+
+
+@pytest.mark.docker
 def test_render_target_merged_includes_gated_services(mocker: MockerFixture):
     env_cfg = SimpleNamespace(
         tag="merge-env",

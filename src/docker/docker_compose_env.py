@@ -26,7 +26,7 @@ from typing import Any, Optional, cast, override
 import yaml
 
 from config import ConfigMng, EnvironmentCfg
-from config.config import ProbeCfg
+from config.config import InitCfg, ProbeCfg
 from environment import Environment
 from environment.environment import ProbeRunResult
 from service import ServiceFactory
@@ -47,6 +47,7 @@ class DockerComposeEnv(Environment):
     ):
         """Initialize a Docker Compose environment."""
         super().__init__(config, svcFactory, envCfg, cli_flags=cli_flags)
+        self._started_init_keys: set[str] = set()
 
     @override
     def ensure_resources_impl(self):
@@ -125,6 +126,115 @@ class DockerComposeEnv(Environment):
             started_now.add(gate_key)
 
         return started_now
+
+    @override
+    def on_start_cycle_begin(self) -> None:
+        self._started_init_keys.clear()
+
+    @override
+    def run_inits(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]],
+    ) -> None:
+        rendered_map = self.envCfg.status.rendered_config or {}
+        if not rendered_map:
+            return
+
+        probe_status: dict[str, bool] = {"base": True}
+        if probe_results:
+            for result in probe_results:
+                probe_status[result.tag] = (
+                    result.exit_code == 0
+                ) and not result.timed_out
+
+        self._run_eligible_inits(
+            rendered_map=rendered_map,
+            active_gate_keys=started_gate_keys,
+            probe_status=probe_status,
+        )
+
+    def _service_gate_key(self, service: Any) -> str:
+        when_probes = (
+            service.svcCfg.start.when_probes
+            if service.svcCfg.start and service.svcCfg.start.when_probes
+            else None
+        )
+        return "|".join(when_probes) if when_probes else "ungated"
+
+    def _are_probes_open(
+        self, when_probes: Optional[list[str]], probe_status: dict[str, bool]
+    ) -> bool:
+        required_tags = when_probes or []
+        if not required_tags:
+            return True
+        return all(probe_status.get(tag, False) for tag in required_tags)
+
+    def _run_eligible_inits(
+        self,
+        *,
+        rendered_map: dict[str, str],
+        active_gate_keys: set[str],
+        probe_status: dict[str, bool],
+    ) -> None:
+        for svc in self.services:
+            gate_key = self._service_gate_key(svc)
+            if gate_key not in active_gate_keys:
+                continue
+
+            containers = svc.svcCfg.containers or []
+            for container in containers:
+                service_name = container.run_container_name or ""
+                if not service_name:
+                    continue
+                for init in container.inits or []:
+                    if not self._is_init_eligible(
+                        svc_tag=svc.svcCfg.tag,
+                        container_tag=container.tag,
+                        init=init,
+                        probe_status=probe_status,
+                    ):
+                        continue
+
+                    compose_stack = [
+                        rendered_map[k]
+                        for k in rendered_map.keys()
+                        if k in active_gate_keys
+                    ]
+                    script = init.script or init.script_path or ""
+                    if not script:
+                        continue
+
+                    init_key = f"{svc.svcCfg.tag}|{container.tag}|{init.tag}"
+                    cp = self._run_compose(
+                        compose_stack,
+                        "exec",
+                        "-T",
+                        service_name,
+                        "sh",
+                        "-lc",
+                        script,
+                        capture=not self._is_verbose(),
+                        category=f"init:{init_key}",
+                    )
+                    if cp.returncode != 0:
+                        self._record_compose_failure(
+                            cp, category=f"init:{init_key}"
+                        )
+                    self._started_init_keys.add(init_key)
+
+    def _is_init_eligible(
+        self,
+        *,
+        svc_tag: str,
+        container_tag: str,
+        init: InitCfg,
+        probe_status: dict[str, bool],
+    ) -> bool:
+        init_key = f"{svc_tag}|{container_tag}|{init.tag}"
+        if init_key in self._started_init_keys:
+            return False
+        return self._are_probes_open(init.when_probes, probe_status)
 
     @override
     def stop_impl(self):
