@@ -45,6 +45,8 @@ from .render import (
 )
 from .status_wait import WaitForEnvStateHooks, wait_for_env_state
 
+DEFAULT_STATUS_POLL_SECONDS = 1.0
+
 
 @dataclass
 class ProbeRunResult:
@@ -526,7 +528,8 @@ class EnvironmentMng:
         self.configMng = configMng
         self.envFactory = envFactory
         self.svcFactory = svcFactory
-        self._status_poll_seconds = 1.0
+        # Default status snapshot cadence used by wait/status loops.
+        self._status_poll_seconds = DEFAULT_STATUS_POLL_SECONDS
 
     def _is_verbose(self) -> bool:
         return bool(self.cli_flags.get("verbose", False))

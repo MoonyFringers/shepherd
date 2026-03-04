@@ -31,10 +31,23 @@ GroupedStatus: TypeAlias = dict[str, list[list[str]]]
 GateStatus: TypeAlias = dict[str, Optional[bool]]
 CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
 
+# Default/guard timing knobs used by wait loops.
+# With the default manager poll of 1.0s:
+# - UI refresh uses at least 4 Hz (tick every 250 ms).
+# - Gate probe evaluation is throttled to at most every 2.0s.
+MIN_STATUS_POLL_SECONDS = 0.001
+MIN_LIVE_REFRESH_PER_SECOND = 4
+MIN_GATE_EVAL_INTERVAL_SECONDS = 1.0
+
 
 @dataclass(frozen=True)
 class WaitForEnvStateHooks:
-    """Callback/value bundle used by `wait_for_env_state`."""
+    """
+    Callback/value bundle used by `wait_for_env_state`.
+
+    `status_poll_seconds` controls status snapshot cadence.
+    Default from `EnvironmentMng` is 1.0 second.
+    """
 
     status_poll_seconds: float
     is_quiet: Callable[[], bool]
@@ -69,6 +82,11 @@ def wait_for_env_state(
       be true when at least one required tag exists.
     - If no required tags exist (e.g. no `ready.when_probes` and no service
       gate probes), readiness falls back to running-container state only.
+
+    Timing defaults (with `status_poll_seconds=1.0`):
+    - Status snapshots: every 1.0s.
+    - Probe gate evaluation: every max(1.0, 2 * poll) => 2.0s.
+    - Interactive UI tick: at least 4 Hz => every 0.25s.
     """
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
@@ -125,7 +143,7 @@ def wait_for_env_state(
     hidden_columns = {"Gates"} if not wait_until_up else None
     # Probe checks are heavier than status polls; sample at a lower cadence.
     next_gate_eval_at = time.monotonic() + max(
-        1.0, hooks.status_poll_seconds * 2
+        MIN_GATE_EVAL_INTERVAL_SECONDS, hooks.status_poll_seconds * 2
     )
 
     def get_gate_status() -> Optional[GateStatus]:
@@ -137,7 +155,9 @@ def wait_for_env_state(
             return gate_status
         gate_status = hooks.evaluate_gate_status(env, required_gate_tags)
         # Avoid running probes on every visual refresh tick.
-        next_gate_eval_at = now + max(1.0, hooks.status_poll_seconds * 2)
+        next_gate_eval_at = now + max(
+            MIN_GATE_EVAL_INTERVAL_SECONDS, hooks.status_poll_seconds * 2
+        )
         return gate_status
 
     started = time.monotonic()
@@ -230,7 +250,7 @@ def wait_for_env_state(
                         grouped,
                         hidden_columns=hidden_columns,
                         status_suffix=(
-                            "[bold green](Ready)[/bold green]"
+                            "[bold green]Ready[/bold green]"
                             if wait_until_up
                             else None
                         ),
@@ -258,9 +278,15 @@ def wait_for_env_state(
                 return
             time.sleep(hooks.status_poll_seconds)
 
-    # Interactive terminal: continuously render progress with Live.
+    # Interactive terminal: render at a fixed cadence while polling status
+    # independently to avoid visual jitter when polls are slow/variable.
     live_refresh_per_second = max(
-        4, int(1 / max(hooks.status_poll_seconds, 0.001))
+        MIN_LIVE_REFRESH_PER_SECOND,
+        int(1 / max(hooks.status_poll_seconds, MIN_STATUS_POLL_SECONDS)),
+    )
+    ui_tick_seconds = 1.0 / float(live_refresh_per_second)
+    status_poll_seconds = max(
+        MIN_STATUS_POLL_SECONDS, hooks.status_poll_seconds
     )
     with Live(
         refresh_per_second=live_refresh_per_second,
@@ -269,127 +295,196 @@ def wait_for_env_state(
         screen=False,
     ) as live:
         completed = False
-        while True:
-            raise_action_error()
-            current_gate_status = get_gate_status()
-            grouped, all_running, any_running, has_containers = (
-                hooks.collect_env_status(
-                    env,
-                    current_gate_status,
-                )
-            )
-            remaining = hooks.remaining_timeout_seconds(
-                started, timeout_seconds
-            )
-            logging.debug(
-                "wait_for_env_%s poll env='%s': groups=%d "
-                "has_containers=%s all_running=%s any_running=%s "
-                "in_action=%s remaining=%s",
-                phase,
-                env.envCfg.tag,
-                len(grouped),
-                has_containers,
-                all_running,
-                any_running,
-                in_action(),
-                remaining,
-            )
+        next_ui_tick_at = time.monotonic()
+        next_status_poll_at = 0.0
+        snapshot_lock = threading.Lock()
+        stop_polling = threading.Event()
+        poll_error: Optional[BaseException] = None
+        latest_gate_status: Optional[GateStatus] = None
+        grouped: GroupedStatus = {}
+        all_running = False
+        any_running = False
+        has_containers = False
+        has_snapshot = False
 
-            if not has_containers or not grouped:
-                if in_action():
-                    title = f"[white]{env.envCfg.tag}[/white]"
-                    if remaining is not None:
-                        title = (
-                            f"{title} " f"[dim](Time left: {remaining}s)[/dim]"
-                        )
-                    live.update(f"{title} [dim]({phase_gerund}...)[/dim]")
-                else:
-                    live.stop()
-                    Util.console.print(
-                        f"[yellow]No services found for "
-                        f"environment '{env.envCfg.tag}'[/yellow]"
-                    )
-                    return
-            else:
-                show_ready = wait_until_up and completed
-                live.update(
-                    hooks.build_env_status_table(
+        def run_status_polling() -> None:
+            nonlocal poll_error
+            nonlocal next_status_poll_at
+            nonlocal latest_gate_status
+            nonlocal grouped
+            nonlocal all_running
+            nonlocal any_running
+            nonlocal has_containers
+            nonlocal has_snapshot
+            while not stop_polling.is_set():
+                now = time.monotonic()
+                if now < next_status_poll_at:
+                    stop_polling.wait(next_status_poll_at - now)
+                    continue
+                try:
+                    gate_status_now = get_gate_status()
+                    (
+                        poll_grouped,
+                        poll_all_running,
+                        poll_any_running,
+                        (poll_has_containers),
+                    ) = hooks.collect_env_status(env, gate_status_now)
+                    with snapshot_lock:
+                        latest_gate_status = gate_status_now
+                        grouped = poll_grouped
+                        all_running = poll_all_running
+                        any_running = poll_any_running
+                        has_containers = poll_has_containers
+                        has_snapshot = True
+                    logging.debug(
+                        "wait_for_env_%s poll env='%s': groups=%d "
+                        "has_containers=%s all_running=%s any_running=%s "
+                        "in_action=%s",
+                        phase,
                         env.envCfg.tag,
-                        grouped,
-                        hidden_columns=hidden_columns,
-                        status_suffix=(
-                            "[bold green](Ready)[/bold green]"
-                            if show_ready
-                            else None
-                        ),
-                        remaining_seconds=(None if show_ready else remaining),
-                        command_log=(
-                            env.get_command_log()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
-                        command_log_limit=(
-                            env.get_command_log_limit()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
-                        command_error=env.get_command_error(),
-                        command_error_limit=(
-                            env.get_command_log_limit()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
+                        len(poll_grouped),
+                        poll_has_containers,
+                        poll_all_running,
+                        poll_any_running,
+                        in_action(),
                     )
-                )
-
-            if condition_met(all_running, any_running, current_gate_status):
-                logging.debug(
-                    "wait_for_env_%s complete env='%s'",
-                    phase,
-                    env.envCfg.tag,
-                )
-                if not watch_after:
-                    if wait_until_up:
-                        live.update(
-                            hooks.build_env_status_table(
-                                env.envCfg.tag,
-                                grouped,
-                                hidden_columns=hidden_columns,
-                                status_suffix=(
-                                    "[bold green](Ready)[/bold green]"
-                                    if wait_until_up
-                                    else None
-                                ),
-                                command_log=(
-                                    env.get_command_log()
-                                    if env.is_command_log_enabled()
-                                    else None
-                                ),
-                                command_log_limit=(
-                                    env.get_command_log_limit()
-                                    if env.is_command_log_enabled()
-                                    else None
-                                ),
-                                command_error=env.get_command_error(),
-                                command_error_limit=(
-                                    env.get_command_log_limit()
-                                    if env.is_command_log_enabled()
-                                    else None
-                                ),
-                            )
-                        )
+                except BaseException as e:
+                    poll_error = e
+                    stop_polling.set()
                     return
-                completed = True
+                next_status_poll_at = time.monotonic() + status_poll_seconds
 
-            if (
-                not completed
-                and timeout_seconds is not None
-                and remaining is not None
-            ):
-                if remaining <= 0:
-                    live.stop()
-                    Util.print_error_and_die(
-                        "Timed out waiting for environment "
-                        f"'{env.envCfg.tag}' to be {timeout_target}."
+        next_status_poll_at = 0.0
+        poll_thread = threading.Thread(target=run_status_polling, daemon=True)
+        poll_thread.start()
+        try:
+            while True:
+                raise_action_error()
+                if poll_error is not None:
+                    raise poll_error
+                with snapshot_lock:
+                    snap_has_snapshot = has_snapshot
+                    snap_has_containers = has_containers
+                    snap_grouped = grouped
+                    snap_all_running = all_running
+                    snap_any_running = any_running
+                    snap_gate_status = latest_gate_status
+                remaining = hooks.remaining_timeout_seconds(
+                    started, timeout_seconds
+                )
+
+                if (
+                    not snap_has_snapshot
+                    or not snap_has_containers
+                    or not snap_grouped
+                ):
+                    if in_action():
+                        title = f"[white]{env.envCfg.tag}[/white]"
+                        if remaining is not None:
+                            title = (
+                                f"{title} "
+                                f"[dim](Time left: {remaining}s)[/dim]"
+                            )
+                        live.update(f"{title} [dim]({phase_gerund}...)[/dim]")
+                    else:
+                        live.stop()
+                        Util.console.print(
+                            f"[yellow]No services found for "
+                            f"environment '{env.envCfg.tag}'[/yellow]"
+                        )
+                        return
+                else:
+                    show_ready = wait_until_up and completed
+                    live.update(
+                        hooks.build_env_status_table(
+                            env.envCfg.tag,
+                            snap_grouped,
+                            hidden_columns=hidden_columns,
+                            status_suffix=(
+                                "[bold green]Ready[/bold green]"
+                                if show_ready
+                                else None
+                            ),
+                            remaining_seconds=(
+                                None if show_ready else remaining
+                            ),
+                            command_log=(
+                                env.get_command_log()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
+                            command_log_limit=(
+                                env.get_command_log_limit()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
+                            command_error=env.get_command_error(),
+                            command_error_limit=(
+                                env.get_command_log_limit()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
+                        )
                     )
-            time.sleep(hooks.status_poll_seconds)
+
+                if condition_met(
+                    snap_all_running, snap_any_running, snap_gate_status
+                ):
+                    logging.debug(
+                        "wait_for_env_%s complete env='%s'",
+                        phase,
+                        env.envCfg.tag,
+                    )
+                    if not watch_after:
+                        if wait_until_up:
+                            live.update(
+                                hooks.build_env_status_table(
+                                    env.envCfg.tag,
+                                    snap_grouped,
+                                    hidden_columns=hidden_columns,
+                                    status_suffix=(
+                                        "[bold green]Ready[/bold green]"
+                                        if wait_until_up
+                                        else None
+                                    ),
+                                    command_log=(
+                                        env.get_command_log()
+                                        if env.is_command_log_enabled()
+                                        else None
+                                    ),
+                                    command_log_limit=(
+                                        env.get_command_log_limit()
+                                        if env.is_command_log_enabled()
+                                        else None
+                                    ),
+                                    command_error=env.get_command_error(),
+                                    command_error_limit=(
+                                        env.get_command_log_limit()
+                                        if env.is_command_log_enabled()
+                                        else None
+                                    ),
+                                )
+                            )
+                        return
+                    completed = True
+
+                if (
+                    not completed
+                    and timeout_seconds is not None
+                    and remaining is not None
+                ):
+                    if remaining <= 0:
+                        live.stop()
+                        Util.print_error_and_die(
+                            "Timed out waiting for environment "
+                            f"'{env.envCfg.tag}' to be {timeout_target}."
+                        )
+                now = time.monotonic()
+                if next_ui_tick_at < now:
+                    next_ui_tick_at = now
+                next_ui_tick_at += ui_tick_seconds
+                sleep_for = max(0.0, next_ui_tick_at - time.monotonic())
+                time.sleep(sleep_for)
+        finally:
+            stop_polling.set()
+            poll_thread.join(timeout=1.0)
