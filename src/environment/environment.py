@@ -50,6 +50,10 @@ class ProbeRunResult:
     timed_out: bool = False
 
 
+class NonRecoverableStartError(RuntimeError):
+    """Raised when environment start cannot continue safely."""
+
+
 class Environment(ABC):
 
     services: list[Service]
@@ -118,44 +122,54 @@ class Environment(ABC):
         pending_gate_keys = set(rendered_config.keys())
         started_gate_keys: set[str] = set()
 
-        started_now = self.start_impl(
-            started_gate_keys=started_gate_keys,
-            probe_results=None,
-        )
-        started_gate_keys.update(started_now)
-        pending_gate_keys -= started_now
-        self.run_inits(
-            started_gate_keys=started_gate_keys,
-            probe_results=None,
-        )
-
-        started_at = time.monotonic()
-        while pending_gate_keys:
-            probe_results = self.check_probes(
-                probe_tag=None,
-                fail_fast=False,
-                timeout_seconds=120,
-            )
-            if not probe_results:
-                break
-
+        try:
             started_now = self.start_impl(
                 started_gate_keys=started_gate_keys,
-                probe_results=probe_results,
+                probe_results=None,
             )
             started_gate_keys.update(started_now)
             pending_gate_keys -= started_now
             self.run_inits(
                 started_gate_keys=started_gate_keys,
-                probe_results=probe_results,
+                probe_results=None,
             )
-            if not started_now:
-                if timeout_seconds is not None:
-                    elapsed = int(time.monotonic() - started_at)
-                    if elapsed >= timeout_seconds:
-                        break
-                time.sleep(1.0)
-                continue
+
+            started_at = time.monotonic()
+            while pending_gate_keys:
+                probe_results = self.check_probes(
+                    probe_tag=None,
+                    fail_fast=False,
+                    timeout_seconds=120,
+                )
+                if not probe_results:
+                    break
+
+                started_now = self.start_impl(
+                    started_gate_keys=started_gate_keys,
+                    probe_results=probe_results,
+                )
+                started_gate_keys.update(started_now)
+                pending_gate_keys -= started_now
+                self.run_inits(
+                    started_gate_keys=started_gate_keys,
+                    probe_results=probe_results,
+                )
+                if not started_now:
+                    if timeout_seconds is not None:
+                        elapsed = int(time.monotonic() - started_at)
+                        if elapsed >= timeout_seconds:
+                            break
+                    time.sleep(1.0)
+                    continue
+        except NonRecoverableStartError:
+            try:
+                self.stop()
+            except BaseException:
+                logging.exception(
+                    "Failed rollback stop after start failure for env '%s'",
+                    self.envCfg.tag,
+                )
+            raise
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""

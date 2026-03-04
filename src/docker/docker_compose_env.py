@@ -28,7 +28,7 @@ import yaml
 from config import ConfigMng, EnvironmentCfg
 from config.config import InitCfg, ProbeCfg
 from environment import Environment
-from environment.environment import ProbeRunResult
+from environment.environment import NonRecoverableStartError, ProbeRunResult
 from service import ServiceFactory
 from util.util import Util
 
@@ -116,13 +116,18 @@ class DockerComposeEnv(Environment):
                 for k in rendered_map.keys()
                 if k in started_gate_keys or k == gate_key
             ]
-            self._run_compose(
+            cp = self._run_compose(
                 compose_stack,
                 "up",
                 "-d",
                 capture=not self._is_verbose(),
                 category=f"start:{gate_key}",
             )
+            if cp.returncode != 0:
+                raise NonRecoverableStartError(
+                    f"Failed to start gate '{gate_key}' "
+                    f"for environment '{self.envCfg.tag}'."
+                )
             started_now.add(gate_key)
 
         return started_now
@@ -220,6 +225,11 @@ class DockerComposeEnv(Environment):
                     if cp.returncode != 0:
                         self._record_compose_failure(
                             cp, category=f"init:{init_key}"
+                        )
+                        raise NonRecoverableStartError(
+                            f"Failed to run init '{init.tag}' "
+                            f"for container '{container.tag}' "
+                            f"in environment '{self.envCfg.tag}'."
                         )
                     self._started_init_keys.add(init_key)
 

@@ -32,7 +32,7 @@ from pytest_mock import MockerFixture
 from test_util import read_fixture
 
 from docker.docker_compose_env import DockerComposeEnv
-from environment.environment import ProbeRunResult
+from environment.environment import NonRecoverableStartError, ProbeRunResult
 from shepctl import ShepherdMng, cli
 
 docker_compose_ps_output = """
@@ -758,12 +758,56 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
         ),
     )
 
-    env.start_impl(started_gate_keys=set(), probe_results=None)
+    with pytest.raises(NonRecoverableStartError):
+        env.start_impl(started_gate_keys=set(), probe_results=None)
     err = env.get_command_error()
     assert err is not None
     assert "Docker compose start:ungated failed" == err["title"]
     assert "--- stdout ---" in err["body"]
     assert "--- stderr ---" in err["body"]
+
+
+@pytest.mark.docker
+def test_start_rolls_back_with_stop_on_non_recoverable_gate_failure(
+    mocker: MockerFixture,
+):
+    env_cfg = SimpleNamespace(
+        tag="rollback-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(rendered_config=None),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    rendered_map = {
+        "ungated": "name: rollback-env\nservices:\n  app: {}\n",
+    }
+    mocker.patch.object(env, "render_target", return_value=rendered_map)
+    mocker.patch.object(env, "ensure_resources_impl")
+
+    run_compose_mock = mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        side_effect=[
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "up", "-d"],
+                returncode=1,
+                stdout="up-out",
+                stderr="up-err",
+            ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "down"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
+        ],
+    )
+
+    with pytest.raises(NonRecoverableStartError):
+        env.start(timeout_seconds=5)
+
+    assert run_compose_mock.call_count == 2
+    assert run_compose_mock.call_args_list[0].args[1:3] == ("up", "-d")
+    assert run_compose_mock.call_args_list[1].args[1:2] == ("down",)
 
 
 @pytest.mark.docker
@@ -1005,12 +1049,19 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
                 stdout="init-out",
                 stderr="init-err",
             ),
+            subprocess.CompletedProcess(
+                args=["docker", "compose", "down"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            ),
         ],
     )
 
-    env.start(timeout_seconds=5)
+    with pytest.raises(NonRecoverableStartError):
+        env.start(timeout_seconds=5)
 
-    assert run_compose_mock.call_count == 2
+    assert run_compose_mock.call_count == 3
     err = env.get_command_error()
     assert err is not None
     assert "Docker compose init:svc|api|seed failed" == err["title"]
@@ -1018,6 +1069,7 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
     assert "init-out" in err["body"]
     assert "--- stderr ---" in err["body"]
     assert "init-err" in err["body"]
+    assert run_compose_mock.call_args_list[2].args[1:2] == ("down",)
 
 
 @pytest.mark.docker
