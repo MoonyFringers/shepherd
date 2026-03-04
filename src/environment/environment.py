@@ -161,7 +161,7 @@ class Environment(ABC):
                             break
                     time.sleep(1.0)
                     continue
-        except NonRecoverableStartError:
+        except NonRecoverableStartError as e:
             try:
                 self.stop()
             except BaseException:
@@ -169,7 +169,11 @@ class Environment(ABC):
                     "Failed rollback stop after start failure for env '%s'",
                     self.envCfg.tag,
                 )
-            raise
+            message = (
+                str(e)
+                or "Environment start failed due to a non-recoverable error."
+            )
+            Util.print_error_and_die(message)
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""
@@ -1288,11 +1292,11 @@ class EnvironmentMng:
 
                 if state == "running":
                     any_running = True
-                    state_colored = "[bold green]● running[/bold green]"
+                    state_colored = "[bold green]running[/bold green]"
                 elif state == "stopped":
-                    state_colored = "[bold red]● stopped[/bold red]"
+                    state_colored = "[bold red]stopped[/bold red]"
                 else:
-                    state_colored = f"[yellow]● {state}[/yellow]"
+                    state_colored = f"[yellow]{state}[/yellow]"
 
                 if state != "running":
                     all_running = False

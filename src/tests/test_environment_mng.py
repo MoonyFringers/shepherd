@@ -55,7 +55,7 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
         ({}, False, False, False),
         ({}, False, False, False),
         (
-            {"svc": [["cnt", "[bold green]● running[/bold green]"]]},
+            {"svc": [["cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -248,7 +248,7 @@ def test_build_env_status_table_includes_details_column_when_enabled(
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]● running[/bold green]",
+                "[bold green]running[/bold green]",
                 "[dim]a[/dim], [dim]b[/dim]",
             ]
         ]
@@ -266,7 +266,7 @@ def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]● running[/bold green]",
+                "[bold green]running[/bold green]",
             ]
         ]
     }
@@ -296,7 +296,7 @@ def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]● running[/bold green]",
+                "[bold green]running[/bold green]",
             ]
         ]
     }
@@ -363,13 +363,13 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[bold green]● running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             False,
             True,
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[bold red]● stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
             False,
             False,
             True,

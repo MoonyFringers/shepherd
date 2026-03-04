@@ -802,12 +802,19 @@ def test_start_rolls_back_with_stop_on_non_recoverable_gate_failure(
         ],
     )
 
-    with pytest.raises(NonRecoverableStartError):
+    die_mock = mocker.patch(
+        "environment.environment.Util.print_error_and_die",
+        side_effect=RuntimeError("die"),
+    )
+    with pytest.raises(RuntimeError, match="die"):
         env.start(timeout_seconds=5)
 
     assert run_compose_mock.call_count == 2
     assert run_compose_mock.call_args_list[0].args[1:3] == ("up", "-d")
     assert run_compose_mock.call_args_list[1].args[1:2] == ("down",)
+    die_mock.assert_called_once_with(
+        "Failed to start gate 'ungated' for environment 'rollback-env'."
+    )
 
 
 @pytest.mark.docker
@@ -1058,7 +1065,11 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
         ],
     )
 
-    with pytest.raises(NonRecoverableStartError):
+    die_mock = mocker.patch(
+        "environment.environment.Util.print_error_and_die",
+        side_effect=RuntimeError("die"),
+    )
+    with pytest.raises(RuntimeError, match="die"):
         env.start(timeout_seconds=5)
 
     assert run_compose_mock.call_count == 3
@@ -1070,6 +1081,10 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
     assert "--- stderr ---" in err["body"]
     assert "init-err" in err["body"]
     assert run_compose_mock.call_args_list[2].args[1:2] == ("down",)
+    die_mock.assert_called_once_with(
+        "Failed to run init 'seed' for container 'api' in environment "
+        "'init-fail-env'."
+    )
 
 
 @pytest.mark.docker
