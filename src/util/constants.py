@@ -57,6 +57,8 @@ class Constants:
 
     @property
     def LOG_STDOUT(self) -> bool:
+        """Normalize config value to boolean
+        (`\"true\"` enables stdout logs)."""
         return self.RAW_LOG_STDOUT == "true"
 
     # Application metadata
@@ -109,6 +111,12 @@ class Constants:
 
     @property
     def DEFAULT_CONFIG(self) -> dict[Any, Any]:
+        """
+        Canonical skeleton used when bootstrapping a new `.shpd.yaml`.
+
+        Placeholder values are intentionally preserved for later resolution by
+        config loading/resolution flows.
+        """
         return {
             "env_templates": [
                 {

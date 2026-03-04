@@ -34,6 +34,13 @@ from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 
 class ShepherdMng:
+    """
+    Composition root for CLI managers/factories.
+
+    The click context stores one instance per invocation so command handlers
+    share the same loaded config and CLI flags.
+    """
+
     def __init__(self, cli_flags: dict[str, Any] = {}):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
@@ -66,6 +73,13 @@ class ShepherdMng:
 
 
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Ensure an active environment exists before running a command handler.
+
+    Decorated handlers receive `envCfg` injected as the first argument after
+    `shepherd`, which keeps command functions small and consistent.
+    """
+
     @functools.wraps(func)
     def wrapper(
         shepherd: ShepherdMng, *args: List[str], **kwargs: dict[str, str]
@@ -119,11 +133,13 @@ def empty():
 def _apply_show_commands_flags(
     shepherd: ShepherdMng, show_commands: bool, show_commands_limit: int
 ) -> None:
+    """Apply shared status-panel command logging flags to the live CLI state."""
     shepherd.cli_flags["show_commands"] = show_commands
     shepherd.cli_flags["show_commands_limit"] = show_commands_limit
 
 
 def _apply_details_flag(shepherd: ShepherdMng, details: bool) -> None:
+    """Apply shared status-table detail visibility flag."""
     shepherd.cli_flags["details"] = details
 
 
@@ -410,8 +426,13 @@ def up(
     timeout: Optional[int],
     watch: bool,
 ):
-    """Start resources."""
-    # If no subcommand is given, default to "env"
+    """
+    Start resources.
+
+    `up` is an umbrella group: when called without a subcommand it behaves as
+    `up env`, while `up svc ...` routes to direct service-level startup.
+    """
+    # If no subcommand is given, default to environment startup.
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
         _apply_details_flag(shepherd, details)
@@ -493,8 +514,13 @@ def up_svc(
 @click.pass_obj
 @require_active_env
 def halt(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
-    """Stop resources."""
-    # If no subcommand is given, default to "env"
+    """
+    Stop resources.
+
+    `stop` (wired to `halt`) defaults to stopping the active environment when
+    no subcommand is provided.
+    """
+    # If no subcommand is given, default to environment stop.
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
         shepherd.environmentMng.stop_env(envCfg)
@@ -678,7 +704,12 @@ def status(
     show_commands_limit: int,
     watch: bool,
 ):
-    """Show status of resources."""
+    """
+    Show status of resources.
+
+    Like `up`, this group defaults to environment status when no subcommand is
+    provided; subcommands can offer narrower views.
+    """
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is not None:
         return
@@ -749,7 +780,8 @@ def check_probe(
     probe_tag: Optional[str],
     all: bool,
 ):
-    """Check probe"""
+    """Run probe checks and return a process exit code based on
+    probe results."""
     if all:
         probe_tag = None
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)

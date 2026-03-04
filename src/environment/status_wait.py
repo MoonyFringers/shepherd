@@ -49,6 +49,13 @@ def wait_for_env_state(
     build_env_status_table: Callable[..., Any],
     remaining_timeout_seconds: Callable[[float, Optional[int]], Optional[int]],
 ) -> None:
+    """
+    Wait until an environment reaches the requested steady state.
+
+    The optional `action` (start/stop/reload) runs asynchronously while we
+    keep polling status. Probe-gate evaluation is throttled independently from
+    UI refresh to avoid executing probe checks on every render tick.
+    """
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
     timeout_target = "up" if wait_until_up else "down"
@@ -87,6 +94,7 @@ def wait_for_env_state(
     required_gate_tags = get_required_gate_tags(env)
     gate_status: GateStatus = {tag: None for tag in required_gate_tags}
     hidden_columns = {"Gates"} if not wait_until_up else None
+    # Probe checks are heavier than status polls; sample at a lower cadence.
     next_gate_eval_at = time.monotonic() + max(1.0, status_poll_seconds * 2)
 
     def get_gate_status() -> Optional[GateStatus]:
@@ -109,6 +117,8 @@ def wait_for_env_state(
         timeout_seconds,
         Util.console.is_terminal,
     )
+    # Quiet mode: no intermediate rendering, only polling and eventual
+    # return/error.
     if quiet_mode:
         completed = False
         while True:
@@ -139,6 +149,7 @@ def wait_for_env_state(
                     )
             time.sleep(status_poll_seconds)
 
+    # Non-terminal output (e.g. pipes/CI): print the final table once.
     if not Util.console.is_terminal:
         while True:
             raise_action_error()
@@ -205,6 +216,7 @@ def wait_for_env_state(
                 return
             time.sleep(status_poll_seconds)
 
+    # Interactive terminal: continuously render progress with Live.
     live_refresh_per_second = max(4, int(1 / max(status_poll_seconds, 0.001)))
     with Live(
         refresh_per_second=live_refresh_per_second,

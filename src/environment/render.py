@@ -88,6 +88,15 @@ def collect_env_status(
     details_enabled: bool,
     gate_status: Optional[dict[str, Optional[bool]]] = None,
 ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    """
+    Build grouped status rows used by table renderers and wait loops.
+
+    Returns:
+    - grouped rows keyed by service tag
+    - all_running: every discovered container is running
+    - any_running: at least one discovered container is running
+    - has_containers: at least one container exists in config
+    """
     env_status = env.status()
     services = env.get_services()
     status_by_service = {
@@ -218,6 +227,13 @@ def build_env_status_table(
     command_error_limit: Optional[int] = None,
     hidden_columns: Optional[set[str]] = None,
 ) -> Any:
+    """
+    Render the environment status table and optional side panels.
+
+    The table is driven by `grouped` rows from `collect_env_status`.
+    When command log/error inputs are provided, the function returns a
+    Rich `Group` with the table plus panels; otherwise it returns `Table`.
+    """
     title = f"[white]{env_tag}[/white]"
     if remaining_seconds is not None:
         title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
@@ -275,6 +291,8 @@ def build_env_status_table(
 
 
 class ProbeRunResultLike(Protocol):
+    """Minimal probe result contract needed for probe report rendering."""
+
     tag: str
     exit_code: int
     stdout: str
@@ -313,6 +331,14 @@ def build_probe_report(
     verbose: bool,
     title: str,
 ) -> dict[str, Any]:
+    """
+    Convert probe execution results into a presentation-ready view model.
+
+    Policy:
+    - Always include one summary row per probe.
+    - Include detail panels for failures/timeouts.
+    - Include OK detail panels only in verbose mode.
+    """
     rows: list[list[str]] = []
     panels: list[dict[str, Any]] = []
 

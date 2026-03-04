@@ -7,7 +7,11 @@ from util import Util, constants
 class RepositoryManager:
     @staticmethod
     def add_docker_repository(distro: str, codename: str) -> None:
-        """Add the proper repository for the detected distribution."""
+        """
+        Add Docker apt repository metadata for the detected distro/codename.
+
+        The operation is idempotent: existing repo file means no-op.
+        """
         if distro not in constants.REPO_STRINGS:
             raise RuntimeError(f"Unsupported distribution: {distro}")
 
@@ -127,7 +131,12 @@ class RepositoryManager:
 
     @staticmethod
     def install_docker_packages(distro: str, codename: str) -> None:
-        """Install Docker packages using the appropriate package manager."""
+        """
+        Ensure Docker engine/compose packages and runtime setup are present.
+
+        This includes repository/keyring bootstrap, package installation, and
+        post-install system setup when Docker is newly installed.
+        """
         if any(
             RepositoryManager.check_package_installed(pkg)
             for pkg in constants.REQUIRED_DOCKER_PKGS
@@ -242,7 +251,11 @@ class RepositoryManager:
     def install_packages(
         distro: str, codename: str, install_source: bool
     ) -> None:
-        """Install all required, python, and docker packages."""
+        """
+        Install base dependencies and Docker stack.
+
+        Python system packages are installed only for source-based installs.
+        """
         RepositoryManager.install_required_packages(distro)
         if install_source:
             RepositoryManager.install_python_packages(distro)

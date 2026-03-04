@@ -26,6 +26,13 @@ from config import ConfigMng
 
 
 class CompletionMng(AbstractCompletionMng):
+    """
+    Top-level completion router.
+
+    It first resolves the command verb, then routes to a domain-specific
+    completion manager (`env`, `svc`, `probe`) based on either explicit
+    category tokens or implicit `auto-*` categories.
+    """
 
     # Mapping of verbs to valid categories
     VERB_CATEGORIES = {
@@ -71,6 +78,12 @@ class CompletionMng(AbstractCompletionMng):
         return category in self.VERB_CATEGORIES.get(verb, [])
 
     def get_auto_category(self, args: list[str]) -> Optional[str]:
+        """
+        Resolve implicit category for verbs that do not expose it in argv.
+
+        Example: `logs <svc>` maps to `auto-svc`, so completion is delegated
+        directly to the service completion manager.
+        """
         if not args:
             return None
         verb = args[0]
@@ -82,6 +95,7 @@ class CompletionMng(AbstractCompletionMng):
     def get_completion_manager(
         self, args: list[str], auto_category: Optional[str] = None
     ) -> Optional[AbstractCompletionMng]:
+        """Select the concrete completion manager for the resolved category."""
         # Priority: use auto_category if provided, otherwise try args[1]
         category = auto_category or (args[1] if len(args) > 1 else None)
         if not category:
@@ -98,6 +112,12 @@ class CompletionMng(AbstractCompletionMng):
 
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
+        """
+        Completion flow:
+        1. suggest verbs
+        2. suggest valid categories for the chosen verb (if explicit)
+        3. delegate argument completion to the category manager
+        """
         if not self.is_verb_chosen(args):
             return self.VERBS
 

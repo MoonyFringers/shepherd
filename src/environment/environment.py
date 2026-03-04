@@ -116,7 +116,18 @@ class Environment(ABC):
         return self.clone_impl(dst_env_tag)
 
     def start(self, timeout_seconds: Optional[int] = 60):
-        """Start the environment."""
+        """
+        Start the environment in gate phases.
+
+        Flow:
+        - Render and persist the full gated config map once.
+        - Start immediately-open gates (usually `ungated`).
+        - Poll probes and open additional gates as they become eligible.
+        - Run eligible init hooks after each successful gate-open cycle.
+
+        If any gate start or init reports a non-recoverable failure,
+        start rolls back with a best-effort `stop()` and re-raises.
+        """
         self.clear_command_log()
         self.clear_command_error()
         self.on_start_cycle_begin()
@@ -124,6 +135,7 @@ class Environment(ABC):
         self.sync_config()
         self.ensure_resources()
 
+        # Keys are gate identities (`ungated`, `probe-a|probe-b`, ...).
         rendered_config = self.envCfg.status.rendered_config or {}
         pending_gate_keys = set(rendered_config.keys())
         started_gate_keys: set[str] = set()
@@ -142,6 +154,7 @@ class Environment(ABC):
 
             started_at = time.monotonic()
             while pending_gate_keys:
+                # Re-evaluate probe state and attempt newly open gates.
                 probe_results = self.check_probes(
                     probe_tag=None,
                     fail_fast=False,
@@ -161,6 +174,8 @@ class Environment(ABC):
                     probe_results=probe_results,
                 )
                 if not started_now:
+                    # Nothing new opened this cycle; back off until
+                    # next probe poll.
                     if timeout_seconds is not None:
                         elapsed = int(time.monotonic() - started_at)
                         if elapsed >= timeout_seconds:

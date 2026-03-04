@@ -65,7 +65,12 @@ def git_tag(version: str):
 
 
 def copy_resources():
-    """Copy resource files to dist directory."""
+    """
+    Copy runtime support files next to the built binary in `../dist`.
+
+    PyInstaller packages the executable; this step keeps external config/version
+    artifacts available for runtime and release packaging.
+    """
     dist_dir = os.path.join(
         os.path.dirname(os.path.realpath(__file__)), "..", "dist"
     )
@@ -80,7 +85,12 @@ def copy_resources():
 
 
 def build(debug: bool = False):
-    """Build the app."""
+    """
+    Build the CLI as a single-file PyInstaller artifact.
+
+    The command writes binaries to `../dist` (relative to `src/`) so release
+    scripts can consume a stable output path.
+    """
     version = read_version()
     print(f"\n[🚀] Building {APP_NAME} v{version}...")
 
@@ -117,6 +127,14 @@ def build(debug: bool = False):
 
 
 def main():
+    """
+    CLI entrypoint for build automation.
+
+    Option semantics:
+    - `--clean` only removes previous artifacts before build.
+    - `--git` enables post-build tag creation/push.
+    - `--version` prints version and exits without building.
+    """
     script_dir = os.path.dirname(os.path.realpath(__file__))
     os.chdir(script_dir)
 

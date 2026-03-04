@@ -101,7 +101,14 @@ class DockerComposeSvc(Service):
 
     @override
     def start_impl(self, cnt_tag: Optional[str] = None):
-        """Start the service."""
+        """
+        Start one or all service containers using the persisted env compose map.
+
+        Service-level operations intentionally target the `ungated` rendered
+        stack: gate-aware phased startup is handled by environment
+        orchestration, while direct service commands operate on already
+        materialized services.
+        """
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
         verbose = self._is_verbose()
@@ -141,7 +148,7 @@ class DockerComposeSvc(Service):
 
     @override
     def stop_impl(self, cnt_tag: Optional[str] = None):
-        """Stop the service."""
+        """Stop one or all containers for this service within the base stack."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
         verbose = self._is_verbose()
@@ -179,7 +186,8 @@ class DockerComposeSvc(Service):
 
     @override
     def reload_impl(self, cnt_tag: Optional[str] = None):
-        """Reload the service."""
+        """Restart one or all containers for this service within
+        the base stack."""
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
         verbose = self._is_verbose()
@@ -217,7 +225,12 @@ class DockerComposeSvc(Service):
 
     @override
     def get_stdout_impl(self, cnt_tag: Optional[str] = None):
-        """Show the service stdout."""
+        """
+        Show container logs for this service.
+
+        If the service has multiple containers, caller must specify `cnt_tag`
+        to avoid ambiguous output streams.
+        """
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
         capture = self._is_quiet() and not self._is_verbose()
@@ -258,7 +271,11 @@ class DockerComposeSvc(Service):
 
     @override
     def get_shell_impl(self, cnt_tag: Optional[str] = None):
-        """Get a shell session for the service."""
+        """
+        Open an interactive shell in a service container.
+
+        For multi-container services, `cnt_tag` is required to select a target.
+        """
         rendered_map = self.envCfg.status.rendered_config
         rendered = rendered_map.get("ungated") if rendered_map else None
         capture = self._is_quiet() and not self._is_verbose()
