@@ -25,19 +25,23 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, cast
-
-import yaml
-from rich import box
-from rich.console import Group
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
+from typing import Any, Callable, Optional
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
+
+from .status_render import (
+    build_command_error_panel,
+    build_command_log_panel,
+    build_env_status_table,
+    collect_env_status,
+    dump_grouped_yaml,
+    format_service_gate_details,
+    format_service_gate_glyphs,
+)
+from .status_wait import wait_for_env_state
 
 
 @dataclass
@@ -246,7 +250,7 @@ class Environment(ABC):
         grouped by gate.
         """
         rendered = self.render_target(resolved)
-        return _dump_grouped_yaml(rendered)
+        return dump_grouped_yaml(rendered)
 
     def render_probes(
         self, probe_tag: Optional[str], resolved: bool
@@ -924,243 +928,20 @@ class EnvironmentMng:
         wait_until_up: bool,
         watch_after: bool = False,
     ):
-        phase = "up" if wait_until_up else "down"
-        phase_gerund = "starting" if wait_until_up else "stopping"
-        timeout_target = "up" if wait_until_up else "down"
-
-        if self._is_quiet():
-            if action:
-                action()
-            return
-
-        action_error: Optional[BaseException] = None
-        action_done = threading.Event()
-
-        if action:
-
-            def run_action():
-                nonlocal action_error
-                try:
-                    action()
-                except BaseException as e:
-                    action_error = e
-                finally:
-                    action_done.set()
-
-            threading.Thread(target=run_action, daemon=True).start()
-        else:
-            action_done.set()
-
-        def raise_action_error():
-            if action_error is not None:
-                raise action_error
-
-        def in_action() -> bool:
-            return not action_done.is_set()
-
-        def condition_met(all_running: bool, any_running: bool) -> bool:
-            if wait_until_up:
-                return all_running and not in_action()
-            return (not any_running) and not in_action()
-
-        required_gate_tags = self._get_required_gate_tags(env)
-        gate_status: dict[str, Optional[bool]] = {
-            tag: None for tag in required_gate_tags
-        }
-        hidden_columns = {"Gates"} if not wait_until_up else None
-        next_gate_eval_at = time.monotonic() + max(
-            1.0, self._status_poll_seconds * 2
+        wait_for_env_state(
+            env,
+            timeout_seconds=timeout_seconds,
+            action=action,
+            wait_until_up=wait_until_up,
+            watch_after=watch_after,
+            status_poll_seconds=self._status_poll_seconds,
+            is_quiet=self._is_quiet,
+            get_required_gate_tags=self._get_required_gate_tags,
+            evaluate_gate_status=self._evaluate_gate_status,
+            collect_env_status=self._collect_env_status,
+            build_env_status_table=self._build_env_status_table,
+            remaining_timeout_seconds=self._remaining_timeout_seconds,
         )
-
-        def get_gate_status() -> Optional[dict[str, Optional[bool]]]:
-            nonlocal gate_status, next_gate_eval_at
-            if not wait_until_up or not required_gate_tags:
-                return None
-            now = time.monotonic()
-            if now < next_gate_eval_at:
-                return gate_status
-            gate_status = self._evaluate_gate_status(env, required_gate_tags)
-            # Avoid running probes on every visual refresh tick.
-            next_gate_eval_at = now + max(1.0, self._status_poll_seconds * 2)
-            return gate_status
-
-        started = time.monotonic()
-        logging.debug(
-            "wait_for_env_%s started for env='%s' (timeout=%s, terminal=%s)",
-            phase,
-            env.envCfg.tag,
-            timeout_seconds,
-            Util.console.is_terminal,
-        )
-        if not Util.console.is_terminal:
-            while in_action():
-                raise_action_error()
-                remaining = self._remaining_timeout_seconds(
-                    started, timeout_seconds
-                )
-                if timeout_seconds is not None and remaining is not None:
-                    if remaining <= 0:
-                        Util.print_error_and_die(
-                            "Timed out waiting for environment "
-                            f"'{env.envCfg.tag}' to be {timeout_target}."
-                        )
-                time.sleep(self._status_poll_seconds)
-
-            raise_action_error()
-            current_gate_status = get_gate_status()
-            grouped, all_running, any_running, has_containers = (
-                self._collect_env_status(
-                    env,
-                    gate_status=current_gate_status,
-                )
-            )
-            remaining = self._remaining_timeout_seconds(
-                started, timeout_seconds
-            )
-            logging.debug(
-                "wait_for_env_%s non-terminal snapshot env='%s': "
-                "groups=%d has_containers=%s all_running=%s any_running=%s "
-                "remaining=%s",
-                phase,
-                env.envCfg.tag,
-                len(grouped),
-                has_containers,
-                all_running,
-                any_running,
-                remaining,
-            )
-            if not has_containers or not grouped:
-                Util.console.print(
-                    f"[yellow]No services found for "
-                    f"environment '{env.envCfg.tag}'[/yellow]"
-                )
-                return
-            Util.console.print(
-                self._build_env_status_table(
-                    env.envCfg.tag,
-                    grouped,
-                    hidden_columns=hidden_columns,
-                    remaining_seconds=remaining,
-                    command_log=(
-                        env.get_command_log()
-                        if env.is_command_log_enabled()
-                        else None
-                    ),
-                    command_log_limit=(
-                        env.get_command_log_limit()
-                        if env.is_command_log_enabled()
-                        else None
-                    ),
-                    command_error=env.get_command_error(),
-                    command_error_limit=(
-                        env.get_command_log_limit()
-                        if env.is_command_log_enabled()
-                        else None
-                    ),
-                )
-            )
-            return
-
-        live_refresh_per_second = max(
-            4, int(1 / max(self._status_poll_seconds, 0.001))
-        )
-        with Live(
-            refresh_per_second=live_refresh_per_second,
-            console=Util.console,
-            transient=True,
-            screen=False,
-        ) as live:
-            completed = False
-            while True:
-                raise_action_error()
-                current_gate_status = get_gate_status()
-                grouped, all_running, any_running, has_containers = (
-                    self._collect_env_status(
-                        env,
-                        gate_status=current_gate_status,
-                    )
-                )
-                remaining = self._remaining_timeout_seconds(
-                    started, timeout_seconds
-                )
-                logging.debug(
-                    "wait_for_env_%s poll env='%s': groups=%d "
-                    "has_containers=%s all_running=%s any_running=%s "
-                    "in_action=%s remaining=%s",
-                    phase,
-                    env.envCfg.tag,
-                    len(grouped),
-                    has_containers,
-                    all_running,
-                    any_running,
-                    in_action(),
-                    remaining,
-                )
-
-                if not has_containers or not grouped:
-                    if in_action():
-                        title = f"[white]{env.envCfg.tag}[/white]"
-                        if remaining is not None:
-                            title = (
-                                f"{title} "
-                                f"[dim](Time left: {remaining}s)[/dim]"
-                            )
-                        live.update(f"{title} [dim]({phase_gerund}...)[/dim]")
-                    else:
-                        live.stop()
-                        Util.console.print(
-                            f"[yellow]No services found for "
-                            f"environment '{env.envCfg.tag}'[/yellow]"
-                        )
-                        return
-                else:
-                    live.update(
-                        self._build_env_status_table(
-                            env.envCfg.tag,
-                            grouped,
-                            hidden_columns=hidden_columns,
-                            remaining_seconds=remaining,
-                            command_log=(
-                                env.get_command_log()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
-                            command_log_limit=(
-                                env.get_command_log_limit()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
-                            command_error=env.get_command_error(),
-                            command_error_limit=(
-                                env.get_command_log_limit()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
-                        )
-                    )
-
-                if condition_met(all_running, any_running):
-                    logging.debug(
-                        "wait_for_env_%s complete env='%s'",
-                        phase,
-                        env.envCfg.tag,
-                    )
-                    if not watch_after:
-                        return
-                    completed = True
-
-                if (
-                    not completed
-                    and timeout_seconds is not None
-                    and remaining is not None
-                ):
-                    if remaining <= 0:
-                        live.stop()
-                        Util.print_error_and_die(
-                            "Timed out waiting for environment "
-                            f"'{env.envCfg.tag}' to be {timeout_target}."
-                        )
-                time.sleep(self._status_poll_seconds)
 
     def _build_env_status_table(
         self,
@@ -1173,104 +954,29 @@ class EnvironmentMng:
         command_error_limit: Optional[int] = None,
         hidden_columns: Optional[set[str]] = None,
     ):
-        title = f"[white]{env_tag}[/white]"
-        if remaining_seconds is not None:
-            title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
-        table = Table(
-            title=title,
-            box=box.SIMPLE,
-            title_justify="left",
-            title_style="bold",
+        return build_env_status_table(
+            env_tag,
+            grouped,
+            details_enabled=self._is_details(),
+            remaining_seconds=remaining_seconds,
+            command_log=command_log,
+            command_log_limit=command_log_limit,
+            command_error=command_error,
+            command_error_limit=command_error_limit,
+            hidden_columns=hidden_columns,
         )
-        hidden = hidden_columns or set()
-        column_order = ["Gates", "Service", "Container", "State"]
-        if self._is_details():
-            column_order.append("Probes")
-        visible_columns = [c for c in column_order if c not in hidden]
-
-        for col in visible_columns:
-            if col in ("Gates", "Service"):
-                table.add_column(col, style="cyan", no_wrap=True)
-            elif col == "Container":
-                table.add_column(col, style="white", no_wrap=True)
-            elif col == "Probes":
-                table.add_column(col, style="white")
-            else:
-                table.add_column(col, no_wrap=True)
-
-        for service, items in grouped.items():
-            for idx, item in enumerate(items):
-                gate_details = ""
-                if self._is_details():
-                    gates, container, state, gate_details = item
-                else:
-                    gates, container, state = item
-                is_last = idx == len(items) - 1
-                branch = "└─" if is_last else "├─"
-                row_map = {
-                    "Gates": gates if idx == 0 else "",
-                    "Service": f"[bold]{service}[/bold]" if idx == 0 else "",
-                    "Container": f"{branch} {container}",
-                    "State": state,
-                    "Probes": gate_details if idx == 0 else "",
-                }
-                row = [row_map[c] for c in visible_columns]
-                table.add_row(*row)
-
-        panels: list[Any] = [table]
-        if command_log is not None and command_log_limit is not None:
-            panels.append(
-                self._build_command_log_panel(command_log, command_log_limit)
-            )
-        if command_error:
-            panels.append(
-                self._build_command_error_panel(
-                    command_error, command_error_limit
-                )
-            )
-        if len(panels) == 1:
-            return table
-        return Group(*panels)
 
     def _build_command_log_panel(
         self, command_log: list[str], command_log_limit: int
-    ) -> Panel:
-        limit = max(0, command_log_limit)
-        lines = [f"{cmd}" for cmd in command_log[-limit:]]
-        while len(lines) < limit:
-            lines.append("[dim]•[/dim]")
-        body = "\n".join(lines)
-        return Panel(
-            body,
-            title="Recent Commands",
-            border_style="blue",
-            padding=(1, 2),
-            box=box.ROUNDED,
-            expand=True,
-        )
+    ):
+        return build_command_log_panel(command_log, command_log_limit)
 
     def _build_command_error_panel(
         self,
         command_error: dict[str, str],
         command_error_limit: Optional[int],
-    ) -> Panel:
-        title = command_error.get("title") or "Command Error"
-        body = command_error.get("body") or ""
-        lines = body.splitlines()
-        limit = command_error_limit or 0
-        if limit > 0:
-            lines = lines[-limit:]
-            while len(lines) < limit:
-                lines.append("[dim][/dim]")
-        body = "\n".join(lines)
-        return Panel(
-            body,
-            title=title,
-            border_style="red",
-            padding=(1, 2),
-            box=box.ROUNDED,
-            expand=True,
-        )
+    ):
+        return build_command_error_panel(command_error, command_error_limit)
 
     def _remaining_timeout_seconds(
         self, started_at: float, timeout_seconds: Optional[int]
@@ -1286,115 +992,25 @@ class EnvironmentMng:
         env: Environment,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
     ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
-        env_status = env.status()
-        services: list[Service] = env.get_services()
-        status_by_service = {
-            row.get("Service"): row for row in env_status if row.get("Service")
-        }
-
-        grouped: dict[str, list[list[str]]] = {}
-        all_running = True
-        any_running = False
-        has_containers = False
-
-        for svc in services:
-            rows: list[list[str]] = []
-            service_gates = self._format_service_gate_glyphs(
-                svc,
-                gate_status=gate_status,
-            )
-            service_gate_details = self._format_service_gate_details(
-                svc,
-                gate_status=gate_status,
-            )
-            for idx, container in enumerate(svc.svcCfg.containers or []):
-                has_containers = True
-                cnt_name = container.run_container_name or ""
-                cnt_info = status_by_service.get(cnt_name)
-                state = (
-                    cnt_info.get("State", "?").lower()
-                    if cnt_info
-                    else "stopped"
-                )
-
-                if state == "running":
-                    any_running = True
-                    state_colored = "[bold green]running[/bold green]"
-                elif state == "stopped":
-                    state_colored = "[bold red]stopped[/bold red]"
-                else:
-                    state_colored = f"[yellow]{state}[/yellow]"
-
-                if state != "running":
-                    all_running = False
-
-                gates_cell = service_gates if idx == 0 else ""
-                row = [gates_cell, container.tag, state_colored]
-                if self._is_details():
-                    row.append(service_gate_details if idx == 0 else "")
-                rows.append(row)
-
-            if rows:
-                grouped[svc.svcCfg.tag] = rows
-
-        if not has_containers:
-            all_running = False
-
-        return grouped, all_running, any_running, has_containers
+        return collect_env_status(
+            env,
+            details_enabled=self._is_details(),
+            gate_status=gate_status,
+        )
 
     def _format_service_gate_glyphs(
         self,
         svc: Service,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
     ) -> str:
-        when_probes = (
-            svc.svcCfg.start.when_probes
-            if svc.svcCfg.start and svc.svcCfg.start.when_probes
-            else None
-        )
-        if not when_probes:
-            return "[dim]-[/dim]"
-        if gate_status is None:
-            return "".join("[dim]○[/dim]" for _ in when_probes)
-
-        glyphs: list[str] = []
-        for probe_tag in when_probes:
-            probe_ok = gate_status.get(probe_tag)
-            if probe_ok is True:
-                glyphs.append("[bold green]●[/bold green]")
-            elif probe_ok is False:
-                glyphs.append("[bold red]●[/bold red]")
-            else:
-                glyphs.append("[dim]○[/dim]")
-        return "".join(glyphs)
+        return format_service_gate_glyphs(svc, gate_status=gate_status)
 
     def _format_service_gate_details(
         self,
         svc: Service,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
     ) -> str:
-        when_probes = (
-            svc.svcCfg.start.when_probes
-            if svc.svcCfg.start and svc.svcCfg.start.when_probes
-            else None
-        )
-        if not when_probes:
-            return "[dim]-[/dim]"
-
-        probe_tags = sorted(when_probes)
-        parts: list[str] = []
-        for probe_tag in probe_tags:
-            if gate_status is None:
-                parts.append(f"[dim]{probe_tag}[/dim]")
-                continue
-            probe_ok = gate_status.get(probe_tag)
-            if probe_ok is True:
-                parts.append(f"[bold green]{probe_tag}[/bold green]")
-            elif probe_ok is False:
-                parts.append(f"[bold red]{probe_tag}[/bold red]")
-            else:
-                parts.append(f"[dim]{probe_tag}[/dim]")
-        return ", ".join(parts)
+        return format_service_gate_details(svc, gate_status=gate_status)
 
     def _get_required_gate_tags(self, env: Environment) -> set[str]:
         required: set[str] = set()
@@ -1482,25 +1098,3 @@ class EnvironmentMng:
                 )
             except ValueError as e:
                 Util.print_error_and_die(f"Failed to create service: {e}")
-
-
-class _LiteralDumper(yaml.SafeDumper):
-    pass
-
-
-def _repr_str(dumper: _LiteralDumper, data: str) -> yaml.ScalarNode:
-    style = "|" if "\n" in data else None
-    data_str: str = str(data)
-    return cast(
-        yaml.ScalarNode,
-        cast(Any, dumper).represent_scalar(
-            "tag:yaml.org,2002:str", data_str, style=style
-        ),
-    )
-
-
-_LiteralDumper.add_representer(str, _repr_str)
-
-
-def _dump_grouped_yaml(data: dict[str, str]) -> str:
-    return yaml.dump(data, Dumper=_LiteralDumper, sort_keys=False)

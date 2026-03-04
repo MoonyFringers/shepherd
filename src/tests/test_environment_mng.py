@@ -498,7 +498,7 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
         def stop(self):
             live_stops["count"] += 1
 
-    mocker.patch("environment.environment.Live", FakeLive)
+    mocker.patch("environment.status_wait.Live", FakeLive)
 
     stop_calls = {"count": 0}
 
