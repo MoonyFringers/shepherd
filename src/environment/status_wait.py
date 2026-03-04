@@ -140,7 +140,7 @@ def wait_for_env_state(
             time.sleep(status_poll_seconds)
 
     if not Util.console.is_terminal:
-        while in_action():
+        while True:
             raise_action_error()
             remaining = remaining_timeout_seconds(started, timeout_seconds)
             if timeout_seconds is not None and remaining is not None:
@@ -149,58 +149,61 @@ def wait_for_env_state(
                         "Timed out waiting for environment "
                         f"'{env.envCfg.tag}' to be {timeout_target}."
                     )
-            time.sleep(status_poll_seconds)
-
-        raise_action_error()
-        current_gate_status = get_gate_status()
-        grouped, all_running, any_running, has_containers = collect_env_status(
-            env,
-            current_gate_status,
-        )
-        remaining = remaining_timeout_seconds(started, timeout_seconds)
-        logging.debug(
-            "wait_for_env_%s non-terminal snapshot env='%s': "
-            "groups=%d has_containers=%s all_running=%s any_running=%s "
-            "remaining=%s",
-            phase,
-            env.envCfg.tag,
-            len(grouped),
-            has_containers,
-            all_running,
-            any_running,
-            remaining,
-        )
-        if not has_containers or not grouped:
-            Util.console.print(
-                f"[yellow]No services found for "
-                f"environment '{env.envCfg.tag}'[/yellow]"
+            current_gate_status = get_gate_status()
+            grouped, all_running, any_running, has_containers = (
+                collect_env_status(
+                    env,
+                    current_gate_status,
+                )
             )
-            return
-        Util.console.print(
-            build_env_status_table(
+            logging.debug(
+                "wait_for_env_%s non-terminal poll env='%s': "
+                "groups=%d has_containers=%s all_running=%s any_running=%s "
+                "in_action=%s remaining=%s",
+                phase,
                 env.envCfg.tag,
-                grouped,
-                hidden_columns=hidden_columns,
-                remaining_seconds=remaining,
-                command_log=(
-                    env.get_command_log()
-                    if env.is_command_log_enabled()
-                    else None
-                ),
-                command_log_limit=(
-                    env.get_command_log_limit()
-                    if env.is_command_log_enabled()
-                    else None
-                ),
-                command_error=env.get_command_error(),
-                command_error_limit=(
-                    env.get_command_log_limit()
-                    if env.is_command_log_enabled()
-                    else None
-                ),
+                len(grouped),
+                has_containers,
+                all_running,
+                any_running,
+                in_action(),
+                remaining,
             )
-        )
-        return
+
+            if not has_containers or not grouped:
+                if not in_action():
+                    Util.console.print(
+                        f"[yellow]No services found for "
+                        f"environment '{env.envCfg.tag}'[/yellow]"
+                    )
+                    return
+            elif condition_met(all_running, any_running):
+                Util.console.print(
+                    build_env_status_table(
+                        env.envCfg.tag,
+                        grouped,
+                        hidden_columns=hidden_columns,
+                        remaining_seconds=remaining,
+                        command_log=(
+                            env.get_command_log()
+                            if env.is_command_log_enabled()
+                            else None
+                        ),
+                        command_log_limit=(
+                            env.get_command_log_limit()
+                            if env.is_command_log_enabled()
+                            else None
+                        ),
+                        command_error=env.get_command_error(),
+                        command_error_limit=(
+                            env.get_command_log_limit()
+                            if env.is_command_log_enabled()
+                            else None
+                        ),
+                    )
+                )
+                return
+            time.sleep(status_poll_seconds)
 
     live_refresh_per_second = max(4, int(1 / max(status_poll_seconds, 0.001)))
     with Live(

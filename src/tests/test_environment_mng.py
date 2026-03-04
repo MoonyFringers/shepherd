@@ -87,10 +87,8 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     mng.wait_for_env_up(env, timeout_seconds=2, start_action=start_action)
 
     assert start_calls["count"] == 1
-    assert status_idx["value"] == 1
-    fake_console.print.assert_called_once_with(
-        "[yellow]No services found for environment 'test-env'[/yellow]"
-    )
+    assert status_idx["value"] >= 2
+    fake_console.print.assert_called_once_with("table")
 
 
 def test_wait_for_env_up_propagates_action_error(mocker: MockerFixture):
@@ -200,6 +198,100 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
 
     assert build_mock.call_count == 1
     assert build_mock.call_args.kwargs["hidden_columns"] == {"Gates"}
+
+
+def test_wait_for_env_up_non_terminal_waits_for_running_state(
+    mocker: MockerFixture,
+):
+    mng = _new_environment_mng(mocker)
+    setattr(mng, "_status_poll_seconds", 0.001)
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_services.return_value = []
+
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            False,
+            False,
+            True,
+        ),
+        (
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            True,
+            True,
+            True,
+        ),
+    ]
+    idx = {"value": 0}
+
+    def collect_status(
+        _env: Any,
+        gate_status: Any = None,
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        i = min(idx["value"], len(status_samples) - 1)
+        idx["value"] += 1
+        return status_samples[i]
+
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = False
+    mocker.patch.object(Util, "console", fake_console)
+    mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
+    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+
+    mng.wait_for_env_up(env, timeout_seconds=2, start_action=None)
+
+    assert idx["value"] >= 2
+    fake_console.print.assert_called_once_with("table")
+
+
+def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
+    mocker: MockerFixture,
+):
+    mng = _new_environment_mng(mocker)
+    setattr(mng, "_status_poll_seconds", 0.001)
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_services.return_value = []
+
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            False,
+            True,
+            True,
+        ),
+        (
+            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            False,
+            False,
+            True,
+        ),
+    ]
+    idx = {"value": 0}
+
+    def collect_status(
+        _env: Any,
+        gate_status: Any = None,
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        i = min(idx["value"], len(status_samples) - 1)
+        idx["value"] += 1
+        return status_samples[i]
+
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = False
+    mocker.patch.object(Util, "console", fake_console)
+    mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
+    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+
+    mng.wait_for_env_down(env, timeout_seconds=2, stop_action=None)
+
+    assert idx["value"] >= 2
+    fake_console.print.assert_called_once_with("table")
 
 
 def test_wait_for_env_up_quiet_still_polls_until_running(
