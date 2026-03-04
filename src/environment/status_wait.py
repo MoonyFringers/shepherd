@@ -52,11 +52,7 @@ def wait_for_env_state(
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
     timeout_target = "up" if wait_until_up else "down"
-
-    if is_quiet():
-        if action:
-            action()
-        return
+    quiet_mode = is_quiet()
 
     action_error: Optional[BaseException] = None
     action_done = threading.Event()
@@ -113,6 +109,36 @@ def wait_for_env_state(
         timeout_seconds,
         Util.console.is_terminal,
     )
+    if quiet_mode:
+        completed = False
+        while True:
+            raise_action_error()
+            current_gate_status = get_gate_status()
+            grouped, all_running, any_running, has_containers = (
+                collect_env_status(
+                    env,
+                    current_gate_status,
+                )
+            )
+            remaining = remaining_timeout_seconds(started, timeout_seconds)
+            if not has_containers or not grouped:
+                if not in_action():
+                    return
+            elif condition_met(all_running, any_running):
+                return
+
+            if (
+                not completed
+                and timeout_seconds is not None
+                and remaining is not None
+            ):
+                if remaining <= 0:
+                    Util.print_error_and_die(
+                        "Timed out waiting for environment "
+                        f"'{env.envCfg.tag}' to be {timeout_target}."
+                    )
+            time.sleep(status_poll_seconds)
+
     if not Util.console.is_terminal:
         while in_action():
             raise_action_error()
