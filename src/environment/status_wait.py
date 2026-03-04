@@ -62,6 +62,13 @@ def wait_for_env_state(
     The optional `action` (start/stop/reload) runs asynchronously while we
     keep polling status. Probe-gate evaluation is throttled independently from
     UI refresh to avoid executing probe checks on every render tick.
+
+    Readiness policy for `wait_until_up=True`:
+    - Always requires "all tracked containers are running".
+    - Additionally requires all `hooks.get_required_gate_tags(...)` probes to
+      be true when at least one required tag exists.
+    - If no required tags exist (e.g. no `ready.when_probes` and no service
+      gate probes), readiness falls back to running-container state only.
     """
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
@@ -93,9 +100,24 @@ def wait_for_env_state(
     def in_action() -> bool:
         return not action_done.is_set()
 
-    def condition_met(all_running: bool, any_running: bool) -> bool:
+    def condition_met(
+        all_running: bool,
+        any_running: bool,
+        current_gate_status: Optional[GateStatus],
+    ) -> bool:
         if wait_until_up:
-            return all_running and not in_action()
+            if not all_running or in_action():
+                return False
+            if not required_gate_tags:
+                # No readiness probes required: container-running state
+                # is enough.
+                return True
+            if current_gate_status is None:
+                return False
+            return all(
+                current_gate_status.get(tag) is True
+                for tag in required_gate_tags
+            )
         return (not any_running) and not in_action()
 
     required_gate_tags = hooks.get_required_gate_tags(env)
@@ -145,7 +167,7 @@ def wait_for_env_state(
             if not has_containers or not grouped:
                 if not in_action():
                     return
-            elif condition_met(all_running, any_running):
+            elif condition_met(all_running, any_running, current_gate_status):
                 return
 
             if (
@@ -201,13 +223,20 @@ def wait_for_env_state(
                         f"environment '{env.envCfg.tag}'[/yellow]"
                     )
                     return
-            elif condition_met(all_running, any_running):
+            elif condition_met(all_running, any_running, current_gate_status):
                 Util.console.print(
                     hooks.build_env_status_table(
                         env.envCfg.tag,
                         grouped,
                         hidden_columns=hidden_columns,
-                        remaining_seconds=remaining,
+                        status_suffix=(
+                            "[bold green](Ready)[/bold green]"
+                            if wait_until_up
+                            else None
+                        ),
+                        remaining_seconds=(
+                            None if wait_until_up else remaining
+                        ),
                         command_log=(
                             env.get_command_log()
                             if env.is_command_log_enabled()
@@ -282,12 +311,18 @@ def wait_for_env_state(
                     )
                     return
             else:
+                show_ready = wait_until_up and completed
                 live.update(
                     hooks.build_env_status_table(
                         env.envCfg.tag,
                         grouped,
                         hidden_columns=hidden_columns,
-                        remaining_seconds=remaining,
+                        status_suffix=(
+                            "[bold green](Ready)[/bold green]"
+                            if show_ready
+                            else None
+                        ),
+                        remaining_seconds=(None if show_ready else remaining),
                         command_log=(
                             env.get_command_log()
                             if env.is_command_log_enabled()
@@ -307,13 +342,42 @@ def wait_for_env_state(
                     )
                 )
 
-            if condition_met(all_running, any_running):
+            if condition_met(all_running, any_running, current_gate_status):
                 logging.debug(
                     "wait_for_env_%s complete env='%s'",
                     phase,
                     env.envCfg.tag,
                 )
                 if not watch_after:
+                    if wait_until_up:
+                        live.update(
+                            hooks.build_env_status_table(
+                                env.envCfg.tag,
+                                grouped,
+                                hidden_columns=hidden_columns,
+                                status_suffix=(
+                                    "[bold green](Ready)[/bold green]"
+                                    if wait_until_up
+                                    else None
+                                ),
+                                command_log=(
+                                    env.get_command_log()
+                                    if env.is_command_log_enabled()
+                                    else None
+                                ),
+                                command_log_limit=(
+                                    env.get_command_log_limit()
+                                    if env.is_command_log_enabled()
+                                    else None
+                                ),
+                                command_error=env.get_command_error(),
+                                command_error_limit=(
+                                    env.get_command_log_limit()
+                                    if env.is_command_log_enabled()
+                                    else None
+                                ),
+                            )
+                        )
                     return
                 completed = True
 

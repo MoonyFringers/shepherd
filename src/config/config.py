@@ -529,6 +529,24 @@ class StartCfg(Resolvable):
 
 
 @dataclass
+class ReadyCfg(Resolvable):
+    """
+    Represents environment readiness conditions.
+
+    Semantics:
+    - `when_probes` follows the same all-of behavior used by service/start
+      gates.
+    - When configured, an environment is considered "up" only after:
+      1) containers are running, and
+      2) every listed probe currently evaluates to success.
+    - When omitted/null/empty, readiness falls back to container-running state
+      only (legacy behavior).
+    """
+
+    when_probes: Optional[list[str]] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -638,6 +656,7 @@ class EnvironmentTemplateCfg(Resolvable):
     probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
+    ready: Optional[ReadyCfg] = None
 
 
 @dataclass
@@ -653,6 +672,7 @@ class EnvironmentCfg(Resolvable):
     probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
+    ready: Optional[ReadyCfg] = None
     status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
@@ -896,6 +916,11 @@ def parse_config(yaml_str: str) -> Config:
             when_probes=item.get("when_probes", []),
         )
 
+    def parse_ready(item: Any) -> ReadyCfg:
+        return ReadyCfg(
+            when_probes=item.get("when_probes", []),
+        )
+
     def parse_service_template(item: Any) -> ServiceTemplateCfg:
         return ServiceTemplateCfg(
             tag=item["tag"],
@@ -991,6 +1016,7 @@ def parse_config(yaml_str: str) -> Config:
                 for svc_templ_ref in item.get("service_templates", [])
             ],
             probes=[parse_probe(probe) for probe in item.get("probes", [])],
+            ready=parse_ready(item["ready"]) if item.get("ready") else None,
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -1014,6 +1040,7 @@ def parse_config(yaml_str: str) -> Config:
                 parse_service(service) for service in item.get("services", [])
             ],
             probes=[parse_probe(probe) for probe in item.get("probes", [])],
+            ready=parse_ready(item["ready"]) if item.get("ready") else None,
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -1542,6 +1569,7 @@ class ConfigMng:
             tag=env_tag,
             services=services,
             probes=env_tmpl_cfg.probes,
+            ready=deepcopy(env_tmpl_cfg.ready),
             networks=env_tmpl_cfg.networks,
             volumes=env_tmpl_cfg.volumes,
         )
@@ -1556,6 +1584,7 @@ class ConfigMng:
             tag=other.tag,
             services=deepcopy(other.services),
             probes=deepcopy(other.probes),
+            ready=deepcopy(other.ready),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
         )

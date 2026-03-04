@@ -858,6 +858,7 @@ class EnvironmentMng:
         env_tag: str,
         grouped: dict[str, list[list[str]]],
         remaining_seconds: Optional[int] = None,
+        status_suffix: Optional[str] = None,
         command_log: Optional[list[str]] = None,
         command_log_limit: Optional[int] = None,
         command_error: Optional[dict[str, str]] = None,
@@ -869,6 +870,7 @@ class EnvironmentMng:
             grouped,
             details_enabled=self._is_details(),
             remaining_seconds=remaining_seconds,
+            status_suffix=status_suffix,
             command_log=command_log,
             command_log_limit=command_log_limit,
             command_error=command_error,
@@ -923,7 +925,28 @@ class EnvironmentMng:
         return format_service_gate_details(svc, gate_status=gate_status)
 
     def _get_required_gate_tags(self, env: Environment) -> set[str]:
+        """
+        Collect probe tags required to consider the environment "up".
+
+        Sources:
+        - `env.ready.when_probes` (environment-level readiness gate)
+        - service `start.when_probes` (service-level gate dependencies)
+
+        If `env.ready` is not configured, only service gate tags are required;
+        if neither source contributes tags, up/down waits use container state
+        only.
+        """
         required: set[str] = set()
+        env_cfg = getattr(env, "envCfg", None)
+        ready_cfg = getattr(env_cfg, "ready", None) if env_cfg else None
+        ready_when_probes = (
+            ready_cfg.when_probes
+            if ready_cfg and ready_cfg.when_probes
+            else None
+        )
+        if ready_when_probes:
+            required.update(ready_when_probes)
+
         for svc in env.get_services():
             when_probes = (
                 svc.svcCfg.start.when_probes

@@ -221,6 +221,7 @@ def build_env_status_table(
     *,
     details_enabled: bool,
     remaining_seconds: Optional[int] = None,
+    status_suffix: Optional[str] = None,
     command_log: Optional[list[str]] = None,
     command_log_limit: Optional[int] = None,
     command_error: Optional[dict[str, str]] = None,
@@ -235,7 +236,9 @@ def build_env_status_table(
     Rich `Group` with the table plus panels; otherwise it returns `Table`.
     """
     title = f"[white]{env_tag}[/white]"
-    if remaining_seconds is not None:
+    if status_suffix:
+        title = f"{title} {status_suffix}"
+    elif remaining_seconds is not None:
         title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
     table = Table(
         title=title,

@@ -243,7 +243,9 @@ status:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    expected_obj.setdefault("ready", None)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
@@ -402,7 +404,9 @@ status:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    expected_obj.setdefault("ready", None)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
