@@ -163,6 +163,45 @@ def test_wait_for_env_down_timeout_calls_print_error(mocker: MockerFixture):
     print_error.assert_called_once()
 
 
+def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    setattr(mng, "_status_poll_seconds", 0.001)
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_services.return_value = []
+
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = False
+    mocker.patch.object(Util, "console", fake_console)
+
+    mocker.patch.object(
+        mng,
+        "_collect_env_status",
+        return_value=(
+            {
+                "svc-1": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt-1",
+                        "[bold red]stopped[/bold red]",
+                    ]
+                ]
+            },
+            False,
+            False,
+            True,
+        ),
+    )
+    build_mock = mocker.patch.object(
+        mng, "_build_env_status_table", return_value="table"
+    )
+
+    mng.wait_for_env_down(env, timeout_seconds=1, stop_action=None)
+
+    assert build_mock.call_count == 1
+    assert build_mock.call_args.kwargs["hidden_columns"] == {"Gates"}
+
+
 def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     env = mocker.Mock()
@@ -178,6 +217,39 @@ def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
         start_action=None,
         watch_after=True,
     )
+
+
+def test_status_env_hides_gates_column(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    env_cfg = SimpleNamespace(tag="env-1")
+    env = mocker.Mock()
+    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
+    mocker.patch.object(
+        mng,
+        "_collect_env_status",
+        return_value=(
+            {
+                "svc-1": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt-1",
+                        "[bold green]● running[/bold green]",
+                    ]
+                ]
+            },
+            True,
+            True,
+            True,
+        ),
+    )
+    fake_console = mocker.Mock()
+    mocker.patch.object(Util, "console", fake_console)
+
+    mng.status_env(cast(Any, env_cfg), watch=False)
+
+    printed_table = cast(Table, fake_console.print.call_args.args[0])
+    headers = [c.header for c in printed_table.columns]
+    assert headers == ["Service", "Container", "State"]
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):

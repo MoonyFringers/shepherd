@@ -177,7 +177,11 @@ def test_cli_flags_yes(
 def test_status_flags_details(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+    def assert_flags(
+        env_mng: EnvironmentMng,
+        env_cfg: EnvironmentCfg,
+        **kwargs: object,
+    ) -> None:
         assert env_mng.cli_flags["details"] is True
 
     mocker.patch.object(
@@ -197,7 +201,11 @@ def test_status_flags_details(
 def test_status_flags_show_commands(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    def assert_flags(env_mng: EnvironmentMng, env_cfg: EnvironmentCfg) -> None:
+    def assert_flags(
+        env_mng: EnvironmentMng,
+        env_cfg: EnvironmentCfg,
+        **kwargs: object,
+    ) -> None:
         assert env_mng.cli_flags["show_commands"] is True
         assert env_mng.cli_flags["show_commands_limit"] == 5
 

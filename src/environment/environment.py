@@ -878,7 +878,13 @@ class EnvironmentMng:
                 f"environment '{envCfg.tag}'[/yellow]"
             )
             return
-        Util.console.print(self._build_env_status_table(envCfg.tag, grouped))
+        Util.console.print(
+            self._build_env_status_table(
+                envCfg.tag,
+                grouped,
+                hidden_columns={"Gates"},
+            )
+        )
 
     def wait_for_env_up(
         self,
@@ -961,6 +967,7 @@ class EnvironmentMng:
         gate_status: dict[str, Optional[bool]] = {
             tag: None for tag in required_gate_tags
         }
+        hidden_columns = {"Gates"} if not wait_until_up else None
         next_gate_eval_at = time.monotonic() + max(
             1.0, self._status_poll_seconds * 2
         )
@@ -1032,6 +1039,7 @@ class EnvironmentMng:
                 self._build_env_status_table(
                     env.envCfg.tag,
                     grouped,
+                    hidden_columns=hidden_columns,
                     remaining_seconds=remaining,
                     command_log=(
                         env.get_command_log()
@@ -1110,6 +1118,7 @@ class EnvironmentMng:
                         self._build_env_status_table(
                             env.envCfg.tag,
                             grouped,
+                            hidden_columns=hidden_columns,
                             remaining_seconds=remaining,
                             command_log=(
                                 env.get_command_log()
@@ -1162,6 +1171,7 @@ class EnvironmentMng:
         command_log_limit: Optional[int] = None,
         command_error: Optional[dict[str, str]] = None,
         command_error_limit: Optional[int] = None,
+        hidden_columns: Optional[set[str]] = None,
     ):
         title = f"[white]{env_tag}[/white]"
         if remaining_seconds is not None:
@@ -1172,12 +1182,21 @@ class EnvironmentMng:
             title_justify="left",
             title_style="bold",
         )
-        table.add_column("Gates", style="cyan", no_wrap=True)
-        table.add_column("Service", style="cyan", no_wrap=True)
-        table.add_column("Container", style="white", no_wrap=True)
-        table.add_column("State", no_wrap=True)
+        hidden = hidden_columns or set()
+        column_order = ["Gates", "Service", "Container", "State"]
         if self._is_details():
-            table.add_column("Probes", style="white")
+            column_order.append("Probes")
+        visible_columns = [c for c in column_order if c not in hidden]
+
+        for col in visible_columns:
+            if col in ("Gates", "Service"):
+                table.add_column(col, style="cyan", no_wrap=True)
+            elif col == "Container":
+                table.add_column(col, style="white", no_wrap=True)
+            elif col == "Probes":
+                table.add_column(col, style="white")
+            else:
+                table.add_column(col, no_wrap=True)
 
         for service, items in grouped.items():
             for idx, item in enumerate(items):
@@ -1188,14 +1207,14 @@ class EnvironmentMng:
                     gates, container, state = item
                 is_last = idx == len(items) - 1
                 branch = "└─" if is_last else "├─"
-                row: list[str] = [
-                    gates if idx == 0 else "",
-                    f"[bold]{service}[/bold]" if idx == 0 else "",
-                    f"{branch} {container}",
-                    state,
-                ]
-                if self._is_details():
-                    row.append(gate_details if idx == 0 else "")
+                row_map = {
+                    "Gates": gates if idx == 0 else "",
+                    "Service": f"[bold]{service}[/bold]" if idx == 0 else "",
+                    "Container": f"{branch} {container}",
+                    "State": state,
+                    "Probes": gate_details if idx == 0 else "",
+                }
+                row = [row_map[c] for c in visible_columns]
                 table.add_row(*row)
 
         panels: list[Any] = [table]
