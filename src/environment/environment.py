@@ -43,7 +43,7 @@ from .render import (
     format_service_gate_glyphs,
     render_probe_report,
 )
-from .status_wait import wait_for_env_state
+from .status_wait import WaitForEnvStateHooks, wait_for_env_state
 
 
 @dataclass
@@ -835,12 +835,7 @@ class EnvironmentMng:
         wait_until_up: bool,
         watch_after: bool = False,
     ):
-        wait_for_env_state(
-            env,
-            timeout_seconds=timeout_seconds,
-            action=action,
-            wait_until_up=wait_until_up,
-            watch_after=watch_after,
+        hooks = WaitForEnvStateHooks(
             status_poll_seconds=self._status_poll_seconds,
             is_quiet=self._is_quiet,
             get_required_gate_tags=self._get_required_gate_tags,
@@ -848,6 +843,14 @@ class EnvironmentMng:
             collect_env_status=self._collect_env_status,
             build_env_status_table=self._build_env_status_table,
             remaining_timeout_seconds=self._remaining_timeout_seconds,
+        )
+        wait_for_env_state(
+            env,
+            timeout_seconds=timeout_seconds,
+            action=action,
+            wait_until_up=wait_until_up,
+            watch_after=watch_after,
+            hooks=hooks,
         )
 
     def _build_env_status_table(

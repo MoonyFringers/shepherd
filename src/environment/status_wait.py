@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
+from dataclasses import dataclass
 from typing import Any, Callable, Optional, TypeAlias
 
 from rich.live import Live
@@ -31,6 +32,21 @@ GateStatus: TypeAlias = dict[str, Optional[bool]]
 CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
 
 
+@dataclass(frozen=True)
+class WaitForEnvStateHooks:
+    """Callback/value bundle used by `wait_for_env_state`."""
+
+    status_poll_seconds: float
+    is_quiet: Callable[[], bool]
+    get_required_gate_tags: Callable[[Any], set[str]]
+    evaluate_gate_status: Callable[[Any, set[str]], GateStatus]
+    collect_env_status: Callable[
+        [Any, Optional[GateStatus]], CollectStatusResult
+    ]
+    build_env_status_table: Callable[..., Any]
+    remaining_timeout_seconds: Callable[[float, Optional[int]], Optional[int]]
+
+
 def wait_for_env_state(
     env: Any,
     timeout_seconds: Optional[int],
@@ -38,16 +54,7 @@ def wait_for_env_state(
     wait_until_up: bool,
     watch_after: bool,
     *,
-    status_poll_seconds: float,
-    is_quiet: Callable[[], bool],
-    get_required_gate_tags: Callable[[Any], set[str]],
-    evaluate_gate_status: Callable[[Any, set[str]], GateStatus],
-    collect_env_status: Callable[
-        [Any, Optional[GateStatus]],
-        CollectStatusResult,
-    ],
-    build_env_status_table: Callable[..., Any],
-    remaining_timeout_seconds: Callable[[float, Optional[int]], Optional[int]],
+    hooks: WaitForEnvStateHooks,
 ) -> None:
     """
     Wait until an environment reaches the requested steady state.
@@ -59,7 +66,7 @@ def wait_for_env_state(
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
     timeout_target = "up" if wait_until_up else "down"
-    quiet_mode = is_quiet()
+    quiet_mode = hooks.is_quiet()
 
     action_error: Optional[BaseException] = None
     action_done = threading.Event()
@@ -91,11 +98,13 @@ def wait_for_env_state(
             return all_running and not in_action()
         return (not any_running) and not in_action()
 
-    required_gate_tags = get_required_gate_tags(env)
+    required_gate_tags = hooks.get_required_gate_tags(env)
     gate_status: GateStatus = {tag: None for tag in required_gate_tags}
     hidden_columns = {"Gates"} if not wait_until_up else None
     # Probe checks are heavier than status polls; sample at a lower cadence.
-    next_gate_eval_at = time.monotonic() + max(1.0, status_poll_seconds * 2)
+    next_gate_eval_at = time.monotonic() + max(
+        1.0, hooks.status_poll_seconds * 2
+    )
 
     def get_gate_status() -> Optional[GateStatus]:
         nonlocal gate_status, next_gate_eval_at
@@ -104,9 +113,9 @@ def wait_for_env_state(
         now = time.monotonic()
         if now < next_gate_eval_at:
             return gate_status
-        gate_status = evaluate_gate_status(env, required_gate_tags)
+        gate_status = hooks.evaluate_gate_status(env, required_gate_tags)
         # Avoid running probes on every visual refresh tick.
-        next_gate_eval_at = now + max(1.0, status_poll_seconds * 2)
+        next_gate_eval_at = now + max(1.0, hooks.status_poll_seconds * 2)
         return gate_status
 
     started = time.monotonic()
@@ -125,12 +134,14 @@ def wait_for_env_state(
             raise_action_error()
             current_gate_status = get_gate_status()
             grouped, all_running, any_running, has_containers = (
-                collect_env_status(
+                hooks.collect_env_status(
                     env,
                     current_gate_status,
                 )
             )
-            remaining = remaining_timeout_seconds(started, timeout_seconds)
+            remaining = hooks.remaining_timeout_seconds(
+                started, timeout_seconds
+            )
             if not has_containers or not grouped:
                 if not in_action():
                     return
@@ -147,13 +158,15 @@ def wait_for_env_state(
                         "Timed out waiting for environment "
                         f"'{env.envCfg.tag}' to be {timeout_target}."
                     )
-            time.sleep(status_poll_seconds)
+            time.sleep(hooks.status_poll_seconds)
 
     # Non-terminal output (e.g. pipes/CI): print the final table once.
     if not Util.console.is_terminal:
         while True:
             raise_action_error()
-            remaining = remaining_timeout_seconds(started, timeout_seconds)
+            remaining = hooks.remaining_timeout_seconds(
+                started, timeout_seconds
+            )
             if timeout_seconds is not None and remaining is not None:
                 if remaining <= 0:
                     Util.print_error_and_die(
@@ -162,7 +175,7 @@ def wait_for_env_state(
                     )
             current_gate_status = get_gate_status()
             grouped, all_running, any_running, has_containers = (
-                collect_env_status(
+                hooks.collect_env_status(
                     env,
                     current_gate_status,
                 )
@@ -190,7 +203,7 @@ def wait_for_env_state(
                     return
             elif condition_met(all_running, any_running):
                 Util.console.print(
-                    build_env_status_table(
+                    hooks.build_env_status_table(
                         env.envCfg.tag,
                         grouped,
                         hidden_columns=hidden_columns,
@@ -214,10 +227,12 @@ def wait_for_env_state(
                     )
                 )
                 return
-            time.sleep(status_poll_seconds)
+            time.sleep(hooks.status_poll_seconds)
 
     # Interactive terminal: continuously render progress with Live.
-    live_refresh_per_second = max(4, int(1 / max(status_poll_seconds, 0.001)))
+    live_refresh_per_second = max(
+        4, int(1 / max(hooks.status_poll_seconds, 0.001))
+    )
     with Live(
         refresh_per_second=live_refresh_per_second,
         console=Util.console,
@@ -229,12 +244,14 @@ def wait_for_env_state(
             raise_action_error()
             current_gate_status = get_gate_status()
             grouped, all_running, any_running, has_containers = (
-                collect_env_status(
+                hooks.collect_env_status(
                     env,
                     current_gate_status,
                 )
             )
-            remaining = remaining_timeout_seconds(started, timeout_seconds)
+            remaining = hooks.remaining_timeout_seconds(
+                started, timeout_seconds
+            )
             logging.debug(
                 "wait_for_env_%s poll env='%s': groups=%d "
                 "has_containers=%s all_running=%s any_running=%s "
@@ -266,7 +283,7 @@ def wait_for_env_state(
                     return
             else:
                 live.update(
-                    build_env_status_table(
+                    hooks.build_env_status_table(
                         env.envCfg.tag,
                         grouped,
                         hidden_columns=hidden_columns,
@@ -311,4 +328,4 @@ def wait_for_env_state(
                         "Timed out waiting for environment "
                         f"'{env.envCfg.tag}' to be {timeout_target}."
                     )
-            time.sleep(status_poll_seconds)
+            time.sleep(hooks.status_poll_seconds)
