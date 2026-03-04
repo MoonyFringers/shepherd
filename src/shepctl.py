@@ -686,15 +686,7 @@ def status(
     _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
 
-    if watch:
-        shepherd.environmentMng.wait_for_env_up(
-            shepherd.environmentMng.get_environment_from_cfg(envCfg),
-            timeout_seconds=None,
-            start_action=None,
-            watch_after=True,
-        )
-    else:
-        shepherd.environmentMng.status_env(envCfg)
+    shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
 @status.command(name="env")
@@ -734,15 +726,7 @@ def status_env(
     """Show environment status."""
     _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-    if watch:
-        shepherd.environmentMng.wait_for_env_up(
-            shepherd.environmentMng.get_environment_from_cfg(envCfg),
-            timeout_seconds=None,
-            start_action=None,
-            watch_after=True,
-        )
-    else:
-        shepherd.environmentMng.status_env(envCfg)
+    shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
 # =====================================================

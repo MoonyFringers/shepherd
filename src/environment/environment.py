@@ -860,9 +860,17 @@ class EnvironmentMng:
         Util.render_kv_summary(report["summary"])
         Util.render_panels(panels=report.get("panels") or [])
 
-    def status_env(self, envCfg: EnvironmentCfg):
+    def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""
         env = self.get_environment_from_cfg(envCfg)
+        if watch:
+            self.wait_for_env_up(
+                env,
+                timeout_seconds=None,
+                start_action=None,
+                watch_after=True,
+            )
+            return
         grouped, _, _, has_containers = self._collect_env_status(env)
         if not has_containers or not grouped:
             Util.console.print(

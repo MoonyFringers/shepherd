@@ -525,7 +525,7 @@ def test_cli_status_env(
 
     result = runner.invoke(cli, ["status", "env"])
     assert result.exit_code == 0
-    mock_status.assert_called_once()
+    mock_status.assert_called_once_with(mocker.ANY, watch=False)
 
 
 @pytest.mark.shpd
@@ -533,7 +533,6 @@ def test_cli_status_env_watch(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_status = mocker.patch.object(EnvironmentMng, "status_env")
-    mock_wait = mocker.patch.object(EnvironmentMng, "wait_for_env_up")
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
@@ -542,8 +541,7 @@ def test_cli_status_env_watch(
 
     result = runner.invoke(cli, ["status", "env", "--watch"])
     assert result.exit_code == 0
-    mock_wait.assert_called_once()
-    mock_status.assert_not_called()
+    mock_status.assert_called_once_with(mocker.ANY, watch=True)
 
 
 @pytest.mark.shpd
@@ -551,7 +549,6 @@ def test_cli_status_watch_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mock_status = mocker.patch.object(EnvironmentMng, "status_env")
-    mock_wait = mocker.patch.object(EnvironmentMng, "wait_for_env_up")
     shpd_path = shpd_conf[0]
     shpd_path.mkdir(parents=True, exist_ok=True)
     shpd_yaml = shpd_path / ".shpd.yaml"
@@ -560,8 +557,7 @@ def test_cli_status_watch_default(
 
     result = runner.invoke(cli, ["status", "--watch"])
     assert result.exit_code == 0
-    mock_wait.assert_called_once()
-    mock_status.assert_not_called()
+    mock_status.assert_called_once_with(mocker.ANY, watch=True)
 
 
 # probe tests

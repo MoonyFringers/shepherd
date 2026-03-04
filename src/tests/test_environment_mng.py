@@ -163,6 +163,23 @@ def test_wait_for_env_down_timeout_calls_print_error(mocker: MockerFixture):
     print_error.assert_called_once()
 
 
+def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    env = mocker.Mock()
+    env_cfg = SimpleNamespace(tag="test-env")
+    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
+    wait_mock = mocker.patch.object(mng, "wait_for_env_up")
+
+    mng.status_env(cast(Any, env_cfg), watch=True)
+
+    wait_mock.assert_called_once_with(
+        env,
+        timeout_seconds=None,
+        start_action=None,
+        watch_after=True,
+    )
+
+
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     mng_any = cast(Any, mng)
