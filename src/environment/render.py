@@ -17,13 +17,15 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, cast
+from typing import Any, Optional, Protocol, Sequence, cast
 
 import yaml
 from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
+
+from util import Util
 
 
 def format_service_gate_glyphs(
@@ -270,3 +272,127 @@ def build_env_status_table(
     if len(panels) == 1:
         return table
     return Group(*panels)
+
+
+class ProbeRunResultLike(Protocol):
+    tag: str
+    exit_code: int
+    stdout: str
+    stderr: str
+    duration_ms: Optional[int]
+    timed_out: bool
+
+
+def probe_status_key(r: ProbeRunResultLike) -> str:
+    if r.timed_out:
+        return "timeout"
+    if r.exit_code == 0:
+        return "ok"
+    return "failed"
+
+
+def probe_status_glyph(key: str) -> str:
+    return "✔" if key == "ok" else "✖"
+
+
+def probe_status_color_tag(key: str) -> str:
+    if key == "ok":
+        return "bold green"
+    if key == "timeout":
+        return "bold yellow"
+    return "bold red"
+
+
+def fmt_duration_ms(ms: Optional[int]) -> str:
+    return "?" if ms is None else f"{ms} ms"
+
+
+def build_probe_report(
+    results: Sequence[ProbeRunResultLike],
+    *,
+    verbose: bool,
+    title: str,
+) -> dict[str, Any]:
+    rows: list[list[str]] = []
+    panels: list[dict[str, Any]] = []
+
+    ok = failed = timeout = 0
+
+    for r in results:
+        key = probe_status_key(r)
+        if key == "ok":
+            ok += 1
+        elif key == "timeout":
+            timeout += 1
+        else:
+            failed += 1
+
+        glyph = probe_status_glyph(key)
+        label = key.upper()
+        color = probe_status_color_tag(key)
+        status_markup = f"[{color}]{glyph} {label}[/{color}]"
+
+        rows.append([r.tag, status_markup, fmt_duration_ms(r.duration_ms)])
+
+        want_details = verbose or key in ("failed", "timeout")
+        if want_details:
+            out = (r.stdout or "").strip("\n")
+            err = (r.stderr or "").strip("\n")
+
+            body_parts: list[str] = []
+            if out.strip():
+                body_parts.append("--- stdout ---")
+                body_parts.append(out)
+
+            if err.strip() and (verbose or key in ("failed", "timeout")):
+                body_parts.append("--- stderr ---")
+                body_parts.append(err)
+
+            if key != "ok":
+                body_parts.append("--- meta ---")
+                body_parts.append(f"exit_code: {r.exit_code}")
+                body_parts.append(f"timed_out: {r.timed_out}")
+
+            body = "\n".join(body_parts).strip()
+            if body:
+                border = (
+                    "green"
+                    if key == "ok"
+                    else ("yellow" if key == "timeout" else "red")
+                )
+                panels.append(
+                    {
+                        "title": f"{r.tag} ({label})",
+                        "body": body,
+                        "border_style": border,
+                    }
+                )
+    return {
+        "title": title,
+        "rows": rows,
+        "summary": [
+            ("OK", str(ok)),
+            ("FAILED", str(failed)),
+            ("TIMEOUT", str(timeout)),
+        ],
+        "panels": panels,
+    }
+
+
+def render_probe_report(report: dict[str, Any]) -> None:
+    Util.render_table(
+        title=report["title"],
+        columns=[
+            {"header": "Probe", "style": "white", "no_wrap": True},
+            {"header": "Status", "no_wrap": True},
+            {
+                "header": "Duration",
+                "justify": "right",
+                "style": "white",
+                "no_wrap": True,
+            },
+        ],
+        rows=report["rows"],
+    )
+    Util.render_kv_summary(report["summary"])
+    Util.render_panels(panels=report.get("panels") or [])

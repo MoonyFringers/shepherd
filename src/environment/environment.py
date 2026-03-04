@@ -32,14 +32,16 @@ from service import Service, ServiceFactory
 from util import Constants, Util
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
-from .status_render import (
+from .render import (
     build_command_error_panel,
     build_command_log_panel,
     build_env_status_table,
+    build_probe_report,
     collect_env_status,
     dump_grouped_yaml,
     format_service_gate_details,
     format_service_gate_glyphs,
+    render_probe_report,
 )
 from .status_wait import wait_for_env_state
 
@@ -742,26 +744,6 @@ class EnvironmentMng:
 
     # --- probe presentation policy ---
 
-    def _probe_status_key(self, r: ProbeRunResult) -> str:
-        if r.timed_out:
-            return "timeout"
-        if r.exit_code == 0:
-            return "ok"
-        return "failed"
-
-    def _probe_status_glyph(self, key: str) -> str:
-        return "✔" if key == "ok" else "✖"
-
-    def _probe_status_color_tag(self, key: str) -> str:
-        if key == "ok":
-            return "bold green"
-        if key == "timeout":
-            return "bold yellow"
-        return "bold red"
-
-    def _fmt_duration_ms(self, ms: Optional[int]) -> str:
-        return "?" if ms is None else f"{ms} ms"
-
     def build_probe_report(
         self,
         results: list[ProbeRunResult],
@@ -769,100 +751,10 @@ class EnvironmentMng:
         verbose: bool,
         title: str,
     ) -> dict[str, Any]:
-        """
-        Returns a probe 'view model' as plain dicts:
-          {
-            "title": str,
-            "rows": [[probe, status_markup, duration], ...],
-            "summary": [("OK","1"), ("FAILED","0"), ("TIMEOUT","0")],
-            "single_ok_stdout": "first line …" | "",
-            "panels": [{"title":..., "body":..., "border_style":...}, ...]
-          }
-        """
-        rows: list[list[str]] = []
-        panels: list[dict[str, Any]] = []
-
-        ok = failed = timeout = 0
-
-        for r in results:
-            key = self._probe_status_key(r)
-            if key == "ok":
-                ok += 1
-            elif key == "timeout":
-                timeout += 1
-            else:
-                failed += 1
-
-            glyph = self._probe_status_glyph(key)
-            label = key.upper()
-            color = self._probe_status_color_tag(key)
-            status_markup = f"[{color}]{glyph} {label}[/{color}]"
-
-            rows.append(
-                [r.tag, status_markup, self._fmt_duration_ms(r.duration_ms)]
-            )
-
-            want_details = verbose or key in ("failed", "timeout")
-            if want_details:
-                out = (r.stdout or "").strip("\n")
-                err = (r.stderr or "").strip("\n")
-
-                body_parts: list[str] = []
-                if out.strip():
-                    body_parts.append("--- stdout ---")
-                    body_parts.append(out)
-
-                if err.strip() and (verbose or key in ("failed", "timeout")):
-                    body_parts.append("--- stderr ---")
-                    body_parts.append(err)
-
-                if key != "ok":
-                    body_parts.append("--- meta ---")
-                    body_parts.append(f"exit_code: {r.exit_code}")
-                    body_parts.append(f"timed_out: {r.timed_out}")
-
-                body = "\n".join(body_parts).strip()
-                if body:
-                    border = (
-                        "green"
-                        if key == "ok"
-                        else ("yellow" if key == "timeout" else "red")
-                    )
-                    panels.append(
-                        {
-                            "title": f"{r.tag} ({label})",
-                            "body": body,
-                            "border_style": border,
-                        }
-                    )
-        return {
-            "title": title,
-            "rows": rows,
-            "summary": [
-                ("OK", str(ok)),
-                ("FAILED", str(failed)),
-                ("TIMEOUT", str(timeout)),
-            ],
-            "panels": panels,
-        }
+        return build_probe_report(results, verbose=verbose, title=title)
 
     def render_probe_report(self, report: dict[str, Any]):
-        Util.render_table(
-            title=report["title"],
-            columns=[
-                {"header": "Probe", "style": "white", "no_wrap": True},
-                {"header": "Status", "no_wrap": True},
-                {
-                    "header": "Duration",
-                    "justify": "right",
-                    "style": "white",
-                    "no_wrap": True,
-                },
-            ],
-            rows=report["rows"],
-        )
-        Util.render_kv_summary(report["summary"])
-        Util.render_panels(panels=report.get("panels") or [])
+        render_probe_report(report)
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""
