@@ -28,6 +28,7 @@ from rich.panel import Panel
 from rich.table import Table
 
 from environment.environment import EnvironmentMng, ProbeRunResult
+from environment.status_wait import render_moving_shadow_text
 from util.util import Util
 
 
@@ -679,3 +680,23 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
     assert idx["value"] >= 2
     assert live_updates
     assert live_stops["count"] == 0
+
+
+def test_render_moving_shadow_text_is_deterministic_per_tick():
+    frame0 = render_moving_shadow_text("Starting", tick=0)
+    frame1 = render_moving_shadow_text("Starting", tick=1)
+    frame8 = render_moving_shadow_text("Starting", tick=8)
+
+    assert frame0 != frame1
+    assert frame0 == frame8
+    assert "[bold white]" in frame0
+    assert "[white]" in frame0
+    assert "[grey50]" in frame0
+
+
+def test_render_moving_shadow_text_preserves_spaces_and_escapes_markup():
+    frame = render_moving_shadow_text("Go [now]", tick=2)
+
+    assert " " in frame
+    assert "[" in frame
+    assert "]" in frame

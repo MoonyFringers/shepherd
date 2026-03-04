@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Optional, TypeAlias
 
 from rich.live import Live
+from rich.markup import escape
 
 from util.util import Util
 
@@ -33,11 +34,64 @@ CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
 
 # Default/guard timing knobs used by wait loops.
 # With the default manager poll of 1.0s:
-# - UI refresh uses at least 4 Hz (tick every 250 ms).
+# - UI refresh uses at least 8 Hz (tick every 125 ms).
 # - Gate probe evaluation is throttled to at most every 2.0s.
 MIN_STATUS_POLL_SECONDS = 0.001
-MIN_LIVE_REFRESH_PER_SECOND = 4
+MIN_LIVE_REFRESH_PER_SECOND = 8
 MIN_GATE_EVAL_INTERVAL_SECONDS = 1.0
+
+
+def render_moving_shadow_text(
+    phrase: str,
+    tick: int,
+    *,
+    base_style: str = "grey50",
+    highlight_style: str = "bold white",
+    trail_styles: tuple[str, ...] = ("white", "grey62"),
+) -> str:
+    """
+    Render a phrase with a moving highlight and trailing "shadow".
+
+    The effect is deterministic for a given `tick` and works for any input
+    phrase. Whitespace is preserved unstyled, and only non-whitespace
+    characters participate in the animation cycle.
+    """
+    if not phrase:
+        return ""
+
+    visible_positions = [
+        idx for idx, char in enumerate(phrase) if not char.isspace()
+    ]
+    if not visible_positions:
+        return escape(phrase)
+
+    n = len(visible_positions)
+    head_visible_idx = tick % n
+
+    style_by_visible_idx: dict[int, str] = {
+        visible_idx: base_style for visible_idx in range(n)
+    }
+    style_by_visible_idx[head_visible_idx] = highlight_style
+    for offset, style in enumerate(trail_styles, start=1):
+        trail_visible_idx = (head_visible_idx - offset) % n
+        style_by_visible_idx[trail_visible_idx] = style
+
+    visible_rank_by_pos = {
+        pos: visible_idx for visible_idx, pos in enumerate(visible_positions)
+    }
+
+    out: list[str] = []
+    for pos, char in enumerate(phrase):
+        escaped_char = escape(char)
+        if char.isspace():
+            out.append(escaped_char)
+            continue
+        visible_idx = visible_rank_by_pos[pos]
+        out.append(
+            f"[{style_by_visible_idx[visible_idx]}]{escaped_char}"
+            f"[/{style_by_visible_idx[visible_idx]}]"
+        )
+    return "".join(out)
 
 
 @dataclass(frozen=True)
@@ -86,7 +140,7 @@ def wait_for_env_state(
     Timing defaults (with `status_poll_seconds=1.0`):
     - Status snapshots: every 1.0s.
     - Probe gate evaluation: every max(1.0, 2 * poll) => 2.0s.
-    - Interactive UI tick: at least 4 Hz => every 0.25s.
+    - Interactive UI tick: at least 8 Hz => every 0.125s.
     """
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
@@ -117,6 +171,12 @@ def wait_for_env_state(
 
     def in_action() -> bool:
         return not action_done.is_set()
+
+    def starting_suffix(remaining: Optional[int], tick: int) -> str:
+        animated = render_moving_shadow_text("Starting", tick)
+        if remaining is None:
+            return animated
+        return f"{animated} " f"[dim]({remaining}s left)[/dim]"
 
     def condition_met(
         all_running: bool,
@@ -295,6 +355,7 @@ def wait_for_env_state(
         screen=False,
     ) as live:
         completed = False
+        ui_tick_count = 0
         next_ui_tick_at = time.monotonic()
         next_status_poll_at = 0.0
         snapshot_lock = threading.Lock()
@@ -380,12 +441,20 @@ def wait_for_env_state(
                 ):
                     if in_action():
                         title = f"[white]{env.envCfg.tag}[/white]"
-                        if remaining is not None:
-                            title = (
+                        if wait_until_up:
+                            live.update(
                                 f"{title} "
-                                f"[dim](Time left: {remaining}s)[/dim]"
+                                f"{starting_suffix(remaining, ui_tick_count)}"
                             )
-                        live.update(f"{title} [dim]({phase_gerund}...)[/dim]")
+                        else:
+                            if remaining is not None:
+                                title = (
+                                    f"{title} "
+                                    f"[dim](Time left: {remaining}s)[/dim]"
+                                )
+                            live.update(
+                                f"{title} [dim]({phase_gerund}...)[/dim]"
+                            )
                     else:
                         live.stop()
                         Util.console.print(
@@ -401,12 +470,20 @@ def wait_for_env_state(
                             snap_grouped,
                             hidden_columns=hidden_columns,
                             status_suffix=(
-                                "[bold green]Ready[/bold green]"
-                                if show_ready
+                                (
+                                    "[bold green]Ready[/bold green]"
+                                    if show_ready
+                                    else starting_suffix(
+                                        remaining, ui_tick_count
+                                    )
+                                )
+                                if wait_until_up
                                 else None
                             ),
                             remaining_seconds=(
-                                None if show_ready else remaining
+                                None
+                                if wait_until_up or show_ready
+                                else remaining
                             ),
                             command_log=(
                                 env.get_command_log()
@@ -483,6 +560,7 @@ def wait_for_env_state(
                 if next_ui_tick_at < now:
                     next_ui_tick_at = now
                 next_ui_tick_at += ui_tick_seconds
+                ui_tick_count += 1
                 sleep_for = max(0.0, next_ui_tick_at - time.monotonic())
                 time.sleep(sleep_for)
         finally:
