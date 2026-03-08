@@ -398,7 +398,7 @@ def uninstall_shepctl() -> None:
         completion_script.unlink()
         Util.print(f"Removed completion script {completion_script}")
 
-    Util.print("shepctl uninstalled successfully")
+    Util.print("Uninstalled")
 
 
 def create_wrapper_script(

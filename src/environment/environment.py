@@ -593,7 +593,7 @@ class EnvironmentMng:
             env = self.envFactory.new_environment_cfg(envCfg)
             clonedEnv = env.clone(dst_env_tag)
             clonedEnv.realize_from(env)
-            Util.print(f"Cloned to: {dst_env_tag}")
+            Util.print(dst_env_tag)
 
     def rename_env(self, src_env_tag: str, dst_env_tag: str):
         """Rename an environment."""
@@ -605,7 +605,7 @@ class EnvironmentMng:
         else:
             env = self.envFactory.new_environment_cfg(envCfg)
             env.move_to(dst_env_tag)
-            Util.print(f"Renamed to: {dst_env_tag}")
+            Util.print(dst_env_tag)
 
     def checkout_env(self, env_tag: str):
         """Checkout an environment."""
@@ -617,7 +617,7 @@ class EnvironmentMng:
         else:
             envCfg.status.active = True
             self.configMng.set_active_environment(env_tag)
-            Util.print(f"Switched to: {env_tag}")
+            Util.print(env_tag)
 
     def delete_env(self, env_tag: str):
         """Delete an environment."""
@@ -637,7 +637,7 @@ class EnvironmentMng:
 
             env = self.envFactory.new_environment_cfg(envCfg)
             env.delete()
-            Util.print(f"Deleted: {env.envCfg.tag}")
+            Util.print(env.envCfg.tag)
 
     def list_envs(self):
         """List all available environments."""
@@ -678,7 +678,7 @@ class EnvironmentMng:
             start_action=lambda: env.start(timeout_seconds=timeout_seconds),
             watch_after=watch,
         )
-        Util.print(f"Started environment: {env.envCfg.tag}")
+        Util.print(env.envCfg.tag)
 
     def stop_env(self, envCfg: EnvironmentCfg, wait: bool = True):
         """Halt an environment."""
@@ -689,7 +689,7 @@ class EnvironmentMng:
             env.stop()
         env.envCfg.status.rendered_config = None
         env.sync_config()
-        Util.print(f"Halted environment: {env.envCfg.tag}")
+        Util.print(env.envCfg.tag)
 
     def reload_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Reload an environment."""
@@ -707,7 +707,7 @@ class EnvironmentMng:
                 start_action=None,
                 watch_after=True,
             )
-        Util.print(f"Reloaded environment: {env.envCfg.tag}")
+        Util.print(env.envCfg.tag)
 
     def render_env(
         self, env_tag: str, target: bool, resolved: bool, grouped: bool = False
@@ -786,6 +786,7 @@ class EnvironmentMng:
                 timeout_seconds=None,
                 start_action=None,
                 watch_after=True,
+                progress_label="Checking",
             )
             return
         grouped, _, _, has_containers = self._collect_env_status(env)
@@ -809,6 +810,7 @@ class EnvironmentMng:
         timeout_seconds: Optional[int] = None,
         start_action: Optional[Callable[[], Any]] = None,
         watch_after: bool = False,
+        progress_label: str = "Starting",
     ):
         self._wait_for_env_state(
             env,
@@ -816,6 +818,7 @@ class EnvironmentMng:
             action=start_action,
             wait_until_up=True,
             watch_after=watch_after,
+            progress_label=progress_label,
         )
 
     def wait_for_env_down(
@@ -840,6 +843,7 @@ class EnvironmentMng:
         action: Optional[Callable[[], Any]],
         wait_until_up: bool,
         watch_after: bool = False,
+        progress_label: str = "Starting",
     ):
         hooks = WaitForEnvStateHooks(
             status_poll_seconds=self._status_poll_seconds,
@@ -856,6 +860,7 @@ class EnvironmentMng:
             action=action,
             wait_until_up=wait_until_up,
             watch_after=watch_after,
+            progress_label=progress_label,
             hooks=hooks,
         )
 

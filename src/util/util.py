@@ -110,7 +110,7 @@ class Util:
 
     @staticmethod
     def print_error_and_die(message: str):
-        Util.console.print(f"[bold red]ERROR[/bold red]: {message}")
+        Util.console.print(f"[red]Error:[/red] {message}", highlight=False)
         sys.exit(1)
 
     @staticmethod

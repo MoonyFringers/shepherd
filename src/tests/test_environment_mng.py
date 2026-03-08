@@ -26,9 +26,14 @@ from pytest_mock import MockerFixture
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.text import Text
 
 from environment.environment import EnvironmentMng, ProbeRunResult
-from environment.status_wait import render_moving_shadow_text
+from environment.status_wait import (
+    WaitForEnvStateHooks,
+    render_moving_shadow_text,
+    wait_for_env_state,
+)
 from util.util import Util
 
 
@@ -401,6 +406,7 @@ def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
         timeout_seconds=None,
         start_action=None,
         watch_after=True,
+        progress_label="Checking",
     )
 
 
@@ -776,3 +782,103 @@ def test_render_moving_shadow_text_preserves_spaces_and_escapes_markup():
     assert " " in frame
     assert "[" in frame
     assert "]" in frame
+
+
+def test_wait_for_env_state_uses_custom_progress_label(
+    mocker: MockerFixture,
+):
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {
+                "svc": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt",
+                        "[bold yellow]◌ starting[/bold yellow]",
+                    ]
+                ]
+            },
+            False,
+            True,
+            True,
+        ),
+        (
+            {
+                "svc": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt",
+                        "[bold green]● running[/bold green]",
+                    ]
+                ]
+            },
+            True,
+            True,
+            True,
+        ),
+    ]
+    status_idx = {"value": 0}
+
+    def collect_status(
+        _env: Any,
+        _gate_status: Any = None,
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        idx = min(status_idx["value"], len(status_samples) - 1)
+        status_idx["value"] += 1
+        return status_samples[idx]
+
+    build_table = mocker.Mock(return_value="table")
+    hooks = WaitForEnvStateHooks(
+        status_poll_seconds=0.001,
+        is_quiet=lambda: False,
+        get_required_gate_tags=lambda _env: set(),
+        evaluate_gate_status=lambda _env, _tags: {},
+        collect_env_status=collect_status,
+        build_env_status_table=build_table,
+        remaining_timeout_seconds=lambda _started, _timeout: None,
+    )
+
+    class FakeLive:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def update(self, renderable: Any):
+            pass
+
+        def stop(self):
+            pass
+
+    mocker.patch("environment.status_wait.Live", FakeLive)
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = True
+    mocker.patch.object(Util, "console", fake_console)
+
+    def action() -> None:
+        time.sleep(0.02)
+
+    wait_for_env_state(
+        env,
+        timeout_seconds=None,
+        action=action,
+        wait_until_up=True,
+        watch_after=False,
+        progress_label="Checking",
+        hooks=hooks,
+    )
+
+    suffixes = [
+        Text.from_markup(call.kwargs["status_suffix"]).plain
+        for call in build_table.call_args_list
+        if "status_suffix" in call.kwargs
+    ]
+    assert "Checking" in suffixes

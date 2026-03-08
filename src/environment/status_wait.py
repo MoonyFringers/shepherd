@@ -120,6 +120,7 @@ def wait_for_env_state(
     action: Optional[Callable[[], Any]],
     wait_until_up: bool,
     watch_after: bool,
+    progress_label: str = "Starting",
     *,
     hooks: WaitForEnvStateHooks,
 ) -> None:
@@ -177,7 +178,7 @@ def wait_for_env_state(
         return not action_done.is_set()
 
     def starting_suffix(remaining: Optional[int], tick: int) -> str:
-        animated = render_moving_shadow_text("Starting", tick)
+        animated = render_moving_shadow_text(progress_label, tick)
         if remaining is None:
             return animated
         return f"{animated} " f"[dim]({remaining}s left)[/dim]"
