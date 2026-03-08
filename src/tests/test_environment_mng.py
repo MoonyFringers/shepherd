@@ -61,7 +61,7 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
         ({}, False, False, False),
         ({}, False, False, False),
         (
-            {"svc": [["cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["cnt", "[white]running[/white]"]]},
             True,
             True,
             True,
@@ -187,7 +187,7 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
                     [
                         "[dim]-[/dim]",
                         "cnt-1",
-                        "[bold red]stopped[/bold red]",
+                        "[dim]stopped[/dim]",
                     ]
                 ]
             },
@@ -235,13 +235,13 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
             True,
             True,
             True,
@@ -282,13 +282,13 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
             False,
             True,
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
@@ -329,13 +329,13 @@ def test_wait_for_env_up_quiet_still_polls_until_running(
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
             True,
             True,
             True,
@@ -373,7 +373,7 @@ def test_wait_for_env_up_quiet_still_enforces_timeout(mocker: MockerFixture):
         mng,
         "_collect_env_status",
         return_value=(
-            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             True,
             True,
@@ -424,7 +424,7 @@ def test_status_env_hides_gates_column(mocker: MockerFixture):
                     [
                         "[dim]-[/dim]",
                         "cnt-1",
-                        "[bold green]● running[/bold green]",
+                        "[white]running[/white]",
                     ]
                 ]
             },
@@ -458,15 +458,15 @@ def test_format_service_gate_glyphs_states(mocker: MockerFixture):
     )
     assert (
         mng_any._format_service_gate_glyphs(cast(Any, gated))
-        == "[dim]○[/dim][dim]○[/dim]"
+        == "[dim]·[/dim][dim]·[/dim]"
     )
 
     glyphs = mng_any._format_service_gate_glyphs(
         cast(Any, gated),
         gate_status={"p1": True, "p2": False},
     )
-    assert "[bold red]●[/bold red]" in glyphs
-    assert "[bold green]●[/bold green]" in glyphs
+    assert "[bold red]✗[/bold red]" in glyphs
+    assert "[bold green]✓[/bold green]" in glyphs
 
 
 def test_format_service_gate_details_sorted_and_colored(mocker: MockerFixture):
@@ -528,7 +528,7 @@ def test_build_env_status_table_includes_details_column_when_enabled(
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]running[/bold green]",
+                "[white]running[/white]",
                 "[dim]a[/dim], [dim]b[/dim]",
             ]
         ]
@@ -546,7 +546,7 @@ def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]running[/bold green]",
+                "[white]running[/white]",
             ]
         ]
     }
@@ -576,7 +576,7 @@ def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[bold green]running[/bold green]",
+                "[white]running[/white]",
             ]
         ]
     }
@@ -643,13 +643,13 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
             False,
             True,
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[bold red]stopped[/bold red]"]]},
+            {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
@@ -723,7 +723,7 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
         if calls["count"] == 1:
             time.sleep(0.03)
         return (
-            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
             True,
             True,
             True,
@@ -798,7 +798,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
                     [
                         "[dim]-[/dim]",
                         "cnt",
-                        "[bold yellow]◌ starting[/bold yellow]",
+                        "[yellow]starting[/yellow]",
                     ]
                 ]
             },
@@ -812,7 +812,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
                     [
                         "[dim]-[/dim]",
                         "cnt",
-                        "[bold green]● running[/bold green]",
+                        "[white]running[/white]",
                     ]
                 ]
             },

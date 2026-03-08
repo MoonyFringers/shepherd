@@ -181,7 +181,7 @@ def wait_for_env_state(
         animated = render_moving_shadow_text(progress_label, tick)
         if remaining is None:
             return animated
-        return f"{animated} " f"[dim]({remaining}s left)[/dim]"
+        return f"{animated} " f"[dim]({remaining}s)[/dim]"
 
     # Gates are only meaningful while waiting for readiness, not for stop.
     hidden_columns = {"Gates"} if not wait_until_up else None
@@ -298,7 +298,7 @@ def wait_for_env_state(
         if wait_until_up:
             return f"{title} {starting_suffix(remaining, tick)}"
         if remaining is not None:
-            title = f"{title} [dim]({remaining}s left)[/dim]"
+            title = f"{title} [dim]({remaining}s)[/dim]"
         return f"{title} [dim]({phase_gerund}...)[/dim]"
 
     started = time.monotonic()

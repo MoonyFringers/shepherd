@@ -40,17 +40,17 @@ def format_service_gate_glyphs(
     if not when_probes:
         return "[dim]-[/dim]"
     if gate_status is None:
-        return "".join("[dim]○[/dim]" for _ in when_probes)
+        return "".join("[dim]·[/dim]" for _ in when_probes)
 
     glyphs: list[str] = []
     for probe_tag in when_probes:
         probe_ok = gate_status.get(probe_tag)
         if probe_ok is True:
-            glyphs.append("[bold green]●[/bold green]")
+            glyphs.append("[bold green]✓[/bold green]")
         elif probe_ok is False:
-            glyphs.append("[bold red]●[/bold red]")
+            glyphs.append("[bold red]✗[/bold red]")
         else:
-            glyphs.append("[dim]○[/dim]")
+            glyphs.append("[dim]·[/dim]")
     return "".join(glyphs)
 
 
@@ -128,9 +128,9 @@ def collect_env_status(
 
             if state == "running":
                 any_running = True
-                state_colored = "[bold green]running[/bold green]"
+                state_colored = "[white]running[/white]"
             elif state == "stopped":
-                state_colored = "[bold red]stopped[/bold red]"
+                state_colored = "[dim]stopped[/dim]"
             else:
                 state_colored = f"[yellow]{state}[/yellow]"
 
