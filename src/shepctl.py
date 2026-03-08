@@ -511,9 +511,14 @@ def up_svc(
 # STOP
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "--no-wait",
+    is_flag=True,
+    help="Return after issuing the stop command without waiting.",
+)
 @click.pass_obj
 @require_active_env
-def halt(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def halt(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
     """
     Stop resources.
 
@@ -523,15 +528,20 @@ def halt(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
     # If no subcommand is given, default to environment stop.
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.stop_env(envCfg)
+        shepherd.environmentMng.stop_env(envCfg, wait=not no_wait)
 
 
 @halt.command(name="env")
+@click.option(
+    "--no-wait",
+    is_flag=True,
+    help="Return after issuing the stop command without waiting.",
+)
 @click.pass_obj
 @require_active_env
-def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
     """Stop environment."""
-    shepherd.environmentMng.stop_env(envCfg)
+    shepherd.environmentMng.stop_env(envCfg, wait=not no_wait)
 
 
 @halt.command(name="svc")

@@ -201,6 +201,22 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
     assert build_mock.call_args.kwargs["hidden_columns"] == {"Gates"}
 
 
+def test_stop_env_no_wait_skips_wait_for_down(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    env_cfg = SimpleNamespace(tag="test-env", status=SimpleNamespace())
+    env = mocker.Mock()
+    env.envCfg = env_cfg
+    wait_mock = mocker.patch.object(mng, "wait_for_env_down")
+    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
+
+    mng.stop_env(cast(Any, env_cfg), wait=False)
+
+    wait_mock.assert_not_called()
+    env.stop.assert_called_once_with()
+    env.sync_config.assert_called_once_with()
+    assert env.envCfg.status.rendered_config is None
+
+
 def test_wait_for_env_up_non_terminal_waits_for_running_state(
     mocker: MockerFixture,
 ):
@@ -680,6 +696,66 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
     assert idx["value"] >= 2
     assert live_updates
     assert live_stops["count"] == 0
+
+
+def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
+    mocker: MockerFixture,
+):
+    mng = _new_environment_mng(mocker)
+    setattr(mng, "_status_poll_seconds", 0.001)
+
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_services.return_value = []
+
+    calls = {"count": 0}
+
+    def collect_status(
+        _env: Any, gate_status: Any = None
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            time.sleep(0.03)
+        return (
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            True,
+            True,
+            True,
+        )
+
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = True
+    mocker.patch.object(Util, "console", fake_console)
+    mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
+    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+
+    class FakeLive:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def update(self, renderable: Any):
+            pass
+
+        def stop(self):
+            pass
+
+    mocker.patch("environment.status_wait.Live", FakeLive)
+
+    mng.wait_for_env_up(
+        env,
+        timeout_seconds=2,
+        start_action=None,
+        watch_after=False,
+    )
+
+    assert calls["count"] >= 1
+    fake_console.print.assert_not_called()
 
 
 def test_render_moving_shadow_text_is_deterministic_per_tick():

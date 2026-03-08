@@ -680,10 +680,13 @@ class EnvironmentMng:
         )
         Util.print(f"Started environment: {env.envCfg.tag}")
 
-    def stop_env(self, envCfg: EnvironmentCfg):
+    def stop_env(self, envCfg: EnvironmentCfg, wait: bool = True):
         """Halt an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        self.wait_for_env_down(env, stop_action=env.stop)
+        if wait:
+            self.wait_for_env_down(env, stop_action=env.stop)
+        else:
+            env.stop()
         env.envCfg.status.rendered_config = None
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")
@@ -860,7 +863,6 @@ class EnvironmentMng:
         self,
         env_tag: str,
         grouped: dict[str, list[list[str]]],
-        remaining_seconds: Optional[int] = None,
         status_suffix: Optional[str] = None,
         command_log: Optional[list[str]] = None,
         command_log_limit: Optional[int] = None,
@@ -872,7 +874,6 @@ class EnvironmentMng:
             env_tag,
             grouped,
             details_enabled=self._is_details(),
-            remaining_seconds=remaining_seconds,
             status_suffix=status_suffix,
             command_log=command_log,
             command_log_limit=command_log_limit,

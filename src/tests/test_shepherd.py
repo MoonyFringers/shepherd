@@ -485,7 +485,23 @@ def test_cli_stop_env(
 
     result = runner.invoke(cli, ["halt", "env"])
     assert result.exit_code == 0
-    mock_stop.assert_called_once()
+    mock_stop.assert_called_once_with(mocker.ANY, wait=True)
+
+
+@pytest.mark.shpd
+def test_cli_stop_env_no_wait(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_stop = mocker.patch.object(EnvironmentMng, "stop_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["halt", "env", "--no-wait"])
+    assert result.exit_code == 0
+    mock_stop.assert_called_once_with(mocker.ANY, wait=False)
 
 
 @pytest.mark.shpd

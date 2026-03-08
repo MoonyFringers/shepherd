@@ -220,7 +220,6 @@ def build_env_status_table(
     grouped: dict[str, list[list[str]]],
     *,
     details_enabled: bool,
-    remaining_seconds: Optional[int] = None,
     status_suffix: Optional[str] = None,
     command_log: Optional[list[str]] = None,
     command_log_limit: Optional[int] = None,
@@ -238,8 +237,6 @@ def build_env_status_table(
     title = f"[white]{env_tag}[/white]"
     if status_suffix:
         title = f"{title} {status_suffix}"
-    elif remaining_seconds is not None:
-        title = f"{title} " f"[dim](Time left: {remaining_seconds}s)[/dim]"
     table = Table(
         title=title,
         box=box.SIMPLE,

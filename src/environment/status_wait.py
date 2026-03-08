@@ -142,12 +142,16 @@ def wait_for_env_state(
     - Probe gate evaluation: every max(1.0, 2 * poll) => 2.0s.
     - Interactive UI tick: at least 8 Hz => every 0.125s.
     """
+    # Human-readable labels reused in logs and timeout/progress messages.
     phase = "up" if wait_until_up else "down"
     phase_gerund = "starting" if wait_until_up else "stopping"
     timeout_target = "up" if wait_until_up else "down"
     quiet_mode = hooks.is_quiet()
 
     action_error: Optional[BaseException] = None
+    # The optional start/stop action runs on a worker thread while the main
+    # thread polls state and renders progress. `action_done` tracks whether
+    # that side effect has finished, independent of the observed env status.
     action_done = threading.Event()
 
     if action:
@@ -178,12 +182,28 @@ def wait_for_env_state(
             return animated
         return f"{animated} " f"[dim]({remaining}s left)[/dim]"
 
-    def condition_met(
-        all_running: bool,
-        any_running: bool,
-        current_gate_status: Optional[GateStatus],
-    ) -> bool:
-        if wait_until_up:
+    # Gates are only meaningful while waiting for readiness, not for stop.
+    hidden_columns = {"Gates"} if not wait_until_up else None
+    ready_status = "[bold green]Ready[/bold green]"
+
+    if wait_until_up:
+        # Only "up" waits care about readiness probes. "Down" waits complete
+        # solely from container state plus the action thread finishing.
+        required_gate_tags = hooks.get_required_gate_tags(env)
+        # Probe results start as unknown (`None`) until the first sampled
+        # evaluation completes.
+        gate_status: GateStatus = {tag: None for tag in required_gate_tags}
+        # Probe checks are heavier than status polls; sample at a lower cadence.
+        next_gate_eval_at = time.monotonic() + max(
+            MIN_GATE_EVAL_INTERVAL_SECONDS, hooks.status_poll_seconds * 2
+        )
+
+        def condition_met(
+            all_running: bool,
+            any_running: bool,
+            current_gate_status: Optional[GateStatus],
+        ) -> bool:
+            del any_running
             if not all_running or in_action():
                 return False
             if not required_gate_tags:
@@ -196,29 +216,89 @@ def wait_for_env_state(
                 current_gate_status.get(tag) is True
                 for tag in required_gate_tags
             )
-        return (not any_running) and not in_action()
 
-    required_gate_tags = hooks.get_required_gate_tags(env)
-    gate_status: GateStatus = {tag: None for tag in required_gate_tags}
-    hidden_columns = {"Gates"} if not wait_until_up else None
-    # Probe checks are heavier than status polls; sample at a lower cadence.
-    next_gate_eval_at = time.monotonic() + max(
-        MIN_GATE_EVAL_INTERVAL_SECONDS, hooks.status_poll_seconds * 2
-    )
-
-    def get_gate_status() -> Optional[GateStatus]:
-        nonlocal gate_status, next_gate_eval_at
-        if not wait_until_up or not required_gate_tags:
-            return None
-        now = time.monotonic()
-        if now < next_gate_eval_at:
+        def get_gate_status() -> Optional[GateStatus]:
+            nonlocal gate_status, next_gate_eval_at
+            now = time.monotonic()
+            if now < next_gate_eval_at:
+                return gate_status
+            gate_status = hooks.evaluate_gate_status(env, required_gate_tags)
+            # Avoid running probes on every visual refresh tick.
+            next_gate_eval_at = now + max(
+                MIN_GATE_EVAL_INTERVAL_SECONDS,
+                hooks.status_poll_seconds * 2,
+            )
             return gate_status
-        gate_status = hooks.evaluate_gate_status(env, required_gate_tags)
-        # Avoid running probes on every visual refresh tick.
-        next_gate_eval_at = now + max(
-            MIN_GATE_EVAL_INTERVAL_SECONDS, hooks.status_poll_seconds * 2
+
+    else:
+
+        def condition_met(
+            all_running: bool,
+            any_running: bool,
+            current_gate_status: Optional[GateStatus],
+        ) -> bool:
+            del all_running, current_gate_status
+            return (not any_running) and not in_action()
+
+        def get_gate_status() -> Optional[GateStatus]:
+            return None
+
+    def current_status_suffix(
+        remaining: Optional[int],
+        tick: int,
+        *,
+        show_ready: bool = False,
+    ) -> Optional[str]:
+        # Only "up" waits decorate the table title with animated/progressive
+        # readiness text. Stop waits use plain tables plus separate progress
+        # lines while the action is still in flight.
+        if not wait_until_up:
+            return None
+        if show_ready:
+            return ready_status
+        return starting_suffix(remaining, tick)
+
+    def build_status_renderable(
+        grouped: GroupedStatus,
+        *,
+        remaining: Optional[int],
+        tick: int,
+        show_ready: bool = False,
+    ) -> Any:
+        # Centralize all table-side decorations so the render loops can focus
+        # on state transitions instead of repeatedly wiring optional panels.
+        return hooks.build_env_status_table(
+            env.envCfg.tag,
+            grouped,
+            hidden_columns=hidden_columns,
+            status_suffix=current_status_suffix(
+                remaining, tick, show_ready=show_ready
+            ),
+            command_log=(
+                env.get_command_log() if env.is_command_log_enabled() else None
+            ),
+            command_log_limit=(
+                env.get_command_log_limit()
+                if env.is_command_log_enabled()
+                else None
+            ),
+            command_error=env.get_command_error(),
+            command_error_limit=(
+                env.get_command_log_limit()
+                if env.is_command_log_enabled()
+                else None
+            ),
         )
-        return gate_status
+
+    def render_progress_text(remaining: Optional[int], tick: int) -> str:
+        # Used only when there is not yet a stable table snapshot to render,
+        # or when an in-flight action would make an empty snapshot misleading.
+        title = f"[white]{env.envCfg.tag}[/white]"
+        if wait_until_up:
+            return f"{title} {starting_suffix(remaining, tick)}"
+        if remaining is not None:
+            title = f"{title} [dim]({remaining}s left)[/dim]"
+        return f"{title} [dim]({phase_gerund}...)[/dim]"
 
     started = time.monotonic()
     logging.debug(
@@ -305,34 +385,11 @@ def wait_for_env_state(
                     return
             elif condition_met(all_running, any_running, current_gate_status):
                 Util.console.print(
-                    hooks.build_env_status_table(
-                        env.envCfg.tag,
+                    build_status_renderable(
                         grouped,
-                        hidden_columns=hidden_columns,
-                        status_suffix=(
-                            "[bold green]Ready[/bold green]"
-                            if wait_until_up
-                            else None
-                        ),
-                        remaining_seconds=(
-                            None if wait_until_up else remaining
-                        ),
-                        command_log=(
-                            env.get_command_log()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
-                        command_log_limit=(
-                            env.get_command_log_limit()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
-                        command_error=env.get_command_error(),
-                        command_error_limit=(
-                            env.get_command_log_limit()
-                            if env.is_command_log_enabled()
-                            else None
-                        ),
+                        remaining=remaining,
+                        tick=0,
+                        show_ready=True,
                     )
                 )
                 return
@@ -354,18 +411,34 @@ def wait_for_env_state(
         transient=True,
         screen=False,
     ) as live:
+        # `completed` means the requested steady state has been observed at
+        # least once. In watch mode we keep rendering after that point; in
+        # non-watch mode we return immediately after the final update.
         completed = False
+        # UI animation/render cadence is decoupled from status polling cadence.
         ui_tick_count = 0
         next_ui_tick_at = time.monotonic()
+        # `next_status_poll_at` is shared with the polling thread and starts at
+        # zero so the first sample happens immediately.
         next_status_poll_at = 0.0
+        # Snapshot fields below are written by the polling thread and read by
+        # the UI thread.
         snapshot_lock = threading.Lock()
         stop_polling = threading.Event()
         poll_error: Optional[BaseException] = None
+        # Latest sampled readiness gates, or `None` when stop waits / no probes
+        # are involved.
         latest_gate_status: Optional[GateStatus] = None
         grouped: GroupedStatus = {}
         all_running = False
         any_running = False
+        # `has_containers` means the environment currently resolves to at
+        # least one tracked container. This differs from `grouped`: the row
+        # structure can still be empty before the first successful poll.
         has_containers = False
+        # `has_snapshot` flips to true after the polling thread has produced
+        # one complete status sample. Until then, the UI can only show a
+        # generic progress line because there is no stable table data yet.
         has_snapshot = False
 
         def run_status_polling() -> None:
@@ -434,28 +507,22 @@ def wait_for_env_state(
                     started, timeout_seconds
                 )
 
-                if (
-                    not snap_has_snapshot
-                    or not snap_has_containers
-                    or not snap_grouped
-                ):
+                if not snap_has_snapshot:
+                    # No poll has completed yet, so we have no trustworthy
+                    # table rows to render. Show only a progress headline.
+                    live.update(render_progress_text(remaining, ui_tick_count))
+                elif not snap_has_containers or not snap_grouped:
+                    # A snapshot exists, but it resolved to no visible
+                    # containers/rows. During an in-flight start/stop action
+                    # this can be transient, so keep showing progress instead
+                    # of flashing a misleading empty-state message.
                     if in_action():
-                        title = f"[white]{env.envCfg.tag}[/white]"
-                        if wait_until_up:
-                            live.update(
-                                f"{title} "
-                                f"{starting_suffix(remaining, ui_tick_count)}"
-                            )
-                        else:
-                            if remaining is not None:
-                                title = (
-                                    f"{title} "
-                                    f"[dim](Time left: {remaining}s)[/dim]"
-                                )
-                            live.update(
-                                f"{title} [dim]({phase_gerund}...)[/dim]"
-                            )
+                        live.update(
+                            render_progress_text(remaining, ui_tick_count)
+                        )
                     else:
+                        # Once the action is finished, an empty snapshot means
+                        # there is nothing left to render as a table.
                         live.stop()
                         Util.console.print(
                             f"[yellow]No services found for "
@@ -465,42 +532,11 @@ def wait_for_env_state(
                 else:
                     show_ready = wait_until_up and completed
                     live.update(
-                        hooks.build_env_status_table(
-                            env.envCfg.tag,
+                        build_status_renderable(
                             snap_grouped,
-                            hidden_columns=hidden_columns,
-                            status_suffix=(
-                                (
-                                    "[bold green]Ready[/bold green]"
-                                    if show_ready
-                                    else starting_suffix(
-                                        remaining, ui_tick_count
-                                    )
-                                )
-                                if wait_until_up
-                                else None
-                            ),
-                            remaining_seconds=(
-                                None
-                                if wait_until_up or show_ready
-                                else remaining
-                            ),
-                            command_log=(
-                                env.get_command_log()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
-                            command_log_limit=(
-                                env.get_command_log_limit()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
-                            command_error=env.get_command_error(),
-                            command_error_limit=(
-                                env.get_command_log_limit()
-                                if env.is_command_log_enabled()
-                                else None
-                            ),
+                            remaining=remaining,
+                            tick=ui_tick_count,
+                            show_ready=show_ready,
                         )
                     )
 
@@ -515,31 +551,11 @@ def wait_for_env_state(
                     if not watch_after:
                         if wait_until_up:
                             live.update(
-                                hooks.build_env_status_table(
-                                    env.envCfg.tag,
+                                build_status_renderable(
                                     snap_grouped,
-                                    hidden_columns=hidden_columns,
-                                    status_suffix=(
-                                        "[bold green]Ready[/bold green]"
-                                        if wait_until_up
-                                        else None
-                                    ),
-                                    command_log=(
-                                        env.get_command_log()
-                                        if env.is_command_log_enabled()
-                                        else None
-                                    ),
-                                    command_log_limit=(
-                                        env.get_command_log_limit()
-                                        if env.is_command_log_enabled()
-                                        else None
-                                    ),
-                                    command_error=env.get_command_error(),
-                                    command_error_limit=(
-                                        env.get_command_log_limit()
-                                        if env.is_command_log_enabled()
-                                        else None
-                                    ),
+                                    remaining=remaining,
+                                    tick=ui_tick_count,
+                                    show_ready=True,
                                 )
                             )
                         return
