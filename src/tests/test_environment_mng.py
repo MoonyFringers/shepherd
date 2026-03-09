@@ -23,6 +23,9 @@ from typing import Any, cast
 
 import pytest
 from pytest_mock import MockerFixture
+from rich.console import Group
+from rich.panel import Panel
+from rich.table import Table
 
 from environment.environment import EnvironmentMng, ProbeRunResult
 from util.util import Util
@@ -37,35 +40,6 @@ def _new_environment_mng(
         envFactory=mocker.Mock(),
         svcFactory=mocker.Mock(),
     )
-
-
-def test_start_env_wraps_start_with_wait_loop(mocker: MockerFixture):
-    mng = _new_environment_mng(mocker)
-
-    env_cfg = cast(
-        Any,
-        SimpleNamespace(
-            tag="test-env",
-            status=SimpleNamespace(rendered_config=None),
-        ),
-    )
-    env = mocker.Mock()
-    env.envCfg = env_cfg
-    env.render_target.return_value = {"ungated": "yaml"}
-
-    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
-    wait_for_env_up = mocker.patch.object(mng, "wait_for_env_up")
-
-    mng.start_env(env_cfg, timeout_seconds=15)
-
-    assert env.start.call_count == 0
-    wait_for_env_up.assert_called_once_with(
-        env,
-        timeout_seconds=15,
-        start_action=env.start,
-    )
-    env.sync_config.assert_called_once()
-    assert env.envCfg.status.rendered_config == {"ungated": "yaml"}
 
 
 def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
@@ -282,6 +256,69 @@ def test_build_env_status_table_includes_details_column_when_enabled(
     table = mng_any._build_env_status_table("env-1", grouped)
     headers = [c.header for c in table.columns]
     assert headers == ["Gates", "Service", "Container", "State", "Probes"]
+
+
+def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]● running[/bold green]",
+            ]
+        ]
+    }
+
+    renderable = mng_any._build_env_status_table(
+        "env-1",
+        grouped,
+        command_log=["[green]ok[/green]", "[red]fail[/red]"],
+        command_log_limit=4,
+    )
+    assert isinstance(renderable, Group)
+    assert isinstance(renderable.renderables[0], Table)
+    assert isinstance(renderable.renderables[1], Panel)
+    panel = renderable.renderables[1]
+    assert panel.title == "Recent Commands"
+    assert panel.border_style == "blue"
+    assert panel.expand is True
+    assert panel.box is not None
+    assert len(str(panel.renderable).splitlines()) == 4
+
+
+def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]● running[/bold green]",
+            ]
+        ]
+    }
+
+    renderable = mng_any._build_env_status_table(
+        "env-1",
+        grouped,
+        command_log=["[green]ok[/green]"],
+        command_log_limit=2,
+        command_error={
+            "title": "Command start:db failed",
+            "body": "--- stderr ---\nboom",
+        },
+        command_error_limit=2,
+    )
+    assert isinstance(renderable, Group)
+    assert len(renderable.renderables) == 3
+    error_panel = renderable.renderables[2]
+    assert isinstance(error_panel, Panel)
+    assert error_panel.title == "Command start:db failed"
+    assert error_panel.border_style == "red"
+    assert len(str(error_panel.renderable).splitlines()) == 2
 
 
 def test_collect_env_status_details_row_shape(mocker: MockerFixture):

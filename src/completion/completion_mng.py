@@ -17,6 +17,7 @@
 
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from config import ConfigMng
 
@@ -27,7 +28,7 @@ class AbstractCompletionMng(ABC):
     This class defines the interface for completion managers.
     """
 
-    def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
+    def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
 

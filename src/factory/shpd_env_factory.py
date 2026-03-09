@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from typing import override
+from typing import Any, override
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from docker import DockerComposeEnv
@@ -31,7 +31,7 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
         self,
         configMng: ConfigMng,
         svcFactory: ServiceFactory,
-        cli_flags: dict[str, bool] | None = None,
+        cli_flags: dict[str, Any] | None = None,
     ):
         self.configMng = configMng
         self.svcFactory = svcFactory

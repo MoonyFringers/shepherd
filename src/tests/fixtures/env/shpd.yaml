@@ -71,6 +71,7 @@ service_templates:
         extra_hosts:
           - host.docker.internal:host-gateway
         subject_alternative_name: null
+        inits: null
     labels:
       - com.example.label1=value1
       - com.example.label2=value2
@@ -101,6 +102,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         tag: test-1
         labels:
           - com.example.label1=value1
@@ -131,6 +133,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         tag: test-2
         labels:
           - com.example.label1=value1
@@ -177,6 +180,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         tag: test-1
         labels:
           - com.example.label1=value1
@@ -207,6 +211,7 @@ envs:
             extra_hosts:
               - host.docker.internal:host-gateway
             subject_alternative_name: null
+            inits: null
         tag: test-2
         labels:
           - com.example.label1=value1

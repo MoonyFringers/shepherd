@@ -73,7 +73,6 @@ env_templates:
 service_templates:
   - tag: nginx
     factory: docker
-    inits: []
     start: null
     containers:
       - image: nginx:latest
@@ -92,6 +91,7 @@ service_templates:
         extra_hosts: []
         subject_alternative_name: null
         build: null
+        inits: null
     labels:
       - com.example.type=web
     ingress: true
@@ -99,7 +99,6 @@ service_templates:
     properties: {}
   - tag: postgres
     factory: docker
-    inits: []
     start: null
     containers:
       - image: postgres:14
@@ -118,6 +117,7 @@ service_templates:
         extra_hosts: []
         subject_alternative_name: null
         build: null
+        inits: null
     labels:
       - com.example.type=db
     ingress: false
@@ -131,7 +131,6 @@ envs:
       - template: nginx
         tag: web
         factory: docker
-        inits: []
         start: null
         containers:
           - image: nginx:latest
@@ -150,6 +149,7 @@ envs:
             extra_hosts: []
             subject_alternative_name: null
             build: null
+            inits: null
         labels:
           - com.example.type=web
         ingress: true
@@ -164,7 +164,6 @@ envs:
           rendered_config: null
       - template: postgres
         upstreams: []
-        inits: []
         start: null
         factory: docker
         tag: db
@@ -186,6 +185,7 @@ envs:
             extra_hosts: []
             subject_alternative_name: null
             build: null
+            inits: null
         labels:
           - com.example.type=db
         ingress: false

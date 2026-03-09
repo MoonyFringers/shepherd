@@ -21,14 +21,14 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Optional, override
+from typing import Any, Optional, cast, override
 
 import yaml
 
 from config import ConfigMng, EnvironmentCfg
-from config.config import ProbeCfg
+from config.config import InitCfg, ProbeCfg
 from environment import Environment
-from environment.environment import ProbeRunResult
+from environment.environment import NonRecoverableStartError, ProbeRunResult
 from service import ServiceFactory
 from util.util import Util
 
@@ -36,16 +36,18 @@ from .docker_compose_util import render_container, run_compose
 
 
 class DockerComposeEnv(Environment):
+    _command_category_width = 16
 
     def __init__(
         self,
         config: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ):
         """Initialize a Docker Compose environment."""
         super().__init__(config, svcFactory, envCfg, cli_flags=cli_flags)
+        self._started_init_keys: set[str] = set()
 
     @override
     def ensure_resources_impl(self):
@@ -78,40 +80,194 @@ class DockerComposeEnv(Environment):
         return clonedEnv
 
     @override
-    def start_impl(self):
-        """Start the environment."""
-        rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
-            run_compose(
-                rendered_map["ungated"],
+    def start_impl(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]] = None,
+    ) -> set[str]:
+        """Start the environment according to probe-gate availability."""
+        rendered_map = self.envCfg.status.rendered_config or {}
+        if not rendered_map:
+            return set()
+
+        probe_status: dict[str, bool] = {"base": True}
+        if probe_results:
+            for result in probe_results:
+                probe_status[result.tag] = (
+                    result.exit_code == 0
+                ) and not result.timed_out
+
+        started_now: set[str] = set()
+        for gate_key, _ in rendered_map.items():
+            if gate_key in started_gate_keys:
+                continue
+
+            if gate_key != "ungated":
+                required_tags = [tag for tag in gate_key.split("|") if tag]
+                if not required_tags:
+                    continue
+                if not all(
+                    probe_status.get(tag, False) for tag in required_tags
+                ):
+                    continue
+
+            compose_stack = [
+                rendered_map[k]
+                for k in rendered_map.keys()
+                if k in started_gate_keys or k == gate_key
+            ]
+            cp = self._run_compose(
+                compose_stack,
                 "up",
                 "-d",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category=f"start:{gate_key}",
             )
+            if cp.returncode != 0:
+                raise NonRecoverableStartError(
+                    f"Failed to start gate '{gate_key}' "
+                    f"for environment '{self.envCfg.tag}'."
+                )
+            started_now.add(gate_key)
+
+        return started_now
+
+    @override
+    def on_start_cycle_begin(self) -> None:
+        self._started_init_keys.clear()
+
+    @override
+    def run_inits(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]],
+    ) -> None:
+        rendered_map = self.envCfg.status.rendered_config or {}
+        if not rendered_map:
+            return
+
+        probe_status: dict[str, bool] = {"base": True}
+        if probe_results:
+            for result in probe_results:
+                probe_status[result.tag] = (
+                    result.exit_code == 0
+                ) and not result.timed_out
+
+        self._run_eligible_inits(
+            rendered_map=rendered_map,
+            active_gate_keys=started_gate_keys,
+            probe_status=probe_status,
+        )
+
+    def _service_gate_key(self, service: Any) -> str:
+        when_probes = (
+            service.svcCfg.start.when_probes
+            if service.svcCfg.start and service.svcCfg.start.when_probes
+            else None
+        )
+        return "|".join(when_probes) if when_probes else "ungated"
+
+    def _are_probes_open(
+        self, when_probes: Optional[list[str]], probe_status: dict[str, bool]
+    ) -> bool:
+        required_tags = when_probes or []
+        if not required_tags:
+            return True
+        return all(probe_status.get(tag, False) for tag in required_tags)
+
+    def _run_eligible_inits(
+        self,
+        *,
+        rendered_map: dict[str, str],
+        active_gate_keys: set[str],
+        probe_status: dict[str, bool],
+    ) -> None:
+        for svc in self.services:
+            gate_key = self._service_gate_key(svc)
+            if gate_key not in active_gate_keys:
+                continue
+
+            containers = svc.svcCfg.containers or []
+            for container in containers:
+                service_name = container.run_container_name or ""
+                if not service_name:
+                    continue
+                for init in container.inits or []:
+                    if not self._is_init_eligible(
+                        svc_tag=svc.svcCfg.tag,
+                        container_tag=container.tag,
+                        init=init,
+                        probe_status=probe_status,
+                    ):
+                        continue
+
+                    compose_stack = [
+                        rendered_map[k]
+                        for k in rendered_map.keys()
+                        if k in active_gate_keys
+                    ]
+                    script = init.script or init.script_path or ""
+                    if not script:
+                        continue
+
+                    init_key = f"{svc.svcCfg.tag}|{container.tag}|{init.tag}"
+                    cp = self._run_compose(
+                        compose_stack,
+                        "exec",
+                        "-T",
+                        service_name,
+                        "sh",
+                        "-lc",
+                        script,
+                        capture=not self._is_verbose(),
+                        category=f"init:{init_key}",
+                    )
+                    if cp.returncode != 0:
+                        self._record_compose_failure(
+                            cp, category=f"init:{init_key}"
+                        )
+                        raise NonRecoverableStartError(
+                            f"Failed to run init '{init.tag}' "
+                            f"for container '{container.tag}' "
+                            f"in environment '{self.envCfg.tag}'."
+                        )
+                    self._started_init_keys.add(init_key)
+
+    def _is_init_eligible(
+        self,
+        *,
+        svc_tag: str,
+        container_tag: str,
+        init: InitCfg,
+        probe_status: dict[str, bool],
+    ) -> bool:
+        init_key = f"{svc_tag}|{container_tag}|{init.tag}"
+        if init_key in self._started_init_keys:
+            return False
+        return self._are_probes_open(init.when_probes, probe_status)
 
     @override
     def stop_impl(self):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
-            run_compose(
-                rendered_map["ungated"],
+        if rendered_map:
+            self._run_compose(
+                list(rendered_map.values()),
                 "down",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category="stop",
             )
 
     @override
     def reload_impl(self):
         """Reload the environment."""
         rendered_map = self.envCfg.status.rendered_config
-        if rendered_map and "ungated" in rendered_map:
-            run_compose(
-                rendered_map["ungated"],
+        if rendered_map:
+            self._run_compose(
+                list(rendered_map.values()),
                 "restart",
-                project_name=self.envCfg.tag,
                 capture=not self._is_verbose(),
+                category="reload",
             )
 
     @override
@@ -204,7 +360,9 @@ class DockerComposeEnv(Environment):
                     }
                 compose_config = gated_compose_config[probe_key]
 
-                svc_yaml = yaml.safe_load(svc.render_target(resolved=resolved))
+                svc_yaml = yaml.safe_load(
+                    svc.render_target_impl(resolved=resolved)
+                )
                 compose_config["services"].update(svc_yaml["services"])
 
             # --- Render YAML ---
@@ -220,6 +378,32 @@ class DockerComposeEnv(Environment):
                     self.envCfg.set_resolved()
                 else:
                     self.envCfg.set_unresolved()
+
+    @override
+    def render_target_merged(self, resolved: bool = False) -> str:
+        rendered = self.render_target(resolved)
+        base_yaml = rendered.get("ungated")
+        if not base_yaml:
+            return ""
+
+        base_cfg = cast(dict[str, Any], yaml.safe_load(base_yaml) or {})
+        base_services = cast(
+            dict[str, Any], base_cfg.setdefault("services", {})
+        )
+        base_networks = cast(
+            dict[str, Any], base_cfg.setdefault("networks", {})
+        )
+        base_volumes = cast(dict[str, Any], base_cfg.setdefault("volumes", {}))
+
+        for gate_key, gate_yaml in rendered.items():
+            if gate_key == "ungated":
+                continue
+            gate_cfg = cast(dict[str, Any], yaml.safe_load(gate_yaml) or {})
+            base_services.update(gate_cfg.get("services") or {})
+            base_networks.update(gate_cfg.get("networks") or {})
+            base_volumes.update(gate_cfg.get("volumes") or {})
+
+        return yaml.dump(base_cfg, sort_keys=False)
 
     def render_probe_service(
         self, probe: ProbeCfg, labels: Optional[list[str]] = None
@@ -338,15 +522,15 @@ class DockerComposeEnv(Environment):
             # Execute probe container and capture its exit code/output
             # --no-deps: do not start dependencies
             # --rm: remove container after it exits
-            cp = run_compose(
+            cp = self._run_compose(
                 [base_yaml, probes_yaml],
                 "run",
                 "--rm",
                 "--no-deps",
                 probe_service,
                 capture=True,
-                project_name=self.envCfg.tag,
                 timeout_seconds=timeout_seconds,
+                category=f"probe:{probe_service}",
             )
 
             duration_ms = int((time.time() - started) * 1000)
@@ -377,15 +561,15 @@ class DockerComposeEnv(Environment):
         rendered_map = self.envCfg.status.rendered_config
         yaml = rendered_map.get("ungated") if rendered_map else None
         if not yaml:
-            yaml = self.render_target()["ungated"]
+            yaml = self.render_target_impl()["ungated"]
 
-        result = run_compose(
+        result = self._run_compose(
             yaml,
             "ps",
             "--format",
             "json",
             capture=True,
-            project_name=self.envCfg.tag,
+            log_command=False,
         )
         stdout_str = result.stdout.strip()
 
@@ -412,3 +596,84 @@ class DockerComposeEnv(Environment):
             self.envCfg.tag,
         )
         return services
+
+    def _run_compose(
+        self,
+        yamls: str | list[str],
+        *args: str,
+        capture: bool = False,
+        timeout_seconds: Optional[int] = None,
+        log_command: bool = True,
+        category: Optional[str] = None,
+    ):
+        should_log = log_command and self.is_command_log_enabled()
+        result = run_compose(
+            yamls,
+            *args,
+            capture=capture,
+            project_name=self.envCfg.tag,
+            timeout_seconds=timeout_seconds,
+            log_command=False,
+            on_command=None,
+        )
+        if should_log:
+            self._log_compose_result(result, category=category)
+        if (
+            category
+            and category.startswith("start:")
+            and result.returncode != 0
+        ):
+            self._record_compose_failure(result, category=category)
+        return result
+
+    def _log_compose_result(
+        self,
+        result: Any,
+        *,
+        category: Optional[str],
+    ) -> None:
+        if not self.is_command_log_enabled():
+            return
+        exit_code = getattr(result, "returncode", None)
+        if exit_code == 0:
+            dot = "[bold green]●[/bold green]"
+        elif exit_code == 124:
+            dot = "[bold yellow]●[/bold yellow]"
+        else:
+            dot = "[bold red]●[/bold red]"
+
+        cmd = getattr(result, "args", None)
+        if isinstance(cmd, list):
+            cmd_str = " ".join(cast(list[str], cmd))
+        else:
+            cmd_str = str(cmd) if cmd is not None else ""
+
+        category_label = (category or "-").ljust(self._command_category_width)
+        prefix = f"[cyan]{category_label}[/cyan] "
+        suffix = (
+            f" [dim](exit {exit_code})[/dim]" if exit_code is not None else ""
+        )
+        self.add_command_log(f"{dot} {prefix}{cmd_str}{suffix}")
+
+    def _record_compose_failure(
+        self,
+        result: Any,
+        *,
+        category: str,
+    ) -> None:
+        stdout = (getattr(result, "stdout", "") or "").strip()
+        stderr = (getattr(result, "stderr", "") or "").strip()
+        parts: list[str] = []
+        if stdout:
+            parts.append("--- stdout ---")
+            parts.append(stdout)
+        if stderr:
+            parts.append("--- stderr ---")
+            parts.append(stderr)
+        if not parts:
+            return
+        body = "\n".join(parts)
+        self.set_command_error(
+            f"Docker compose {category} failed",
+            body,
+        )

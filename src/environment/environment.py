@@ -23,16 +23,21 @@ import os
 import threading
 import time
 from abc import ABC, abstractmethod
+from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, cast
 
+import yaml
 from rich import box
+from rich.console import Group
 from rich.live import Live
+from rich.panel import Panel
 from rich.table import Table
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
+from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 
 @dataclass
@@ -45,6 +50,10 @@ class ProbeRunResult:
     timed_out: bool = False
 
 
+class NonRecoverableStartError(RuntimeError):
+    """Raised when environment start cannot continue safely."""
+
+
 class Environment(ABC):
 
     services: list[Service]
@@ -54,7 +63,7 @@ class Environment(ABC):
         configMng: ConfigMng,
         svcFactory: ServiceFactory,
         envCfg: EnvironmentCfg,
-        cli_flags: Optional[dict[str, bool]] = None,
+        cli_flags: Optional[dict[str, Any]] = None,
     ):
         self.configMng = configMng
         self.svcFactory = svcFactory
@@ -70,6 +79,17 @@ class Environment(ABC):
             if envCfg.services
             else []
         )
+        self._command_log_limit = int(
+            self.cli_flags.get(
+                "show_commands_limit", DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
+            )
+        )
+        if self._command_log_limit < 0:
+            self._command_log_limit = 0
+        self._command_log: deque[str] = deque(maxlen=self._command_log_limit)
+        self._command_log_lock = threading.Lock()
+        self._command_error_lock = threading.Lock()
+        self._command_error: Optional[dict[str, str]] = None
 
     def _is_verbose(self) -> bool:
         return bool(self.cli_flags.get("verbose", False))
@@ -89,10 +109,106 @@ class Environment(ABC):
         """Clone the environment."""
         return self.clone_impl(dst_env_tag)
 
-    def start(self):
+    def start(self, timeout_seconds: Optional[int] = 60):
         """Start the environment."""
+        self.clear_command_log()
+        self.clear_command_error()
+        self.on_start_cycle_begin()
+        self.envCfg.status.rendered_config = self.render_target(True)
+        self.sync_config()
         self.ensure_resources()
-        return self.start_impl()
+
+        rendered_config = self.envCfg.status.rendered_config or {}
+        pending_gate_keys = set(rendered_config.keys())
+        started_gate_keys: set[str] = set()
+
+        try:
+            started_now = self.start_impl(
+                started_gate_keys=started_gate_keys,
+                probe_results=None,
+            )
+            started_gate_keys.update(started_now)
+            pending_gate_keys -= started_now
+            self.run_inits(
+                started_gate_keys=started_gate_keys,
+                probe_results=None,
+            )
+
+            started_at = time.monotonic()
+            while pending_gate_keys:
+                probe_results = self.check_probes(
+                    probe_tag=None,
+                    fail_fast=False,
+                    timeout_seconds=120,
+                )
+                if not probe_results:
+                    break
+
+                started_now = self.start_impl(
+                    started_gate_keys=started_gate_keys,
+                    probe_results=probe_results,
+                )
+                started_gate_keys.update(started_now)
+                pending_gate_keys -= started_now
+                self.run_inits(
+                    started_gate_keys=started_gate_keys,
+                    probe_results=probe_results,
+                )
+                if not started_now:
+                    if timeout_seconds is not None:
+                        elapsed = int(time.monotonic() - started_at)
+                        if elapsed >= timeout_seconds:
+                            break
+                    time.sleep(1.0)
+                    continue
+        except NonRecoverableStartError:
+            try:
+                self.stop()
+            except BaseException:
+                logging.exception(
+                    "Failed rollback stop after start failure for env '%s'",
+                    self.envCfg.tag,
+                )
+            raise
+
+    def add_command_log(self, command: str) -> None:
+        """Add a command entry to the environment log."""
+        if not command or self._command_log_limit <= 0:
+            return
+        with self._command_log_lock:
+            self._command_log.append(command)
+
+    def get_command_log(self) -> list[str]:
+        """Return a snapshot of recent command entries."""
+        with self._command_log_lock:
+            return list(self._command_log)
+
+    def clear_command_log(self) -> None:
+        """Clear recent command entries."""
+        with self._command_log_lock:
+            self._command_log.clear()
+
+    def get_command_log_limit(self) -> int:
+        return self._command_log_limit
+
+    def is_command_log_enabled(self) -> bool:
+        return bool(self.cli_flags.get("show_commands", False)) and (
+            self._command_log_limit > 0
+        )
+
+    def set_command_error(self, title: str, body: str) -> None:
+        if not title or not body:
+            return
+        with self._command_error_lock:
+            self._command_error = {"title": title, "body": body}
+
+    def clear_command_error(self) -> None:
+        with self._command_error_lock:
+            self._command_error = None
+
+    def get_command_error(self) -> Optional[dict[str, str]]:
+        with self._command_error_lock:
+            return dict(self._command_error) if self._command_error else None
 
     def stop(self):
         """Halt the environment."""
@@ -111,6 +227,22 @@ class Environment(ABC):
         Render the environment configuration in the target system.
         """
         return self.render_target_impl(resolved)
+
+    def render_target_merged(self, resolved: bool = False) -> str:
+        """
+        Render the environment configuration in the target system as a single
+        merged config.
+        """
+        rendered = self.render_target(resolved)
+        return rendered.get("ungated", "")
+
+    def render_target_grouped(self, resolved: bool = False) -> str:
+        """
+        Render the environment configuration in the target system
+        grouped by gate.
+        """
+        rendered = self.render_target(resolved)
+        return _dump_grouped_yaml(rendered)
 
     def render_probes(
         self, probe_tag: Optional[str], resolved: bool
@@ -162,6 +294,18 @@ class Environment(ABC):
         """Get environment status."""
         return self.status_impl()
 
+    def on_start_cycle_begin(self) -> None:
+        """Hook called once at the beginning of environment start."""
+        return None
+
+    def run_inits(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]],
+    ) -> None:
+        """Hook for running service/container init flows during start."""
+        return None
+
     def to_config(self) -> EnvironmentCfg:
         """To config"""
         self.envCfg.services = [svc.svcCfg for svc in self.services]
@@ -185,7 +329,11 @@ class Environment(ABC):
         pass
 
     @abstractmethod
-    def start_impl(self):
+    def start_impl(
+        self,
+        started_gate_keys: set[str],
+        probe_results: Optional[list[ProbeRunResult]] = None,
+    ) -> set[str]:
         """Start the environment."""
         pass
 
@@ -300,7 +448,7 @@ class EnvironmentFactory(ABC):
     """
 
     def __init__(
-        self, config: ConfigMng, cli_flags: Optional[dict[str, bool]] = None
+        self, config: ConfigMng, cli_flags: Optional[dict[str, Any]] = None
     ):
         self.config = config
         self.cli_flags = cli_flags or {}
@@ -344,7 +492,7 @@ class EnvironmentMng:
 
     def __init__(
         self,
-        cli_flags: dict[str, bool],
+        cli_flags: dict[str, Any],
         configMng: ConfigMng,
         envFactory: EnvironmentFactory,
         svcFactory: ServiceFactory,
@@ -485,7 +633,10 @@ class EnvironmentMng:
         )
 
     def start_env(
-        self, envCfg: EnvironmentCfg, timeout_seconds: Optional[int] = 60
+        self,
+        envCfg: EnvironmentCfg,
+        timeout_seconds: Optional[int] = 60,
+        watch: bool = False,
     ):
         """Start an environment."""
         if timeout_seconds is not None and timeout_seconds < 0:
@@ -493,12 +644,11 @@ class EnvironmentMng:
                 "Timeout must be greater than or equal to 0."
             )
         env = self.get_environment_from_cfg(envCfg)
-        env.envCfg.status.rendered_config = env.render_target(True)
-        env.sync_config()
         self.wait_for_env_up(
             env,
             timeout_seconds=timeout_seconds,
-            start_action=env.start,
+            start_action=lambda: env.start(timeout_seconds=timeout_seconds),
+            watch_after=watch,
         )
         Util.print(f"Started environment: {env.envCfg.tag}")
 
@@ -510,7 +660,7 @@ class EnvironmentMng:
         env.sync_config()
         Util.print(f"Halted environment: {env.envCfg.tag}")
 
-    def reload_env(self, envCfg: EnvironmentCfg):
+    def reload_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
         if not env.envCfg.status.rendered_config:
@@ -519,16 +669,25 @@ class EnvironmentMng:
             )
 
         env.reload()
+        if watch:
+            self.wait_for_env_up(
+                env,
+                timeout_seconds=None,
+                start_action=None,
+                watch_after=True,
+            )
         Util.print(f"Reloaded environment: {env.envCfg.tag}")
 
     def render_env(
-        self, env_tag: str, target: bool, resolved: bool
+        self, env_tag: str, target: bool, resolved: bool, grouped: bool = False
     ) -> Optional[str]:
         """Render an environment configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
-                return env.render_target(resolved)["ungated"]
+                if grouped:
+                    return env.render_target_grouped(resolved)
+                return env.render_target_merged(resolved)
             return env.render(resolved)
         return None
 
@@ -714,12 +873,14 @@ class EnvironmentMng:
         env: Environment,
         timeout_seconds: Optional[int] = None,
         start_action: Optional[Callable[[], Any]] = None,
+        watch_after: bool = False,
     ):
         self._wait_for_env_state(
             env,
             timeout_seconds=timeout_seconds,
             action=start_action,
             wait_until_up=True,
+            watch_after=watch_after,
         )
 
     def wait_for_env_down(
@@ -727,12 +888,14 @@ class EnvironmentMng:
         env: Environment,
         timeout_seconds: Optional[int] = None,
         stop_action: Optional[Callable[[], Any]] = None,
+        watch_after: bool = False,
     ):
         self._wait_for_env_state(
             env,
             timeout_seconds=timeout_seconds,
             action=stop_action,
             wait_until_up=False,
+            watch_after=watch_after,
         )
 
     def _wait_for_env_state(
@@ -741,6 +904,7 @@ class EnvironmentMng:
         timeout_seconds: Optional[int],
         action: Optional[Callable[[], Any]],
         wait_until_up: bool,
+        watch_after: bool = False,
     ):
         phase = "up" if wait_until_up else "down"
         phase_gerund = "starting" if wait_until_up else "stopping"
@@ -857,6 +1021,22 @@ class EnvironmentMng:
                     env.envCfg.tag,
                     grouped,
                     remaining_seconds=remaining,
+                    command_log=(
+                        env.get_command_log()
+                        if env.is_command_log_enabled()
+                        else None
+                    ),
+                    command_log_limit=(
+                        env.get_command_log_limit()
+                        if env.is_command_log_enabled()
+                        else None
+                    ),
+                    command_error=env.get_command_error(),
+                    command_error_limit=(
+                        env.get_command_log_limit()
+                        if env.is_command_log_enabled()
+                        else None
+                    ),
                 )
             )
             return
@@ -870,6 +1050,7 @@ class EnvironmentMng:
             transient=True,
             screen=False,
         ) as live:
+            completed = False
             while True:
                 raise_action_error()
                 current_gate_status = get_gate_status()
@@ -918,6 +1099,22 @@ class EnvironmentMng:
                             env.envCfg.tag,
                             grouped,
                             remaining_seconds=remaining,
+                            command_log=(
+                                env.get_command_log()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
+                            command_log_limit=(
+                                env.get_command_log_limit()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
+                            command_error=env.get_command_error(),
+                            command_error_limit=(
+                                env.get_command_log_limit()
+                                if env.is_command_log_enabled()
+                                else None
+                            ),
                         )
                     )
 
@@ -927,9 +1124,15 @@ class EnvironmentMng:
                         phase,
                         env.envCfg.tag,
                     )
-                    return
+                    if not watch_after:
+                        return
+                    completed = True
 
-                if timeout_seconds is not None and remaining is not None:
+                if (
+                    not completed
+                    and timeout_seconds is not None
+                    and remaining is not None
+                ):
                     if remaining <= 0:
                         live.stop()
                         Util.print_error_and_die(
@@ -943,6 +1146,10 @@ class EnvironmentMng:
         env_tag: str,
         grouped: dict[str, list[list[str]]],
         remaining_seconds: Optional[int] = None,
+        command_log: Optional[list[str]] = None,
+        command_log_limit: Optional[int] = None,
+        command_error: Optional[dict[str, str]] = None,
+        command_error_limit: Optional[int] = None,
     ):
         title = f"[white]{env_tag}[/white]"
         if remaining_seconds is not None:
@@ -979,7 +1186,60 @@ class EnvironmentMng:
                     row.append(gate_details if idx == 0 else "")
                 table.add_row(*row)
 
-        return table
+        panels: list[Any] = [table]
+        if command_log is not None and command_log_limit is not None:
+            panels.append(
+                self._build_command_log_panel(command_log, command_log_limit)
+            )
+        if command_error:
+            panels.append(
+                self._build_command_error_panel(
+                    command_error, command_error_limit
+                )
+            )
+        if len(panels) == 1:
+            return table
+        return Group(*panels)
+
+    def _build_command_log_panel(
+        self, command_log: list[str], command_log_limit: int
+    ) -> Panel:
+        limit = max(0, command_log_limit)
+        lines = [f"{cmd}" for cmd in command_log[-limit:]]
+        while len(lines) < limit:
+            lines.append("[dim]•[/dim]")
+        body = "\n".join(lines)
+        return Panel(
+            body,
+            title="Recent Commands",
+            border_style="blue",
+            padding=(1, 2),
+            box=box.ROUNDED,
+            expand=True,
+        )
+
+    def _build_command_error_panel(
+        self,
+        command_error: dict[str, str],
+        command_error_limit: Optional[int],
+    ) -> Panel:
+        title = command_error.get("title") or "Command Error"
+        body = command_error.get("body") or ""
+        lines = body.splitlines()
+        limit = command_error_limit or 0
+        if limit > 0:
+            lines = lines[-limit:]
+            while len(lines) < limit:
+                lines.append("[dim][/dim]")
+        body = "\n".join(lines)
+        return Panel(
+            body,
+            title=title,
+            border_style="red",
+            padding=(1, 2),
+            box=box.ROUNDED,
+            expand=True,
+        )
 
     def _remaining_timeout_seconds(
         self, started_at: float, timeout_seconds: Optional[int]
@@ -1191,3 +1451,25 @@ class EnvironmentMng:
                 )
             except ValueError as e:
                 Util.print_error_and_die(f"Failed to create service: {e}")
+
+
+class _LiteralDumper(yaml.SafeDumper):
+    pass
+
+
+def _repr_str(dumper: _LiteralDumper, data: str) -> yaml.ScalarNode:
+    style = "|" if "\n" in data else None
+    data_str: str = str(data)
+    return cast(
+        yaml.ScalarNode,
+        cast(Any, dumper).represent_scalar(
+            "tag:yaml.org,2002:str", data_str, style=style
+        ),
+    )
+
+
+_LiteralDumper.add_representer(str, _repr_str)
+
+
+def _dump_grouped_yaml(data: dict[str, str]) -> str:
+    return yaml.dump(data, Dumper=_LiteralDumper, sort_keys=False)

@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from typing import override
+from typing import Any, override
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from docker import DockerComposeSvc
@@ -39,7 +39,7 @@ class ShpdServiceFactory(ServiceFactory):
         self,
         envCfg: EnvironmentCfg,
         svcCfg: ServiceCfg,
-        cli_flags: dict[str, bool] | None = None,
+        cli_flags: dict[str, Any] | None = None,
     ) -> Service:
         """
         Get a service.

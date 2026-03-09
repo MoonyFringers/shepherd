@@ -30,10 +30,11 @@ from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from service import ServiceMng
 from util import Util, setup_logging
+from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 
 class ShepherdMng:
-    def __init__(self, cli_flags: dict[str, bool] = {}):
+    def __init__(self, cli_flags: dict[str, Any] = {}):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
         setup_logging(
@@ -81,11 +82,6 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
 @click.option("--quiet", is_flag=True, help="Suppress command output.")
 @click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
-@click.option(
     "-y",
     "--yes",
     is_flag=True,
@@ -96,7 +92,6 @@ def cli(
     ctx: click.Context,
     verbose: bool,
     quiet: bool,
-    details: bool,
     yes: bool,
 ):
     """Shepherd CLI:
@@ -105,7 +100,9 @@ def cli(
     cli_flags = {
         "verbose": verbose,
         "quiet": quiet,
-        "details": details,
+        "details": False,
+        "show_commands": False,
+        "show_commands_limit": DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
         "yes": yes,
     }
 
@@ -117,6 +114,17 @@ def cli(
 def empty():
     """Empty testing purpose stub."""
     pass
+
+
+def _apply_show_commands_flags(
+    shepherd: ShepherdMng, show_commands: bool, show_commands_limit: int
+) -> None:
+    shepherd.cli_flags["show_commands"] = show_commands
+    shepherd.cli_flags["show_commands_limit"] = show_commands_limit
+
+
+def _apply_details_flag(shepherd: ShepherdMng, details: bool) -> None:
+    shepherd.cli_flags["details"] = details
 
 
 @cli.command(
@@ -157,6 +165,11 @@ def get():
     "-t", "--target", is_flag=True, help="Get the target configuration."
 )
 @click.option(
+    "--by-gate",
+    is_flag=True,
+    help="Return target configuration grouped by gate.",
+)
+@click.option(
     "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
 )
 @click.pass_obj
@@ -165,11 +178,18 @@ def get_env(
     tag: str,
     output: Optional[str],
     target: bool,
+    by_gate: bool,
     resolved: bool,
 ):
     """Get environment details or config."""
+    if by_gate and not target:
+        raise click.UsageError("--by-gate requires --target")
     if output:
-        click.echo(shepherd.environmentMng.render_env(tag, target, resolved))
+        click.echo(
+            shepherd.environmentMng.render_env(
+                tag, target, resolved, grouped=by_gate
+            )
+        )
 
 
 @get.command(name="probe")
@@ -350,27 +370,22 @@ def list(shepherd: ShepherdMng):
 # =====================================================
 @cli.group(invoke_without_command=True)
 @click.option(
-    "--timeout",
-    type=int,
-    default=60,
-    show_default=True,
-    help="Maximum seconds to wait for all containers to be running.",
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
 )
-@click.pass_obj
-@require_active_env
-def up(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    timeout: Optional[int],
-):
-    """Start resources."""
-    # If no subcommand is given, default to "env"
-    ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
-
-
-@up.command(name="env")
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.option(
     "--timeout",
     type=int,
@@ -378,15 +393,82 @@ def up(
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
+@click.pass_obj
+@require_active_env
+def up(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+    timeout: Optional[int],
+    watch: bool,
+):
+    """Start resources."""
+    # If no subcommand is given, default to "env"
+    ctx = click.get_current_context()
+    if ctx.invoked_subcommand is None:
+        _apply_details_flag(shepherd, details)
+        _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+        shepherd.environmentMng.start_env(
+            envCfg, timeout_seconds=timeout, watch=watch
+        )
+
+
+@up.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
+    "--timeout",
+    type=int,
+    default=60,
+    show_default=True,
+    help="Maximum seconds to wait for all containers to be running.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
 def up_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
     timeout: Optional[int],
+    watch: bool,
 ):
     """Start environment."""
-    shepherd.environmentMng.start_env(envCfg, timeout_seconds=timeout)
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+    shepherd.environmentMng.start_env(
+        envCfg, timeout_seconds=timeout, watch=watch
+    )
 
 
 @up.command(name="svc")
@@ -451,11 +533,43 @@ def reload():
 
 
 @reload.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def reload_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def reload_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+    watch: bool,
+):
     """Reload environment."""
-    shepherd.environmentMng.reload_env(envCfg)
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+    shepherd.environmentMng.reload_env(envCfg, watch=watch)
 
 
 @reload.command(name="svc")
@@ -531,21 +645,104 @@ def shell(
 # STATUS
 # =====================================================
 @cli.group(invoke_without_command=True)
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def status(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+    watch: bool,
+):
     """Show status of resources."""
     ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
+    if ctx.invoked_subcommand is not None:
+        return
+
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+
+    if watch:
+        shepherd.environmentMng.wait_for_env_up(
+            shepherd.environmentMng.get_environment_from_cfg(envCfg),
+            timeout_seconds=None,
+            start_action=None,
+            watch_after=True,
+        )
+    else:
         shepherd.environmentMng.status_env(envCfg)
 
 
 @status.command(name="env")
+@click.option(
+    "--details",
+    is_flag=True,
+    help="Show additional details in status tables.",
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent commands in status panels.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Keep updating the output until interrupted.",
+)
 @click.pass_obj
 @require_active_env
-def status_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg):
+def status_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    details: bool,
+    show_commands: bool,
+    show_commands_limit: int,
+    watch: bool,
+):
     """Show environment status."""
-    shepherd.environmentMng.status_env(envCfg)
+    _apply_details_flag(shepherd, details)
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+    if watch:
+        shepherd.environmentMng.wait_for_env_up(
+            shepherd.environmentMng.get_environment_from_cfg(envCfg),
+            timeout_seconds=None,
+            start_action=None,
+            watch_after=True,
+        )
+    else:
+        shepherd.environmentMng.status_env(envCfg)
 
 
 # =====================================================

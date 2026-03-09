@@ -16,7 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from typing import override
+from typing import Any, override
 
 from completion.completion_mng import AbstractCompletionMng
 from config import ConfigMng
@@ -24,7 +24,7 @@ from config import ConfigMng
 
 class CompletionProbeMng(AbstractCompletionMng):
 
-    def __init__(self, cli_flags: dict[str, bool], configMng: ConfigMng):
+    def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
         self.cli_flags = cli_flags
         self.configMng = configMng
 
