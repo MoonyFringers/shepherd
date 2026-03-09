@@ -6,35 +6,47 @@
 Shepherd functions as a specialized orchestration tool designed to streamline
 the provisioning of development platforms.
 
+It helps define, start, inspect, and manage reproducible development
+environments with `shepctl`.
+
 > 📌 **Note:** Should a bug be found and not expected to be related with
 > [known issues][issues], one should feel encouraged to file a new issue.
 
+## Getting Started
+
+Install `shepctl`:
+
+```bash
+VER=<release-tag> sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFringers/shepherd/main/scripts/install.sh)"
+```
+
+Then:
+
+1. Pick a sample configuration from [`examples/`](examples/README.md).
+2. Review the available commands with `shepctl --help`.
+3. Read the [installation guide][install] for setup details and advanced options.
+
 ## Key Concepts
 
-Shepherd utilizes two types of images:
+Shepherd works with two image concepts:
 
 1. **Docker Images**
 2. **Environment Images**
 
 ### Docker Images
 
-Classic stateless images containing executables.
+Regular stateless container images that run application or utility code.
 
 ### Environment Images
 
-Environment images capture a snapshot of a specific reference platform
-at a given point in time.
-These images are more comprehensive, including:
+Environment images capture a reusable snapshot of a reference platform at
+a specific point in time. They can include:
 
-- **Database State**: The complete state of the database is embedded within
-  the environment image, allowing it to be immediately consumed by the
-  corresponding database Docker image with no additional processing required.
+- **Database state**: a preloaded database that can be consumed immediately.
+- **Service state**: service deployments that are already prepared for use.
 
-- **Service Deployments**: The snapshot can also include the deployment state
-  of services which are ready for immediate use upon consumption.
-
-Once an environment image is pulled and imported into shepherd,
-the corresponding environment state will evolve privately.
+Once an environment image is pulled and imported into Shepherd, that local
+environment evolves independently for each developer.
 
 ## Requirements
 
@@ -43,34 +55,22 @@ the corresponding environment state will evolve privately.
 - **Linux**
   - Debian derived
 
-## Installation
+## Examples
 
-Set the `VER` environment variable to specify the desired version of the tool:
+Sample `shpd.yaml` configurations are available in [`examples/`](examples/README.md):
 
-```bash
-VER=0.0.0 sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFringers/shepherd/main/scripts/install.sh)"
-```
+- [`examples/minimal/`](examples/minimal/README.md)
+- [`examples/env-basic/`](examples/env-basic/README.md)
+- [`examples/env-with-probes/`](examples/env-with-probes/README.md)
+- [`examples/svc-basic/`](examples/svc-basic/README.md)
 
-For advanced installation options and customization, refer to the
-[installation guide][install].
+## Documentation
 
-## Consuming Environment Images
-
-An environment image is typically created once, then pushed to the registry,
-where it can be pulled and consumed countless times by any developer.
-This ensures uniformity across different instances and reduces setup time.
-
-Refer to documentation for [Consuming Environment Images].
-
-## Authoring Environment Images
-
-For creating, maintaining and pushing environment images to the registry refer
-to [Authoring Environment Images].
-
-## Full Commands and Options Documentation
-
-Refer to the specific documentation for the currently supported commands
-and options of [shepctl].
+- [Installation guide][install]
+- [Consuming Environment Images][Consuming Environment Images]
+- [Authoring Environment Images][Authoring Environment Images]
+- [shepctl command reference][shepctl]
+- [Development guide][development]
 
 ## Develop Shepherd
 
