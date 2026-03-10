@@ -531,7 +531,9 @@ def wait_for_env_state(
                         )
                         return
                 else:
-                    show_ready = wait_until_up and completed
+                    show_ready = wait_until_up and condition_met(
+                        snap_all_running, snap_any_running, snap_gate_status
+                    )
                     live.update(
                         build_status_renderable(
                             snap_grouped,

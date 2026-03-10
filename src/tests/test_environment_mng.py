@@ -764,6 +764,100 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
     fake_console.print.assert_not_called()
 
 
+def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
+    mocker: MockerFixture,
+):
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {"svc": [["-", "cnt", "[yellow]starting[/yellow]"]]},
+            False,
+            True,
+            True,
+        ),
+        (
+            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            True,
+            True,
+            True,
+        ),
+        (
+            {"svc": [["-", "cnt", "[yellow]degraded[/yellow]"]]},
+            False,
+            True,
+            True,
+        ),
+    ]
+    idx = {"value": 0}
+
+    def collect_status(
+        _env: Any, _gate_status: Any = None
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        i = min(idx["value"], len(status_samples) - 1)
+        idx["value"] += 1
+        if idx["value"] > 6:
+            raise RuntimeError("stop-watch")
+        time.sleep(0.01)
+        return status_samples[i]
+
+    build_table = mocker.Mock(return_value="table")
+    hooks = WaitForEnvStateHooks(
+        status_poll_seconds=0.005,
+        is_quiet=lambda: False,
+        get_required_gate_tags=lambda _env: set(),
+        evaluate_gate_status=lambda _env, _tags: {},
+        collect_env_status=collect_status,
+        build_env_status_table=build_table,
+        remaining_timeout_seconds=lambda _started, _timeout: None,
+    )
+
+    class FakeLive:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def update(self, renderable: Any):
+            del renderable
+
+        def stop(self):
+            pass
+
+    mocker.patch("environment.status_wait.Live", FakeLive)
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = True
+    mocker.patch.object(Util, "console", fake_console)
+
+    with pytest.raises(RuntimeError, match="stop-watch"):
+        wait_for_env_state(
+            env,
+            timeout_seconds=None,
+            action=None,
+            wait_until_up=True,
+            watch_after=True,
+            hooks=hooks,
+        )
+
+    suffixes = [
+        Text.from_markup(call.kwargs["status_suffix"]).plain
+        for call in build_table.call_args_list
+        if "status_suffix" in call.kwargs
+    ]
+    ready_indexes = [
+        i for i, suffix in enumerate(suffixes) if suffix == "Ready"
+    ]
+    assert ready_indexes
+    assert any(suffix != "Ready" for suffix in suffixes[ready_indexes[0] + 1 :])
+
+
 def test_render_moving_shadow_text_is_deterministic_per_tick():
     frame0 = render_moving_shadow_text("Starting", tick=0)
     frame1 = render_moving_shadow_text("Starting", tick=1)
