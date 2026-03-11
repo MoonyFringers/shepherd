@@ -346,7 +346,9 @@ def test_cli_get_env_with_output_renders_env(
 
     assert result.exit_code == 0
     assert "env-yaml" in result.output
-    render_env.assert_called_once_with("test-1", False, False, grouped=False)
+    render_env.assert_called_once_with(
+        "test-1", False, False, output="yaml", grouped=False
+    )
     describe_env.assert_not_called()
 
 
@@ -417,7 +419,9 @@ def test_cli_get_svc_with_output_renders_svc(
 
     assert result.exit_code == 0
     assert "svc-yaml" in result.output
-    render_svc.assert_called_once()
+    render_svc.assert_called_once_with(
+        mocker.ANY, "test", False, False, output="yaml"
+    )
     describe_svc.assert_not_called()
 
 

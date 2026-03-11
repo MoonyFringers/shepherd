@@ -17,11 +17,13 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from rich.tree import Tree
@@ -180,6 +182,30 @@ def test_add_svc_two_default(
     assert (
         env.services[2].properties == {}
     ), "Service properties should be empty"
+
+
+@pytest.mark.svc
+def test_get_svc_json(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-json"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["checkout", "test-svc-json"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["get", "svc", "svc-1", "--output", "json"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is not None
+    svc_cfg = env.get_service("svc-1")
+    assert svc_cfg is not None
+    assert json.loads(result.output) == yaml.safe_load(svc_cfg.get_yaml())
 
 
 @pytest.mark.svc

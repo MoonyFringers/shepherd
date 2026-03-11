@@ -16,6 +16,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 
+import json
 import os
 import re
 from copy import copy, deepcopy
@@ -602,6 +603,28 @@ class ServiceCfg(Resolvable):
                 else:
                     self.set_unresolved()
 
+    def get_json(self, resolved: bool = False) -> str:
+        """
+        Return the JSON representation of the service configuration.
+
+        Args:
+            resolved: If True, ensure placeholders are resolved before dumping.
+        """
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            return json.dumps(cfg_asdict(self), indent=2)
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
+
     def get_container_by_tag(self, cnt_tag: str) -> Optional[ContainerCfg]:
         """
         Retrieves a container configuration by its tag.
@@ -678,6 +701,28 @@ class EnvironmentCfg(Resolvable):
                 self.set_unresolved()
 
             return yaml.dump(cfg_asdict(self), sort_keys=False)
+        finally:
+            if was_resolved:
+                self.set_resolved()
+            else:
+                self.set_unresolved()
+
+    def get_json(self, resolved: bool = False) -> str:
+        """
+        Return the JSON representation of the environment configuration.
+
+        Args:
+            resolved: If True, ensure placeholders are resolved before dumping.
+        """
+        was_resolved = self.is_resolved()
+
+        try:
+            if resolved and not was_resolved:
+                self.set_resolved()
+            elif not resolved and was_resolved:
+                self.set_unresolved()
+
+            return json.dumps(cfg_asdict(self), indent=2)
         finally:
             if was_resolved:
                 self.set_resolved()

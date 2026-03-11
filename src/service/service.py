@@ -17,8 +17,11 @@
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from typing import Any, Optional
+
+import yaml
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from util import Util
@@ -226,6 +229,9 @@ class ServiceMng:
         self.configMng = configMng
         self.svcFactory = svcFactory
 
+    def _is_details(self) -> bool:
+        return bool(self.cli_flags.get("details", False))
+
     def get_service(
         self, envCfg: EnvironmentCfg, svc_tag: str
     ) -> Optional[Service]:
@@ -287,13 +293,23 @@ class ServiceMng:
             service.reload(cnt_tag)
 
     def render_svc(
-        self, envCfg: EnvironmentCfg, svc_tag: str, target: bool, resolved: bool
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        target: bool,
+        resolved: bool,
+        output: str = "yaml",
     ) -> Optional[str]:
         """Render a service configuration."""
         service = self.get_service(envCfg, svc_tag)
         if service:
             if target:
-                return service.render_target(resolved)
+                rendered = service.render_target(resolved)
+                if output == "json":
+                    return json.dumps(yaml.safe_load(rendered), indent=2)
+                return rendered
+            if output == "json":
+                return service.svcCfg.get_json(resolved)
             return service.render(resolved)
         return None
 
@@ -304,7 +320,7 @@ class ServiceMng:
             return
 
         render_svc_summary(service)
-        if bool(self.cli_flags.get("details", False)):
+        if self._is_details():
             Util.console.print(self._build_svc_details_tree(service))
 
     def _build_svc_details_tree(self, service: Service):

@@ -204,7 +204,7 @@ def get_env(
     if output:
         click.echo(
             shepherd.environmentMng.render_env(
-                tag, target, resolved, grouped=by_gate
+                tag, target, resolved, output=output, grouped=by_gate
             )
         )
         return
@@ -270,7 +270,9 @@ def get_svc(
     _apply_details_flag(shepherd, details)
     if output:
         click.echo(
-            shepherd.serviceMng.render_svc(envCfg, tag, target, resolved)
+            shepherd.serviceMng.render_svc(
+                envCfg, tag, target, resolved, output=output
+            )
         )
         return
     shepherd.serviceMng.describe_svc(envCfg, tag)
