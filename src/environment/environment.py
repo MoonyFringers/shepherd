@@ -35,12 +35,14 @@ from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 from .render import (
     build_command_error_panel,
     build_command_log_panel,
+    build_env_details_tree,
     build_env_status_table,
     build_probe_report,
     collect_env_status,
     dump_grouped_yaml,
     format_service_gate_details,
     format_service_gate_glyphs,
+    render_env_summary,
     render_probe_report,
 )
 from .status_wait import WaitForEnvStateHooks, wait_for_env_state
@@ -721,6 +723,20 @@ class EnvironmentMng:
                 return env.render_target_merged(resolved)
             return env.render(resolved)
         return None
+
+    def describe_env(self, env_tag: Optional[str]) -> None:
+        """Render a kubectl-like single-row environment summary."""
+        env = self.get_environment_from_tag(env_tag)
+        if not env:
+            return
+
+        render_env_summary(env)
+        if self._is_details():
+            Util.console.print(self._build_env_details_tree(env))
+
+    def _build_env_details_tree(self, env: Environment):
+        """Build the details tree shown below the environment summary."""
+        return build_env_details_tree(env)
 
     def render_probes(
         self,

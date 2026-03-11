@@ -109,6 +109,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-t", "--target")),
             OptionSpec(tokens=("--by-gate",)),
             OptionSpec(tokens=("-r", "--resolved")),
+            OptionSpec(tokens=("--details",)),
         ),
         ("get", "probe"): (
             OptionSpec(
@@ -128,6 +129,7 @@ class CompletionMng(AbstractCompletionMng):
             ),
             OptionSpec(tokens=("-t", "--target")),
             OptionSpec(tokens=("-r", "--resolved")),
+            OptionSpec(tokens=("--details",)),
         ),
         ("check", "probe"): (OptionSpec(tokens=("-a", "--all")),),
     }

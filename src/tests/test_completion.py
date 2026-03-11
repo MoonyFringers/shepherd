@@ -613,6 +613,7 @@ def test_completion_get_env_oyaml(
         "--by-gate",
         "-r",
         "--resolved",
+        "--details",
     ], "Expected get env -oyaml completion"
 
 
@@ -640,6 +641,7 @@ def test_completion_get_env(
         "--by-gate",
         "-r",
         "--resolved",
+        "--details",
     ], "Expected get env completion"
 
 
@@ -664,6 +666,7 @@ def test_completion_get_svc_oyaml(
         "--target",
         "-r",
         "--resolved",
+        "--details",
     ], "Expected get svc -oyaml completion"
 
 
@@ -825,6 +828,7 @@ def test_completion_get_env_includes_flags_and_env_tags(
         "--by-gate",
         "-r",
         "--resolved",
+        "--details",
     ], "Expected get env tags and flags"
 
 
@@ -852,6 +856,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
         "--by-gate",
         "-r",
         "--resolved",
+        "--details",
     ], "Expected get env tags after output value"
 
 
