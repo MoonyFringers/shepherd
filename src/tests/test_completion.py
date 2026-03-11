@@ -55,9 +55,25 @@ def test_completion_no_args(
 ):
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions([])
-    assert (
-        completions == sm.completionMng.VERBS
-    ), "Expected Verbs and Shortcuts only"
+    assert completions == [
+        *sm.completionMng.VERBS,
+        "-v",
+        "--verbose",
+        "--quiet",
+        "-y",
+        "--yes",
+    ], "Expected verbs and global flags"
+
+
+@pytest.mark.compl
+def test_completion_global_flags_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["--q"])
+    assert completions == ["--quiet"], "Expected filtered global flag"
 
 
 @pytest.mark.compl
@@ -313,9 +329,14 @@ def test_completion_start(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["up"])
-    assert (
-        completions == sm.completionMng.VERB_CATEGORIES["up"]
-    ), "Expected up completion"
+    assert completions == sm.completionMng.VERB_CATEGORIES["up"] + [
+        "--details",
+        "--show-commands",
+        "--show-commands-limit",
+        "--timeout",
+        "-w",
+        "--watch",
+    ], "Expected up categories and flags"
 
 
 @pytest.mark.compl
@@ -332,7 +353,34 @@ def test_completion_start_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["up", "env"])
-    assert completions == [], "Expected env up completion"
+    assert completions == [
+        "--details",
+        "--show-commands",
+        "--show-commands-limit",
+        "--timeout",
+        "-w",
+        "--watch",
+    ], "Expected env up flags"
+
+
+@pytest.mark.compl
+def test_completion_start_env_with_option_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["up", "env", "--sh"])
+    assert completions == [
+        "--show-commands",
+        "--show-commands-limit",
+    ], "Expected filtered env up flags"
 
 
 @pytest.mark.compl
@@ -386,9 +434,9 @@ def test_completion_stop(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["halt"])
-    assert (
-        completions == sm.completionMng.VERB_CATEGORIES["halt"]
-    ), "Expected halt completion"
+    assert completions == sm.completionMng.VERB_CATEGORIES["halt"] + [
+        "--no-wait"
+    ], "Expected halt categories and flags"
 
 
 @pytest.mark.compl
@@ -405,7 +453,7 @@ def test_completion_stop_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["halt", "env"])
-    assert completions == [], "Expected env halt completion"
+    assert completions == ["--no-wait"], "Expected env halt flags"
 
 
 @pytest.mark.compl
@@ -478,7 +526,13 @@ def test_completion_reload_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["reload", "env"])
-    assert completions == [], "Expected env reload completion"
+    assert completions == [
+        "--details",
+        "--show-commands",
+        "--show-commands-limit",
+        "-w",
+        "--watch",
+    ], "Expected env reload flags"
 
 
 @pytest.mark.compl
@@ -554,6 +608,11 @@ def test_completion_get_env_oyaml(
     assert completions == [
         "test-1",
         "test-2",
+        "-t",
+        "--target",
+        "--by-gate",
+        "-r",
+        "--resolved",
     ], "Expected get env -oyaml completion"
 
 
@@ -574,6 +633,13 @@ def test_completion_get_env(
     assert completions == [
         "test-1",
         "test-2",
+        "-o",
+        "--output",
+        "-t",
+        "--target",
+        "--by-gate",
+        "-r",
+        "--resolved",
     ], "Expected get env completion"
 
 
@@ -591,7 +657,14 @@ def test_completion_get_svc_oyaml(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["get", "svc", "-oyaml"])
-    assert completions == ["red", "white"], "Expected get svc -oyaml completion"
+    assert completions == [
+        "red",
+        "white",
+        "-t",
+        "--target",
+        "-r",
+        "--resolved",
+    ], "Expected get svc -oyaml completion"
 
 
 @pytest.mark.compl
@@ -719,7 +792,104 @@ def test_completion_status_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["status", "env"])
-    assert completions == [], "Expected status env completion"
+    assert completions == [
+        "--details",
+        "--show-commands",
+        "--show-commands-limit",
+        "-w",
+        "--watch",
+    ], "Expected status env flags"
+
+
+@pytest.mark.compl
+def test_completion_get_env_includes_flags_and_env_tags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "env"])
+    assert completions == [
+        "test-1",
+        "test-2",
+        "-o",
+        "--output",
+        "-t",
+        "--target",
+        "--by-gate",
+        "-r",
+        "--resolved",
+    ], "Expected get env tags and flags"
+
+
+@pytest.mark.compl
+def test_completion_get_env_after_output_value_keeps_env_tags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["get", "env", "--output", "yaml"]
+    )
+    assert completions == [
+        "test-1",
+        "test-2",
+        "-t",
+        "--target",
+        "--by-gate",
+        "-r",
+        "--resolved",
+    ], "Expected get env tags after output value"
+
+
+@pytest.mark.compl
+def test_completion_get_env_output_value_choices(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["get", "env", "--output"])
+    assert completions == ["yaml", "json"], "Expected output value choices"
+
+
+@pytest.mark.compl
+def test_completion_get_svc_output_value_choices_with_empty_current_arg(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["get", "svc", "cache", "-o", ""]
+    )
+    assert completions == ["yaml", "json"], "Expected output choices after -o "
+
+
+@pytest.mark.compl
+def test_completion_get_svc_output_value_choices_with_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["get", "svc", "cache", "-o", "y"]
+    )
+    assert completions == ["yaml"], "Expected filtered output value choices"
 
 
 @pytest.mark.compl
@@ -739,6 +909,12 @@ def test_completion_get_probe_oyaml(
     assert completions == [
         "db-live",
         "db-ready",
+        "-t",
+        "--target",
+        "-r",
+        "--resolved",
+        "-a",
+        "--all",
     ], "Expected get probe -oyaml completion"
 
 
@@ -759,4 +935,12 @@ def test_completion_get_probe(
     assert completions == [
         "db-live",
         "db-ready",
+        "-o",
+        "--output",
+        "-t",
+        "--target",
+        "-r",
+        "--resolved",
+        "-a",
+        "--all",
     ], "Expected get probe completion"

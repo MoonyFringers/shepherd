@@ -43,6 +43,11 @@ def run_compose(
 
     Example:
       run_compose([base_yaml, overlay_yaml], "up", "-d", "new-service")
+
+    Notes:
+      - YAML inputs are materialized into temporary files and passed via `-f`.
+      - Compose timeout is normalized to return code `124` so callers can treat
+        timeouts consistently with probe/start orchestration logic.
     """
 
     if isinstance(yamls, str):
@@ -201,7 +206,10 @@ def render_container(
     cnt: ContainerCfg, labels: Optional[list[str]]
 ) -> dict[str, Any]:
     """
-    Render the container configuration in the target system.
+    Render a compose service fragment from container config.
+
+    Only populated/non-empty fields are emitted, keeping rendered compose YAML
+    compact and avoiding noisy null/default entries.
     """
     container_def: dict[str, Any] = {}
     if cnt.image:
@@ -228,7 +236,9 @@ def render_container(
 
 
 def build_container(container: ContainerCfg, *, verbose: bool = False) -> None:
-    """Build a container."""
+    """
+    Validate build config and execute Docker image build for a container.
+    """
     if not container.build:
         Util.print_error_and_die(
             f"Container '{container.tag}' "

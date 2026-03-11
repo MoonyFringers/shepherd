@@ -101,12 +101,13 @@ class DockerComposeSvc(Service):
 
     @override
     def start_impl(self, cnt_tag: Optional[str] = None):
-        """Start the service."""
-        rendered_map = self.envCfg.status.rendered_config
-        rendered = rendered_map.get("ungated") if rendered_map else None
+        """
+        Start one or all service containers using the full rendered env stack.
+        """
+        rendered_stack = self._get_rendered_compose_stack()
         verbose = self._is_verbose()
 
-        if rendered and self.svcCfg.containers:
+        if rendered_stack and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -116,7 +117,7 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        rendered,
+                        rendered_stack,
                         "up",
                         "-d",
                         container.run_container_name or "",
@@ -127,7 +128,7 @@ class DockerComposeSvc(Service):
 
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    rendered,
+                    rendered_stack,
                     "up",
                     "-d",
                     container.run_container_name or "",
@@ -141,12 +142,11 @@ class DockerComposeSvc(Service):
 
     @override
     def stop_impl(self, cnt_tag: Optional[str] = None):
-        """Stop the service."""
-        rendered_map = self.envCfg.status.rendered_config
-        rendered = rendered_map.get("ungated") if rendered_map else None
+        """Stop one or all containers for this service."""
+        rendered_stack = self._get_rendered_compose_stack()
         verbose = self._is_verbose()
 
-        if rendered and self.svcCfg.containers:
+        if rendered_stack and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -156,7 +156,7 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        rendered,
+                        rendered_stack,
                         "stop",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
@@ -166,7 +166,7 @@ class DockerComposeSvc(Service):
 
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    rendered,
+                    rendered_stack,
                     "stop",
                     container.run_container_name or "",
                     project_name=self.envCfg.tag,
@@ -179,12 +179,11 @@ class DockerComposeSvc(Service):
 
     @override
     def reload_impl(self, cnt_tag: Optional[str] = None):
-        """Reload the service."""
-        rendered_map = self.envCfg.status.rendered_config
-        rendered = rendered_map.get("ungated") if rendered_map else None
+        """Restart one or all containers for this service."""
+        rendered_stack = self._get_rendered_compose_stack()
         verbose = self._is_verbose()
 
-        if rendered and self.svcCfg.containers:
+        if rendered_stack and self.svcCfg.containers:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -194,7 +193,7 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        rendered,
+                        rendered_stack,
                         "restart",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
@@ -204,7 +203,7 @@ class DockerComposeSvc(Service):
 
             for container in self.svcCfg.containers or []:
                 run_compose(
-                    rendered,
+                    rendered_stack,
                     "restart",
                     container.run_container_name or "",
                     project_name=self.envCfg.tag,
@@ -217,12 +216,16 @@ class DockerComposeSvc(Service):
 
     @override
     def get_stdout_impl(self, cnt_tag: Optional[str] = None):
-        """Show the service stdout."""
-        rendered_map = self.envCfg.status.rendered_config
-        rendered = rendered_map.get("ungated") if rendered_map else None
+        """
+        Show container logs for this service.
+
+        If the service has multiple containers, caller must specify `cnt_tag`
+        to avoid ambiguous output streams.
+        """
+        rendered_stack = self._get_rendered_compose_stack()
         capture = self._is_quiet() and not self._is_verbose()
 
-        if rendered:
+        if rendered_stack:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -232,7 +235,7 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        rendered,
+                        rendered_stack,
                         "logs",
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
@@ -240,7 +243,7 @@ class DockerComposeSvc(Service):
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
-                    rendered,
+                    rendered_stack,
                     "logs",
                     self.svcCfg.containers[0].run_container_name or "",
                     project_name=self.envCfg.tag,
@@ -258,12 +261,15 @@ class DockerComposeSvc(Service):
 
     @override
     def get_shell_impl(self, cnt_tag: Optional[str] = None):
-        """Get a shell session for the service."""
-        rendered_map = self.envCfg.status.rendered_config
-        rendered = rendered_map.get("ungated") if rendered_map else None
+        """
+        Open an interactive shell in a service container.
+
+        For multi-container services, `cnt_tag` is required to select a target.
+        """
+        rendered_stack = self._get_rendered_compose_stack()
         capture = self._is_quiet() and not self._is_verbose()
 
-        if rendered:
+        if rendered_stack:
             if cnt_tag:
                 container = self.svcCfg.get_container_by_tag(cnt_tag)
                 if not container:
@@ -273,7 +279,7 @@ class DockerComposeSvc(Service):
                     )
                 if container:
                     run_compose(
-                        rendered,
+                        rendered_stack,
                         "exec",
                         container.run_container_name or "",
                         "sh",
@@ -282,7 +288,7 @@ class DockerComposeSvc(Service):
                     )
             elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
                 run_compose(
-                    rendered,
+                    rendered_stack,
                     "exec",
                     self.svcCfg.containers[0].run_container_name or "",
                     "sh",
@@ -298,3 +304,31 @@ class DockerComposeSvc(Service):
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
             )
+
+    def _get_rendered_compose_stack(self) -> Optional[list[str]]:
+        """
+        Return all rendered compose fragments for the running environment.
+
+        Compose applies multiple `-f` files in order, with later files
+        overriding/extending earlier ones. We therefore always place the base
+        `ungated` config first (when present), followed by gated overlays.
+
+        This ordering is explicit on purpose and does not rely on dictionary
+        insertion order from the render pipeline.
+        """
+        rendered_map = self.envCfg.status.rendered_config
+        if not rendered_map:
+            return None
+
+        stack: list[str] = []
+        base = rendered_map.get("ungated")
+        if base:
+            stack.append(base)
+
+        for gate_key, gate_yaml in rendered_map.items():
+            if gate_key == "ungated":
+                continue
+            if gate_yaml:
+                stack.append(gate_yaml)
+
+        return stack or None

@@ -26,6 +26,8 @@ from util import Constants
 
 
 class ShpdEnvironmentFactory(EnvironmentFactory):
+    """Concrete environment factory that dispatches to backend
+    implementations."""
 
     def __init__(
         self,
@@ -44,7 +46,10 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
         env_tag: str,
     ) -> Environment:
         """
-        Create an environment.
+        Materialize an environment instance from a template reference.
+
+        The template is first converted to an `EnvironmentCfg` snapshot for
+        `env_tag`, then routed to the backend-specific environment class.
         """
         match env_tmpl_cfg.factory:
             case Constants.ENV_FACTORY_DEFAULT:
@@ -62,7 +67,9 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
     @override
     def new_environment_cfg_impl(self, envCfg: EnvironmentCfg) -> Environment:
         """
-        Get an environment.
+        Rehydrate an environment instance from an existing config object.
+
+        Used for operations on already persisted environments.
         """
         match envCfg.factory:
             case Constants.ENV_FACTORY_DEFAULT:

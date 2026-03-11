@@ -72,6 +72,12 @@ class Util:
 
     @staticmethod
     def copy_dir(src_path: str, dest_path: str):
+        """
+        Copy directory contents recursively using hard links for files.
+
+        This is intentionally link-based (`os.link`) rather than byte-copy to
+        keep clone-like operations fast and space-efficient.
+        """
         try:
             os.makedirs(dest_path, exist_ok=True)
             for item in os.listdir(src_path):
@@ -104,7 +110,7 @@ class Util:
 
     @staticmethod
     def print_error_and_die(message: str):
-        Util.console.print(f"[bold red]ERROR[/bold red]: {message}")
+        Util.console.print(f"[red]Error:[/red] {message}", highlight=False)
         sys.exit(1)
 
     @staticmethod
@@ -391,7 +397,8 @@ class Util:
         shell: bool = False,
         capture_output: bool = False,
     ) -> Union[subprocess.CompletedProcess[Any], subprocess.CalledProcessError]:
-        """Run a shell command and return the result.
+        """
+        Run a shell command and return the result.
 
         Args:
             cmd: Command to run (list or string)
@@ -401,6 +408,11 @@ class Util:
 
         Returns:
             CompletedProcess instance or CalledProcessError
+
+        Notes:
+            - When `cmd` is a string and `shell=False`, it is split on spaces.
+            - When `check=True`, failures terminate the process via
+              `print_error_and_die` style behavior (`sys.exit(1)`).
         """
         if isinstance(cmd, str) and not shell:
             cmd = cmd.split()
@@ -452,6 +464,12 @@ class Util:
 
     @staticmethod
     def get_os_info() -> "Util.OsInfo":
+        """
+        Return normalized OS metadata for installer/repository selection.
+
+        Current policy is Linux-only for provisioning flows; Windows/macOS are
+        rejected explicitly to avoid partial/undefined installer behavior.
+        """
         system = platform.system().lower()
         if system in ("windows", "win32", "darwin"):
             raise ValueError(f"Unsupported operating system: {system}")

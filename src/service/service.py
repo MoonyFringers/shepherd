@@ -53,7 +53,13 @@ class Service(ABC):
 
     def _generate_containers_names(self):
         """
-        Generate the container names for the service.
+        Derive runtime host/container names for each declared container.
+
+        Naming is stable and environment-scoped (`<container>-<service>-<env>`)
+        unless explicitly overridden in config (`hostname`, `container_name`).
+        This runs once at service construction so all downstream render/compose
+        code can rely on `run_hostname` and `run_container_name` being
+        populated.
         """
         if self.svcCfg.containers:
             if len(self.svcCfg.containers) > 1:
@@ -220,7 +226,12 @@ class ServiceMng:
     def get_service(
         self, envCfg: EnvironmentCfg, svc_tag: str
     ) -> Optional[Service]:
-        """Get a service by environment tag and service tag."""
+        """
+        Resolve a concrete service instance from the environment config.
+
+        The manager returns `None` when the service tag is absent and leaves
+        user-facing error policy to higher-level CLI flows.
+        """
         if svcCfg := envCfg.get_service(svc_tag):
             return self.svcFactory.new_service_from_cfg(
                 envCfg, svcCfg, cli_flags=self.cli_flags

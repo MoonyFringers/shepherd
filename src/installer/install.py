@@ -157,6 +157,11 @@ def install_binary() -> None:
 
 
 def manage_dependencies() -> None:
+    """
+    Ensure system-level prerequisites required by the selected install method.
+
+    Source installs request additional Python runtime/dev packages.
+    """
     Util.console.print("Ensuring dependencies...", style="blue")
 
     os_info: Any = Util.get_os_info()  # Use the patchable alias
@@ -258,7 +263,15 @@ def install_requirements_in_venv(py_src_dir: Path, venv_path: Path) -> None:
 
 # Shepherd source files installer (for development purposes)
 def install_source() -> None:
-    """Install shepctl from source."""
+    """
+    Install shepctl from source into an isolated virtualenv deployment.
+
+    Flow:
+    - copy Python sources into the install directory
+    - normalize source file permissions
+    - create `.venv` and install requirements
+    - create a launcher script in `SYMLINK_DIR`
+    """
     install_shepctl_dir: Path = Path(
         os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
     ).resolve()
@@ -291,6 +304,12 @@ def set_py_permissions(dest_dir: Path) -> None:
 
 
 def install_shepctl() -> None:
+    """
+    Entry point for installer execution after CLI/root checks.
+
+    Existing installation directory is removed before install to guarantee a
+    clean state for both binary and source methods.
+    """
     Util.console.print("Installing shepctl...", style="blue")
 
     if not skip_ensure_deps:
@@ -325,8 +344,9 @@ def get_script_completion_src() -> tuple[Path, str]:
 
 def install_completion() -> None:
     """
-    Install the shell completion script for shepctl if /etc/bash_completion.d
-    exists.
+    Install shell completion if system bash-completion directory is available.
+
+    Failure to install completion is non-fatal for core CLI functionality.
     """
     completion_dir = Path("/etc/bash_completion.d")
 
@@ -355,7 +375,9 @@ def install_completion() -> None:
 
 
 def uninstall_shepctl() -> None:
-    """Uninstall shepctl."""
+    """
+    Remove shepctl installation artifacts (install dir, symlink, completion).
+    """
     Util.console.print("Uninstalling shepctl...", style="blue")
 
     # Remove installation directory
@@ -376,15 +398,15 @@ def uninstall_shepctl() -> None:
         completion_script.unlink()
         Util.print(f"Removed completion script {completion_script}")
 
-    Util.print("shepctl uninstalled successfully")
+    Util.print("Uninstalled")
 
 
 def create_wrapper_script(
     install_dir: Path, symlink_dir: Path, script_name: str = "shepctl"
 ) -> None:
     """
-    Create a wrapper script in the symlink directory that runs shepctl.py
-    using the Python interpreter from the virtual environment.
+    Create a launcher script that pins execution to the install-local
+    virtualenv.
     """
     # Ensure the symlink directory exists
     symlink_dir.mkdir(parents=True, exist_ok=True)
@@ -404,7 +426,10 @@ def create_wrapper_script(
 def create_virtualenv(install_dir: Path) -> Path:
     """
     Create a Python virtual environment in install_dir/.venv and set ownership
-    of the entire .venv directory to the current user.
+    of the entire .venv directory to the invoking (non-root) user.
+
+    Installer typically runs as root; ownership handoff prevents later
+    permission issues for day-to-day package/script updates.
     Returns the Path to the created virtualenv.
     """
     Util.console.print("Creating Python virtual environment...", style="blue")

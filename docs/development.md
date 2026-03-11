@@ -1,177 +1,127 @@
 # Development
 
-This section provides instructions for setting up the development environment
-for contributors.
+This guide covers the local setup and day-to-day commands for contributing to
+Shepherd.
 
 ## Prerequisites
 
-Ensure you have the following installed on your system:
+You need:
 
 - Python 3.12+
 - `pip`
-- `virtualenv`
+- `venv`
+- Git
 
-To install these on Ubuntu, run:
+On Debian-based systems:
 
 ```bash
 sudo apt update
-sudo apt install python3 python3-pip python3-venv -y
+sudo apt install python3 python3-pip python3-venv git -y
 ```
 
-## Setup Instructions
+## Initial Setup
 
-1. **Clone the Repository**
-
-   ```bash
-   git clone git@github.com:MoonyFringers/shepherd.git
-   cd shepherd
-   ```
-
-2. **Create a Virtual Environment**
-
-   Use a virtual environment to isolate dependencies:
-
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   ```
-
-3. **Install Dependencies**
-
-   Install the required Python packages from `requirements.txt`:
-
-   ```bash
-   pip install --upgrade pip
-   pip install -r src/requirements.txt -r src/requirements-dev.txt
-   ```
-
-   Ensure the necessary tools are installed locally in your Python environment:
-
-   ```bash
-   pip install black isort pyright pytest pytest-cov pre-commit
-   ```
-
-4. **Verify Installation**
-
-   Test the CLI to ensure it works:
-
-   ```bash
-   python3 src/shepctl.py --help
-   ```
-
-   You should see the list of available commands and options.
-
-## Lints & Checks
-
-1. **pre-commit**
-
-   Run pre-commit manually:
-
-   ```bash
-   pre-commit run --all-files
-   ```
-
-   Install pre-commit:
-
-   ```bash
-   pre-commit install
-   ```
-
-2. **Black**
-
-   Format your code manually:
-
-   ```bash
-   black src
-   ```
-
-3. **Isort**
-
-   Sort imports manually by running:
-
-   ```bash
-   isort src
-   ```
-
-4. **Pyright**
-
-   Run type checking:
-
-   ```bash
-   pyright src
-   ```
-
-5. **Pytest**
-
-   Run tests with coverage:
-
-   ```bash
-   cd src
-   pytest
-   ```
-
-## PyInstaller Build Automation Script
-
-The `src/build.py` script automates the process of building `shepctl`
-application using PyInstaller, managing versioning,
-Git tagging, and resource management.
-
-The script manages the build process for `shepctl` by:
-
-1. Cleaning previous build files.
-2. Reading the version from `src/version`.
-3. Building `shepctl` with PyInstaller.
-4. Copying necessary resources.
-5. Optionally creating and pushing Git tags for versioning
-   (still experimental).
-
-You can run the script with various command-line arguments:
+Clone the repository and create a local virtual environment:
 
 ```bash
-python3 src/build.py [options]
+git clone git@github.com:MoonyFringers/shepherd.git
+cd shepherd
+python3 -m venv .venv
+source .venv/bin/activate
 ```
 
-### Options
+Install project dependencies:
 
-- `--clean`: Clean previous builds (removes `build`, `dist`, and `.spec` files).
-- `--debug`: Enable debug logs for the PyInstaller build.
-- `--git`: Enable Git tagging.
-- `--version`: Show the application version.
+```bash
+pip install --upgrade pip
+pip install -r src/requirements.txt -r src/requirements-dev.txt
+pre-commit install
+```
 
-### Usage
+Verify the CLI entrypoint:
 
-1. **Build:**
+```bash
+python3 src/shepctl.py --help
+```
 
-    ```bash
-    python3 src/build.py
-    ```
+## Project Layout
 
-2. **Build with debug logs:**
+Core code lives in `src/`:
 
-    ```bash
-    python3 src/build.py --debug
-    ```
+- `src/shepctl.py`: CLI entrypoint
+- `src/config/`: configuration loading and validation
+- `src/environment/`: environment orchestration and status rendering
+- `src/service/`: service operations
+- `src/docker/`: docker-compose integration
+- `src/completion/`: shell completion support
+- `src/installer/`: installer logic
+- `src/util/`: shared utilities
+- `src/tests/`: tests and fixtures
 
-3. **Clean previous builds:**
+Documentation lives in `docs/`.
 
-    ```bash
-    python3 src/build.py --clean
-    ```
+Sample `shpd.yaml` configurations live in `examples/`.
 
-4. **Enable Git tagging:**
+## Daily Commands
 
-    ```bash
-    python3 src/build.py --git
-    ```
+Run the full local quality pass:
 
-5. **Show application version:**
+```bash
+pre-commit run --all-files
+black src
+isort src
+cd src && pyright .
+cd src && pytest
+```
 
-    ```bash
-    python3 src/build.py --version
-    ```
+Run individual checks as needed:
+
+```bash
+black src
+isort src
+cd src && pyright .
+cd src && pytest -k status
+```
+
+Notes:
+
+- Run `pyright` from `src/` so it picks up the configuration in
+  `src/pyproject.toml`.
+- `pytest` is also intended to run from `src/`, where the configured
+  `pythonpath` and coverage settings live.
+
+## Style and Conventions
+
+- Formatting: Black + isort
+- Line length: 80
+- Type checking: Pyright in strict mode
+- Test files: `src/tests/test_*.py`
+- Python naming:
+  - functions/modules: `snake_case`
+  - classes: `PascalCase`
+  - constants: `UPPER_SNAKE_CASE`
+
+Follow the existing package boundaries under `src/` instead of introducing
+new cross-cutting utilities unnecessarily.
+
+## Build Helper
+
+The repository includes a PyInstaller-based build helper:
+
+```bash
+python3 src/build.py [--clean|--debug|--git|--version]
+```
+
+Common usage:
+
+```bash
+python3 src/build.py
+python3 src/build.py --clean
+python3 src/build.py --debug
+python3 src/build.py --version
+```
 
 ## Releasing
 
-For instructions on how to cut a new release, generate changelogs, and publish
-artifacts, please refer to the [Release Process](release-process.md)
-documentation.
+For release steps, changelog generation, and publishing artifacts, see
+[Release Process](release-process.md).

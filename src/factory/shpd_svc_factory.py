@@ -25,6 +25,7 @@ from util import Constants
 
 
 class ShpdServiceFactory(ServiceFactory):
+    """Concrete service factory that resolves service backend from `svcCfg`."""
 
     def __init__(self, configMng: ConfigMng):
         self.configMng = configMng
@@ -42,7 +43,8 @@ class ShpdServiceFactory(ServiceFactory):
         cli_flags: dict[str, Any] | None = None,
     ) -> Service:
         """
-        Get a service.
+        Instantiate a concrete service implementation for the configured
+        backend.
         """
         match svcCfg.factory:
             case Constants.SVC_FACTORY_DEFAULT:

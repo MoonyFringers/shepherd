@@ -16,7 +16,7 @@ VER=0.0.0 sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFringers/she
 
 > Replace `0.0.0` with the desired version.
 
-## 🛠️ Development Installation (From Source)
+## Development Installation (From Source)
 
 ### Prerequisites
 

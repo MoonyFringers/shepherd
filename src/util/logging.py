@@ -26,6 +26,13 @@ def setup_logging(
     log_level: str,
     to_stdout: bool,
 ):
+    """
+    Configure root logging handlers for file and optional stdout output.
+
+    The function is intentionally idempotent-friendly: it ensures log file path
+    existence before handing it to `FileHandler`, then delegates formatting and
+    level setup to `logging.basicConfig`.
+    """
     level = getattr(logging, log_level.upper(), logging.WARNING)
     handlers: list[logging.Handler] = []
 

@@ -218,6 +218,12 @@ class Resolvable:
         obj: Any = None,
         refMap: dict[str, "Resolvable"] | None = None,
     ):
+        """
+        Propagate resolver/reference context and resolution mode recursively.
+
+        This is the core state-wiring pass used by `set_resolved`,
+        `set_unresolved`, and `set_resolver`.
+        """
         if obj is None:
             obj = self
 
@@ -286,6 +292,11 @@ class Resolvable:
         return value
 
     def __getattribute__(self, name: str) -> Any:
+        """
+        Lazily resolve placeholders/references when resolution mode is enabled.
+
+        Raw values are returned unchanged when unresolved mode is active.
+        """
         if (
             name.startswith("_")
             or name
@@ -518,6 +529,24 @@ class StartCfg(Resolvable):
 
 
 @dataclass
+class ReadyCfg(Resolvable):
+    """
+    Represents environment readiness conditions.
+
+    Semantics:
+    - `when_probes` follows the same all-of behavior used by service/start
+      gates.
+    - When configured, an environment is considered "up" only after:
+      1) containers are running, and
+      2) every listed probe currently evaluates to success.
+    - When omitted/null/empty, readiness falls back to container-running state
+      only (legacy behavior).
+    """
+
+    when_probes: Optional[list[str]] = None
+
+
+@dataclass
 class ServiceTemplateCfg(Resolvable):
     """
     Represents a service template configuration.
@@ -627,6 +656,7 @@ class EnvironmentTemplateCfg(Resolvable):
     probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
+    ready: Optional[ReadyCfg] = None
 
 
 @dataclass
@@ -642,6 +672,7 @@ class EnvironmentCfg(Resolvable):
     probes: Optional[list[ProbeCfg]]
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
+    ready: Optional[ReadyCfg] = None
     status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
@@ -805,7 +836,10 @@ class Config(Resolvable):
 
 def parse_config(yaml_str: str) -> Config:
     """
-    Parses a YAML string into a `Config` object.
+    Parse YAML into the strongly typed configuration model.
+
+    Parsing normalizes schema-level defaults and converts bool YAML scalars
+    into canonical string flags for fields managed via `boolify`.
     """
 
     data = yaml.safe_load(yaml_str)
@@ -879,6 +913,11 @@ def parse_config(yaml_str: str) -> Config:
 
     def parse_start(item: Any) -> StartCfg:
         return StartCfg(
+            when_probes=item.get("when_probes", []),
+        )
+
+    def parse_ready(item: Any) -> ReadyCfg:
+        return ReadyCfg(
             when_probes=item.get("when_probes", []),
         )
 
@@ -977,6 +1016,7 @@ def parse_config(yaml_str: str) -> Config:
                 for svc_templ_ref in item.get("service_templates", [])
             ],
             probes=[parse_probe(probe) for probe in item.get("probes", [])],
+            ready=parse_ready(item["ready"]) if item.get("ready") else None,
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -1000,6 +1040,7 @@ def parse_config(yaml_str: str) -> Config:
                 parse_service(service) for service in item.get("services", [])
             ],
             probes=[parse_probe(probe) for probe in item.get("probes", [])],
+            ready=parse_ready(item["ready"]) if item.get("ready") else None,
             networks=[
                 parse_network(network) for network in item.get("networks", [])
             ],
@@ -1161,6 +1202,10 @@ class ConfigMng:
 
         :raises FileNotFoundError: If the config file is missing.
         :raises ValueError: If a line is invalid (missing '=' separator).
+
+        Notes:
+            Expansion is one-pass in file order. A key can reference only
+            values already defined above it (plus environment variables).
         """
         user_values: Dict[str, str] = {}
 
@@ -1207,6 +1252,7 @@ class ConfigMng:
         with open(self.constants.SHPD_CONFIG_FILE, "r", encoding="utf-8") as f:
             config_data = yaml.safe_load(f)
 
+        # Reparse through model constructors to normalize defaults/types.
         config = parse_config(yaml.dump(config_data, sort_keys=False))
         config.set_resolver(self.user_values)
         return config
@@ -1224,6 +1270,7 @@ class ConfigMng:
 
         :param config: The `Config` object to be saved.
         """
+        # Persist unresolved values so placeholders remain in the file.
         config.set_unresolved()
         config_dict = cfg_asdict(config)
         config.set_resolved()
@@ -1376,6 +1423,7 @@ class ConfigMng:
         :param envTag: The tag of the environment to be added/replaced.
         :param newEnv: The new environment configuration.
         """
+        # Ensure we mutate/store the canonical unresolved config tree.
         self.config.set_unresolved()
         for i, env in enumerate(self.config.envs):
             if env.tag == envTag:
@@ -1521,6 +1569,7 @@ class ConfigMng:
             tag=env_tag,
             services=services,
             probes=env_tmpl_cfg.probes,
+            ready=deepcopy(env_tmpl_cfg.ready),
             networks=env_tmpl_cfg.networks,
             volumes=env_tmpl_cfg.volumes,
         )
@@ -1535,6 +1584,7 @@ class ConfigMng:
             tag=other.tag,
             services=deepcopy(other.services),
             probes=deepcopy(other.probes),
+            ready=deepcopy(other.ready),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
         )

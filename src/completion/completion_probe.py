@@ -23,6 +23,7 @@ from config import ConfigMng
 
 
 class CompletionProbeMng(AbstractCompletionMng):
+    """Probe argument completer for `get probe` and `check probe` flows."""
 
     def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
         self.cli_flags = cli_flags
@@ -30,6 +31,7 @@ class CompletionProbeMng(AbstractCompletionMng):
 
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
+        """Dispatch probe completion by verb using command-specific offsets."""
         command = args[0]
         match command:
             case "get":

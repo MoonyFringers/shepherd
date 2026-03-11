@@ -17,6 +17,11 @@
 
 from pathlib import Path
 
+import pytest
+from pytest_mock import MockerFixture
+
+from util.util import Util
+
 
 def read_fixture(*parts: str) -> str:
     """
@@ -26,3 +31,19 @@ def read_fixture(*parts: str) -> str:
     here = Path(__file__).resolve().parent
     fixtures_dir = here / "fixtures"
     return (fixtures_dir.joinpath(*parts)).read_text(encoding="utf-8")
+
+
+def test_print_error_and_die_uses_minimal_error_prefix(
+    mocker: MockerFixture,
+):
+    console = mocker.Mock()
+    mocker.patch.object(Util, "console", console)
+
+    with pytest.raises(SystemExit) as excinfo:
+        Util.print_error_and_die("test failure")
+
+    assert excinfo.value.code == 1
+    console.print.assert_called_once_with(
+        "[red]Error:[/red] test failure",
+        highlight=False,
+    )

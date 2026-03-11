@@ -282,7 +282,12 @@ def test_store_config_with_real_files():
         with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
             y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
-            y2: str = yaml.dump(yaml.safe_load(config_yaml), sort_keys=True)
+            expected = yaml.safe_load(config_yaml)
+            for item in expected.get("env_templates", []):
+                item.setdefault("ready", None)
+            for item in expected.get("envs", []):
+                item.setdefault("ready", None)
+            y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
     finally:
@@ -441,9 +446,12 @@ def test_store_config_with_refs_with_real_files():
         with open(".shpd.yaml", "r") as output_file:
             content = output_file.read()
             y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
-            y2: str = yaml.dump(
-                yaml.safe_load(config_yaml_with_refs), sort_keys=True
-            )
+            expected = yaml.safe_load(config_yaml_with_refs)
+            for item in expected.get("env_templates", []):
+                item.setdefault("ready", None)
+            for item in expected.get("envs", []):
+                item.setdefault("ready", None)
+            y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
     finally:

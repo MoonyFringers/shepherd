@@ -40,6 +40,34 @@ docker_compose_ps_output = """
 {"Command":"\"docker-entrypoint.s…\"","Status":"Wrong JSON"}
 """
 
+test_env_running_ps_output = (
+    '{"Service":"container-1-test-1-test-1","State":"running"}\n'
+    '{"Service":"container-1-test-2-test-1","State":"running"}\n'
+)
+
+
+def mock_subprocess_with_running_ps(mocker: MockerFixture):
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        cmd = cast(list[str], args[0]) if args else []
+        if "ps" in cmd:
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=0,
+                stdout=test_env_running_ps_output,
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        )
+
+    return mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        side_effect=fake_run,
+    )
+
 
 @pytest.fixture
 def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
@@ -215,7 +243,9 @@ status:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    expected_obj.setdefault("ready", None)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
@@ -374,7 +404,9 @@ status:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    expected_obj.setdefault("ready", None)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
@@ -617,20 +649,11 @@ def test_start_env(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
-
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "up", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
-    assert mock_subproc.call_count == 2
+    assert mock_subproc.call_count >= 2
     assert any(
         "ps" in (call.args[0] if call.args else [])
         for call in mock_subproc.call_args_list
@@ -802,12 +825,19 @@ def test_start_rolls_back_with_stop_on_non_recoverable_gate_failure(
         ],
     )
 
-    with pytest.raises(NonRecoverableStartError):
+    die_mock = mocker.patch(
+        "environment.environment.Util.print_error_and_die",
+        side_effect=RuntimeError("die"),
+    )
+    with pytest.raises(RuntimeError, match="die"):
         env.start(timeout_seconds=5)
 
     assert run_compose_mock.call_count == 2
     assert run_compose_mock.call_args_list[0].args[1:3] == ("up", "-d")
     assert run_compose_mock.call_args_list[1].args[1:2] == ("down",)
+    die_mock.assert_called_once_with(
+        "Failed to start gate 'ungated' for environment 'rollback-env'."
+    )
 
 
 @pytest.mark.docker
@@ -1058,7 +1088,11 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
         ],
     )
 
-    with pytest.raises(NonRecoverableStartError):
+    die_mock = mocker.patch(
+        "environment.environment.Util.print_error_and_die",
+        side_effect=RuntimeError("die"),
+    )
+    with pytest.raises(RuntimeError, match="die"):
         env.start(timeout_seconds=5)
 
     assert run_compose_mock.call_count == 3
@@ -1070,6 +1104,10 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
     assert "--- stderr ---" in err["body"]
     assert "init-err" in err["body"]
     assert run_compose_mock.call_args_list[2].args[1:2] == ("down",)
+    die_mock.assert_called_once_with(
+        "Failed to run init 'seed' for container 'api' in environment "
+        "'init-fail-env'."
+    )
 
 
 @pytest.mark.docker
@@ -1327,15 +1365,7 @@ def test_stop_env(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "restart"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -1351,7 +1381,7 @@ def test_stop_env(
 
     result = runner.invoke(cli, ["halt", "env"])
     assert result.exit_code == 0
-    assert mock_subproc.call_count == 2
+    assert mock_subproc.call_count >= 2
     assert any(
         "ps" in (call.args[0] if call.args else [])
         for call in mock_subproc.call_args_list
@@ -1377,15 +1407,7 @@ def test_reload_env(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "restart"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -1627,15 +1649,7 @@ def test_check_probe(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
@@ -1694,15 +1708,7 @@ def test_check_probe_flag_verbose(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
@@ -1734,15 +1740,7 @@ def test_check_probe_with_probe_tag(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
@@ -1774,15 +1772,7 @@ def test_check_probe_with_missing_probe_tag(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0
@@ -1814,15 +1804,7 @@ def test_check_probe_timeout(
     shpd_yaml = shpd_path / ".shpd.yaml"
     shpd_yaml.write_text(read_fixture("env_docker", "shpd.yaml"))
 
-    mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
     assert result.exit_code == 0

@@ -22,6 +22,7 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
+from typing import cast
 
 import pytest
 import yaml
@@ -30,6 +31,44 @@ from pytest_mock import MockerFixture
 from test_util import read_fixture
 
 from shepctl import cli
+
+svc_env_running_ps_output = (
+    '{"Service":"container-1-test-test-1","State":"running"}\n'
+    '{"Service":"container-1-test-1-test-1","State":"running"}\n'
+    '{"Service":"container-2-test-1-test-1","State":"running"}\n'
+    '{"Service":"container-1-test-2-test-1","State":"running"}\n'
+    '{"Service":"container-1-test-3-test-1","State":"running"}\n'
+    '{"Service":"container-1-test-4-test-1","State":"running"}\n'
+)
+
+
+def mock_subprocess_with_running_ps(mocker: MockerFixture):
+    def fake_run(
+        *args: object, **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        cmd = (
+            cast(list[str], args[0])
+            if args and isinstance(args[0], list)
+            else []
+        )
+        if "ps" in cmd:
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=0,
+                stdout=svc_env_running_ps_output,
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        )
+
+    return mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        side_effect=fake_run,
+    )
 
 
 @pytest.fixture
@@ -239,15 +278,7 @@ def test_start_svc(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "up", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -278,15 +309,7 @@ def test_start_svc_cnt_2(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "up", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -317,15 +340,7 @@ def test_stop_svc(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -356,15 +371,7 @@ def test_stop_svc_cnt_2(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -395,15 +402,7 @@ def test_reload_svc(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -434,15 +433,7 @@ def test_reload_svc_cnt_2(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -473,15 +464,7 @@ def test_logs_svc(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -512,15 +495,7 @@ def test_logs_svc_cnt_2(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -551,15 +526,7 @@ def test_shell_svc(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 
@@ -590,15 +557,7 @@ def test_shell_svc_cnt_2(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "start", "-d"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
-    )
+    mock_subproc = mock_subprocess_with_running_ps(mocker)
 
     result = runner.invoke(cli, ["up", "env"])
 

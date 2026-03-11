@@ -85,7 +85,15 @@ class DockerComposeEnv(Environment):
         started_gate_keys: set[str],
         probe_results: Optional[list[ProbeRunResult]] = None,
     ) -> set[str]:
-        """Start the environment according to probe-gate availability."""
+        """
+        Start only gates whose probe requirements are currently satisfied.
+
+        Each gate is brought up using a compose stack that includes:
+        - all previously started gates
+        - the gate being opened now
+        This keeps dependencies visible to compose while preserving
+        phased start.
+        """
         rendered_map = self.envCfg.status.rendered_config or {}
         if not rendered_map:
             return set()
@@ -111,6 +119,8 @@ class DockerComposeEnv(Environment):
                 ):
                     continue
 
+            # Include already-open gates so compose operates on one
+            # coherent view.
             compose_stack = [
                 rendered_map[k]
                 for k in rendered_map.keys()
@@ -142,6 +152,8 @@ class DockerComposeEnv(Environment):
         started_gate_keys: set[str],
         probe_results: Optional[list[ProbeRunResult]],
     ) -> None:
+        """Run container init scripts that are now eligible and
+        not yet executed."""
         rendered_map = self.envCfg.status.rendered_config or {}
         if not rendered_map:
             return
@@ -182,6 +194,10 @@ class DockerComposeEnv(Environment):
         active_gate_keys: set[str],
         probe_status: dict[str, bool],
     ) -> None:
+        """
+        Execute init scripts once, after both service gate and
+        init gate are open.
+        """
         for svc in self.services:
             gate_key = self._service_gate_key(svc)
             if gate_key not in active_gate_keys:
@@ -241,6 +257,8 @@ class DockerComposeEnv(Environment):
         init: InitCfg,
         probe_status: dict[str, bool],
     ) -> bool:
+        # `_started_init_keys` guarantees idempotency across
+        # probe polling cycles.
         init_key = f"{svc_tag}|{container_tag}|{init.tag}"
         if init_key in self._started_init_keys:
             return False
@@ -606,6 +624,9 @@ class DockerComposeEnv(Environment):
         log_command: bool = True,
         category: Optional[str] = None,
     ):
+        """
+        Unified compose execution wrapper with command/error tracking hooks.
+        """
         should_log = log_command and self.is_command_log_enabled()
         result = run_compose(
             yamls,

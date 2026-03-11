@@ -33,6 +33,9 @@ class AbstractCompletionMng(ABC):
         self.configMng = configMng
 
     def get_completions(self, args: list[str]) -> list[str]:
+        """
+        Public completion entrypoint used by the CLI completion command.
+        """
         return self.get_completions_impl(args)
 
     @abstractmethod
