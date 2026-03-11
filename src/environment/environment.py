@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -26,6 +27,8 @@ from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
+
+import yaml
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
@@ -712,15 +715,26 @@ class EnvironmentMng:
         Util.print(env.envCfg.tag)
 
     def render_env(
-        self, env_tag: str, target: bool, resolved: bool, grouped: bool = False
+        self,
+        env_tag: str,
+        target: bool,
+        resolved: bool,
+        output: str = "yaml",
+        grouped: bool = False,
     ) -> Optional[str]:
         """Render an environment configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
                 if grouped:
-                    return env.render_target_grouped(resolved)
-                return env.render_target_merged(resolved)
+                    rendered = env.render_target_grouped(resolved)
+                else:
+                    rendered = env.render_target_merged(resolved)
+                if output == "json":
+                    return json.dumps(yaml.safe_load(rendered), indent=2)
+                return rendered
+            if output == "json":
+                return env.envCfg.get_json(resolved)
             return env.render(resolved)
         return None
 
