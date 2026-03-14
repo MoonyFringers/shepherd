@@ -174,30 +174,6 @@ def test_cli_flags_yes(
 
 
 @pytest.mark.shpd
-def test_status_flags_details(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
-):
-    def assert_flags(
-        env_mng: EnvironmentMng,
-        env_cfg: EnvironmentCfg,
-        **kwargs: object,
-    ) -> None:
-        assert env_mng.cli_flags["details"] is True
-
-    mocker.patch.object(
-        EnvironmentMng, "status_env", autospec=True, side_effect=assert_flags
-    )
-    shpd_path = shpd_conf[0]
-    shpd_path.mkdir(parents=True, exist_ok=True)
-    shpd_yaml = shpd_path / ".shpd.yaml"
-    shpd_config = read_fixture("shpd", "shpd.yaml")
-    shpd_yaml.write_text(shpd_config)
-
-    result = runner.invoke(cli, ["status", "--details"])
-    assert result.exit_code == 0
-
-
-@pytest.mark.shpd
 def test_get_env_flags_details(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):

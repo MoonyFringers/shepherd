@@ -25,12 +25,11 @@ import pytest
 from pytest_mock import MockerFixture
 from rich.console import Group
 from rich.panel import Panel
-from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
 from environment.environment import EnvironmentMng, ProbeRunResult
-from environment.render import build_env_details_tree
+from environment.render import build_env_details_tree, build_env_status_tree
 from environment.status_wait import (
     WaitForEnvStateHooks,
     render_moving_shadow_text,
@@ -63,7 +62,7 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
         ({}, False, False, False),
         ({}, False, False, False),
         (
-            {"svc": [["cnt", "[white]running[/white]"]]},
+            {"svc": [["cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -90,13 +89,13 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     env.get_services.return_value = []
     mocker.patch.object(Util, "console", fake_console)
     mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
-    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+    mocker.patch.object(mng, "_build_env_status_tree", return_value="tree")
 
     mng.wait_for_env_up(env, timeout_seconds=2, start_action=start_action)
 
     assert start_calls["count"] == 1
     assert status_idx["value"] >= 2
-    fake_console.print.assert_called_once_with("table")
+    fake_console.print.assert_called_once_with("tree")
 
 
 def test_wait_for_env_up_propagates_action_error(mocker: MockerFixture):
@@ -199,7 +198,7 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
         ),
     )
     build_mock = mocker.patch.object(
-        mng, "_build_env_status_table", return_value="table"
+        mng, "_build_env_status_tree", return_value="tree"
     )
 
     mng.wait_for_env_down(env, timeout_seconds=1, stop_action=None)
@@ -243,7 +242,7 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -263,12 +262,12 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
     fake_console.is_terminal = False
     mocker.patch.object(Util, "console", fake_console)
     mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
-    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+    mocker.patch.object(mng, "_build_env_status_tree", return_value="tree")
 
     mng.wait_for_env_up(env, timeout_seconds=2, start_action=None)
 
     assert idx["value"] >= 2
-    fake_console.print.assert_called_once_with("table")
+    fake_console.print.assert_called_once_with("tree")
 
 
 def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
@@ -284,7 +283,7 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             False,
             True,
             True,
@@ -310,12 +309,12 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
     fake_console.is_terminal = False
     mocker.patch.object(Util, "console", fake_console)
     mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
-    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+    mocker.patch.object(mng, "_build_env_status_tree", return_value="tree")
 
     mng.wait_for_env_down(env, timeout_seconds=2, stop_action=None)
 
     assert idx["value"] >= 2
-    fake_console.print.assert_called_once_with("table")
+    fake_console.print.assert_called_once_with("tree")
 
 
 def test_wait_for_env_up_quiet_still_polls_until_running(
@@ -337,7 +336,7 @@ def test_wait_for_env_up_quiet_still_polls_until_running(
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -412,7 +411,7 @@ def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
     )
 
 
-def test_status_env_hides_gates_column(mocker: MockerFixture):
+def test_status_env_renders_tree(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     env_cfg = SimpleNamespace(tag="env-1")
     env = mocker.Mock()
@@ -426,7 +425,7 @@ def test_status_env_hides_gates_column(mocker: MockerFixture):
                     [
                         "[dim]-[/dim]",
                         "cnt-1",
-                        "[white]running[/white]",
+                        "[bold green]running[/bold green]",
                     ]
                 ]
             },
@@ -440,9 +439,10 @@ def test_status_env_hides_gates_column(mocker: MockerFixture):
 
     mng.status_env(cast(Any, env_cfg), watch=False)
 
-    printed_table = cast(Table, fake_console.print.call_args.args[0])
-    headers = [c.header for c in printed_table.columns]
-    assert headers == ["Service", "Container", "State"]
+    printed_tree = cast(Tree, fake_console.print.call_args.args[0])
+    assert str(printed_tree.label) == "[bold white]env-1[/bold white]"
+    service_node = printed_tree.children[0]
+    assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
@@ -492,8 +492,8 @@ def test_format_service_gate_details_sorted_and_colored(mocker: MockerFixture):
         gate_status={"alpha": True, "beta": False, "zeta": None},
     )
     assert details.find("alpha") < details.find("beta") < details.find("zeta")
-    assert "[bold green]alpha[/bold green]" in details
-    assert "[bold red]beta[/bold red]" in details
+    assert "[green]alpha[/green]" in details
+    assert "[red]beta[/red]" in details
     assert "[dim]zeta[/dim]" in details
 
 
@@ -520,27 +520,7 @@ def test_evaluate_gate_status_success_and_exception(mocker: MockerFixture):
     assert status_err == {"a": None, "b": None}
 
 
-def test_build_env_status_table_includes_details_column_when_enabled(
-    mocker: MockerFixture,
-):
-    mng = _new_environment_mng(mocker, cli_flags={"details": True})
-    mng_any = cast(Any, mng)
-    grouped = {
-        "svc-1": [
-            [
-                "[dim]-[/dim]",
-                "cnt-1",
-                "[white]running[/white]",
-                "[dim]a[/dim], [dim]b[/dim]",
-            ]
-        ]
-    }
-    table = mng_any._build_env_status_table("env-1", grouped)
-    headers = [c.header for c in table.columns]
-    assert headers == ["Gates", "Service", "Container", "State", "Probes"]
-
-
-def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
+def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     mng_any = cast(Any, mng)
     grouped = {
@@ -548,19 +528,20 @@ def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[white]running[/white]",
+                "[bold green]running[/bold green]",
+                "[dim]-[/dim]",
             ]
         ]
     }
 
-    renderable = mng_any._build_env_status_table(
+    renderable = mng_any._build_env_status_tree(
         "env-1",
         grouped,
         command_log=["[green]ok[/green]", "[red]fail[/red]"],
         command_log_limit=4,
     )
     assert isinstance(renderable, Group)
-    assert isinstance(renderable.renderables[0], Table)
+    assert isinstance(renderable.renderables[0], Tree)
     assert isinstance(renderable.renderables[1], Panel)
     panel = renderable.renderables[1]
     assert panel.title == "Recent Commands"
@@ -570,7 +551,7 @@ def test_build_env_status_table_with_command_log_panel(mocker: MockerFixture):
     assert len(str(panel.renderable).splitlines()) == 4
 
 
-def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
+def test_build_env_status_tree_with_error_panel(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     mng_any = cast(Any, mng)
     grouped = {
@@ -578,12 +559,13 @@ def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
             [
                 "[dim]-[/dim]",
                 "cnt-1",
-                "[white]running[/white]",
+                "[bold green]running[/bold green]",
+                "[dim]-[/dim]",
             ]
         ]
     }
 
-    renderable = mng_any._build_env_status_table(
+    renderable = mng_any._build_env_status_tree(
         "env-1",
         grouped,
         command_log=["[green]ok[/green]"],
@@ -601,6 +583,117 @@ def test_build_env_status_table_with_error_panel(mocker: MockerFixture):
     assert error_panel.title == "Command start:db failed"
     assert error_panel.border_style == "red"
     assert len(str(error_panel.renderable).splitlines()) == 2
+
+
+def test_build_env_status_tree_returns_tree_with_service_metadata():
+    grouped = {
+        "svc-1": [
+            [
+                "[bold green]✓[/bold green]",
+                "cnt-1",
+                "[bold green]running[/bold green]",
+                "[bold green]probe-a[/bold green]",
+            ],
+            ["", "cnt-2", "[dim]stopped[/dim]", ""],
+        ]
+    }
+
+    renderable = build_env_status_tree(
+        "env-1",
+        grouped,
+        details_enabled=True,
+    )
+
+    assert isinstance(renderable, Tree)
+    assert str(renderable.label) == "[bold white]env-1[/bold white]"
+    service_node = renderable.children[0]
+    assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
+    assert (
+        Text.from_markup(str(service_node.children[0].label)).plain == "gates"
+    )
+    gate_labels = [
+        str(child.label) for child in service_node.children[0].children
+    ]
+    assert "[bold green]probe-a[/bold green]" in gate_labels
+    child_labels = [str(child.label) for child in service_node.children[1:]]
+    assert (
+        "[white]cnt-1[/white]: [bold green]running[/bold green]" in child_labels
+    )
+    assert "[white]cnt-2[/white]: [dim]stopped[/dim]" in child_labels
+
+
+def test_build_env_status_tree_manager_method_returns_tree(
+    mocker: MockerFixture,
+):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]running[/bold green]",
+                "[dim]probe-a[/dim]",
+            ]
+        ]
+    }
+
+    renderable = mng_any._build_env_status_tree("env-1", grouped)
+
+    assert isinstance(renderable, Tree)
+
+
+def test_build_env_status_tree_omits_gates_node_without_probes():
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]running[/bold green]",
+                "[dim]-[/dim]",
+            ]
+        ]
+    }
+
+    renderable = build_env_status_tree(
+        "env-1",
+        grouped,
+        details_enabled=True,
+    )
+
+    assert isinstance(renderable, Tree)
+    service_node = renderable.children[0]
+    child_labels = [str(child.label) for child in service_node.children]
+    assert "[cyan]gates[/cyan]" not in child_labels
+    assert (
+        "[white]cnt-1[/white]: [bold green]running[/bold green]" in child_labels
+    )
+
+
+def test_collect_env_status_includes_probe_details_for_tree_view(
+    mocker: MockerFixture,
+):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+
+    container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
+    svc = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="svc-a",
+            containers=[container],
+            start=SimpleNamespace(when_probes=["p1", "p2"]),
+        )
+    )
+    env = mocker.Mock()
+    env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
+    env.get_services.return_value = [svc]
+
+    grouped, _, _, _ = mng_any._collect_env_status(
+        env,
+        gate_status={"p1": True, "p2": None},
+    )
+
+    assert grouped["svc-a"][0][3] == "[green]p1[/green], [dim]p2[/dim]"
 
 
 def test_collect_env_status_details_row_shape(mocker: MockerFixture):
@@ -645,7 +738,7 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
         (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             False,
             True,
             True,
@@ -670,7 +763,7 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
     fake_console.is_terminal = True
     mocker.patch.object(Util, "console", fake_console)
     mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
-    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+    mocker.patch.object(mng, "_build_env_status_tree", return_value="tree")
 
     live_updates: list[Any] = []
     live_stops = {"count": 0}
@@ -725,7 +818,7 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
         if calls["count"] == 1:
             time.sleep(0.03)
         return (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -735,7 +828,7 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
     fake_console.is_terminal = True
     mocker.patch.object(Util, "console", fake_console)
     mocker.patch.object(mng, "_collect_env_status", side_effect=collect_status)
-    mocker.patch.object(mng, "_build_env_status_table", return_value="table")
+    mocker.patch.object(mng, "_build_env_status_tree", return_value="tree")
 
     class FakeLive:
         def __init__(self, *args: Any, **kwargs: Any):
@@ -782,7 +875,7 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
             True,
         ),
         (
-            {"svc": [["-", "cnt", "[white]running[/white]"]]},
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
@@ -806,14 +899,14 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
         time.sleep(0.01)
         return status_samples[i]
 
-    build_table = mocker.Mock(return_value="table")
+    build_tree = mocker.Mock(return_value="tree")
     hooks = WaitForEnvStateHooks(
         status_poll_seconds=0.005,
         is_quiet=lambda: False,
         get_required_gate_tags=lambda _env: set(),
         evaluate_gate_status=lambda _env, _tags: {},
         collect_env_status=collect_status,
-        build_env_status_table=build_table,
+        build_env_status=build_tree,
         remaining_timeout_seconds=lambda _started, _timeout: None,
     )
 
@@ -850,7 +943,7 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
 
     suffixes = [
         Text.from_markup(call.kwargs["status_suffix"]).plain
-        for call in build_table.call_args_list
+        for call in build_tree.call_args_list
         if "status_suffix" in call.kwargs
     ]
     ready_indexes = [
@@ -908,7 +1001,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
                     [
                         "[dim]-[/dim]",
                         "cnt",
-                        "[white]running[/white]",
+                        "[bold green]running[/bold green]",
                     ]
                 ]
             },
@@ -927,14 +1020,14 @@ def test_wait_for_env_state_uses_custom_progress_label(
         status_idx["value"] += 1
         return status_samples[idx]
 
-    build_table = mocker.Mock(return_value="table")
+    build_tree = mocker.Mock(return_value="tree")
     hooks = WaitForEnvStateHooks(
         status_poll_seconds=0.001,
         is_quiet=lambda: False,
         get_required_gate_tags=lambda _env: set(),
         evaluate_gate_status=lambda _env, _tags: {},
         collect_env_status=collect_status,
-        build_env_status_table=build_table,
+        build_env_status=build_tree,
         remaining_timeout_seconds=lambda _started, _timeout: None,
     )
 
@@ -974,7 +1067,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
 
     suffixes = [
         Text.from_markup(call.kwargs["status_suffix"]).plain
-        for call in build_table.call_args_list
+        for call in build_tree.call_args_list
         if "status_suffix" in call.kwargs
     ]
     assert "Checking" in suffixes

@@ -39,7 +39,7 @@ from .render import (
     build_command_error_panel,
     build_command_log_panel,
     build_env_details_tree,
-    build_env_status_table,
+    build_env_status_tree,
     build_probe_report,
     collect_env_status,
     dump_grouped_yaml,
@@ -827,10 +827,9 @@ class EnvironmentMng:
             )
             return
         Util.console.print(
-            self._build_env_status_table(
+            self._build_env_status_tree(
                 envCfg.tag,
                 grouped,
-                hidden_columns={"Gates"},
             )
         )
 
@@ -881,7 +880,7 @@ class EnvironmentMng:
             get_required_gate_tags=self._get_required_gate_tags,
             evaluate_gate_status=self._evaluate_gate_status,
             collect_env_status=self._collect_env_status,
-            build_env_status_table=self._build_env_status_table,
+            build_env_status=self._build_env_status_tree,
             remaining_timeout_seconds=self._remaining_timeout_seconds,
         )
         wait_for_env_state(
@@ -894,7 +893,7 @@ class EnvironmentMng:
             hooks=hooks,
         )
 
-    def _build_env_status_table(
+    def _build_env_status_tree(
         self,
         env_tag: str,
         grouped: dict[str, list[list[str]]],
@@ -905,7 +904,7 @@ class EnvironmentMng:
         command_error_limit: Optional[int] = None,
         hidden_columns: Optional[set[str]] = None,
     ):
-        return build_env_status_table(
+        return build_env_status_tree(
             env_tag,
             grouped,
             details_enabled=self._is_details(),
@@ -945,7 +944,7 @@ class EnvironmentMng:
     ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         return collect_env_status(
             env,
-            details_enabled=self._is_details(),
+            details_enabled=True,
             gate_status=gate_status,
         )
 

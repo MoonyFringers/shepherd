@@ -110,7 +110,7 @@ class WaitForEnvStateHooks:
     collect_env_status: Callable[
         [Any, Optional[GateStatus]], CollectStatusResult
     ]
-    build_env_status_table: Callable[..., Any]
+    build_env_status: Callable[..., Any]
     remaining_timeout_seconds: Callable[[float, Optional[int]], Optional[int]]
 
 
@@ -268,7 +268,7 @@ def wait_for_env_state(
     ) -> Any:
         # Centralize all table-side decorations so the render loops can focus
         # on state transitions instead of repeatedly wiring optional panels.
-        return hooks.build_env_status_table(
+        return hooks.build_env_status(
             env.envCfg.tag,
             grouped,
             hidden_columns=hidden_columns,

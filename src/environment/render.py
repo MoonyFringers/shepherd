@@ -23,7 +23,6 @@ import yaml
 from rich import box
 from rich.console import Group
 from rich.panel import Panel
-from rich.table import Table
 from rich.tree import Tree
 
 from util import Util
@@ -79,9 +78,9 @@ def format_service_gate_details(
             continue
         probe_ok = gate_status.get(probe_tag)
         if probe_ok is True:
-            parts.append(f"[bold green]{probe_tag}[/bold green]")
+            parts.append(f"[green]{probe_tag}[/green]")
         elif probe_ok is False:
-            parts.append(f"[bold red]{probe_tag}[/bold red]")
+            parts.append(f"[red]{probe_tag}[/red]")
         else:
             parts.append(f"[dim]{probe_tag}[/dim]")
     return ", ".join(parts)
@@ -133,7 +132,7 @@ def collect_env_status(
 
             if state == "running":
                 any_running = True
-                state_colored = "[white]running[/white]"
+                state_colored = "[bold green]running[/bold green]"
             elif state == "stopped":
                 state_colored = "[dim]stopped[/dim]"
             else:
@@ -263,7 +262,7 @@ def build_command_error_panel(
     )
 
 
-def build_env_status_table(
+def build_env_status_tree(
     env_tag: str,
     grouped: dict[str, list[list[str]]],
     *,
@@ -275,58 +274,39 @@ def build_env_status_table(
     command_error_limit: Optional[int] = None,
     hidden_columns: Optional[set[str]] = None,
 ) -> Any:
-    """
-    Render the environment status table and optional side panels.
-
-    The table is driven by `grouped` rows from `collect_env_status`.
-    When command log/error inputs are provided, the function returns a
-    Rich `Group` with the table plus panels; otherwise it returns `Table`.
-    """
-    title = f"[white]{env_tag}[/white]"
+    """Render the environment status as a tree with optional side panels."""
+    title = f"[bold white]{env_tag}[/bold white]"
     if status_suffix:
         title = f"{title} {status_suffix}"
-    table = Table(
-        title=title,
-        box=box.SIMPLE,
-        title_justify="left",
-        title_style="bold",
-    )
-    hidden = hidden_columns or set()
-    column_order = ["Gates", "Service", "Container", "State"]
-    if details_enabled:
-        column_order.append("Probes")
-    visible_columns = [c for c in column_order if c not in hidden]
 
-    for col in visible_columns:
-        if col in ("Gates", "Service"):
-            table.add_column(col, style="cyan", no_wrap=True)
-        elif col == "Container":
-            table.add_column(col, style="white", no_wrap=True)
-        elif col == "Probes":
-            table.add_column(col, style="white")
-        else:
-            table.add_column(col, no_wrap=True)
+    hidden = hidden_columns or set()
+    tree = Tree(title, guide_style="dim")
 
     for service, items in grouped.items():
-        for idx, item in enumerate(items):
-            gate_details = ""
-            if details_enabled:
-                gates, container, state, gate_details = item
-            else:
-                gates, container, state = item
-            is_last = idx == len(items) - 1
-            branch = "└─" if is_last else "├─"
-            row_map = {
-                "Gates": gates if idx == 0 else "",
-                "Service": f"[bold]{service}[/bold]" if idx == 0 else "",
-                "Container": f"{branch} {container}",
-                "State": state,
-                "Probes": gate_details if idx == 0 else "",
-            }
-            row = [row_map[c] for c in visible_columns]
-            table.add_row(*row)
+        service_node = tree.add(f"[bold cyan]{service}[/bold cyan]")
+        if not items:
+            continue
 
-    panels: list[Any] = [table]
+        first_row = items[0]
+        probe_details = first_row[3] if len(first_row) > 3 else None
+        has_probe_details = bool(
+            probe_details and probe_details != "[dim]-[/dim]"
+        )
+
+        if "Gates" not in hidden and has_probe_details:
+            probe_details_text = cast(str, probe_details)
+            gates_node = service_node.add("[bold magenta]gates[/bold magenta]")
+            for probe_detail in probe_details_text.split(", "):
+                gates_node.add(probe_detail)
+        elif details_enabled and has_probe_details:
+            service_node.add(f"[white]probes[/white]: {probe_details}")
+
+        for item in items:
+            container = item[1]
+            state = item[2]
+            service_node.add(f"[white]{container}[/white]: {state}")
+
+    panels: list[Any] = [tree]
     if command_log is not None and command_log_limit is not None:
         panels.append(build_command_log_panel(command_log, command_log_limit))
     if command_error:
@@ -334,7 +314,7 @@ def build_env_status_table(
             build_command_error_panel(command_error, command_error_limit)
         )
     if len(panels) == 1:
-        return table
+        return tree
     return Group(*panels)
 
 
