@@ -731,6 +731,69 @@ def test_build_env_status_tree_omits_gates_node_without_probes():
     )
 
 
+def test_build_env_status_tree_applies_flash_to_changed_nodes():
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]running[/bold green]",
+                "[green]probe-a[/green], [dim]probe-b[/dim]",
+            ]
+        ]
+    }
+
+    renderable = build_env_status_tree(
+        "env-1",
+        grouped,
+        details_enabled=True,
+        flashing_containers={"svc-1/cnt-1"},
+        flashing_probes={("svc-1", "probe-a")},
+    )
+
+    tree = cast(Tree, cast(Group, renderable).renderables[0])
+    service_node = tree.children[0]
+    gates_node = service_node.children[0]
+    gate_labels = [str(child.label) for child in gates_node.children]
+    child_labels = [str(child.label) for child in service_node.children[1:]]
+
+    assert "[bold black on green]probe-a[/bold black on green]" in gate_labels
+    assert (
+        "[white]cnt-1[/white]: "
+        "[bold black on green]running[/bold black on green]" in child_labels
+    )
+
+
+def test_build_env_status_tree_applies_flash_to_changed_summary_values():
+    grouped = {
+        "svc-1": [
+            [
+                "[dim]-[/dim]",
+                "cnt-1",
+                "[bold green]running[/bold green]",
+                "[green]probe-a[/green]",
+            ]
+        ]
+    }
+
+    renderable = build_env_status_tree(
+        "env-1",
+        grouped,
+        details_enabled=True,
+        flashing_summary_keys={"RUNNING", "GATES OK"},
+    )
+
+    summary = cast(Text, cast(Group, renderable).renderables[1])
+    assert "RUNNING: 1" in summary.plain
+    assert "GATES OK: 1" in summary.plain
+    assert len(summary.spans) >= 2
+    assert any(
+        span.style == "bold black on green"
+        and summary.plain[span.start : span.end] == "1"
+        for span in summary.spans
+    )
+
+
 def test_collect_env_status_includes_probe_details_for_tree_view(
     mocker: MockerFixture,
 ):
@@ -1012,6 +1075,203 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
     ]
     assert ready_indexes
     assert any(suffix != "Ready" for suffix in suffixes[ready_indexes[0] + 1 :])
+
+
+def test_wait_for_env_up_watch_flashes_ready_badge_briefly(
+    mocker: MockerFixture,
+):
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {"svc": [["-", "cnt", "[yellow]starting[/yellow]"]]},
+            False,
+            True,
+            True,
+        ),
+        (
+            {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
+            True,
+            True,
+            True,
+        ),
+    ]
+    idx = {"value": 0}
+
+    def collect_status(
+        _env: Any, _gate_status: Any = None
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        idx["value"] += 1
+        if idx["value"] > 130:
+            raise RuntimeError("stop-watch")
+        sample_idx = 0 if idx["value"] == 1 else 1
+        time.sleep(0.005)
+        return status_samples[sample_idx]
+
+    build_tree = mocker.Mock(return_value="tree")
+    hooks = WaitForEnvStateHooks(
+        status_poll_seconds=0.005,
+        is_quiet=lambda: False,
+        get_required_gate_tags=lambda _env: set(),
+        evaluate_gate_status=lambda _env, _tags: {},
+        collect_env_status=collect_status,
+        build_env_status=build_tree,
+        remaining_timeout_seconds=lambda _started, _timeout: None,
+    )
+
+    class FakeLive:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def update(self, renderable: Any):
+            del renderable
+
+        def stop(self):
+            pass
+
+    mocker.patch("environment.status_wait.Live", FakeLive)
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = True
+    mocker.patch.object(Util, "console", fake_console)
+
+    with pytest.raises(RuntimeError, match="stop-watch"):
+        wait_for_env_state(
+            env,
+            timeout_seconds=None,
+            action=None,
+            wait_until_up=True,
+            watch_after=True,
+            hooks=hooks,
+        )
+
+    suffixes = [
+        call.kwargs["status_suffix"]
+        for call in build_tree.call_args_list
+        if "status_suffix" in call.kwargs
+    ]
+    assert "[bold black on green]Ready[/bold black on green]" in suffixes
+
+
+def test_wait_for_env_up_watch_marks_changed_container_and_probe_for_flash(
+    mocker: MockerFixture,
+):
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+
+    status_samples: list[
+        tuple[dict[str, list[list[str]]], bool, bool, bool]
+    ] = [
+        (
+            {
+                "svc": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt",
+                        "[yellow]starting[/yellow]",
+                        "[dim]probe-a[/dim]",
+                    ]
+                ]
+            },
+            False,
+            True,
+            True,
+        ),
+        (
+            {
+                "svc": [
+                    [
+                        "[dim]-[/dim]",
+                        "cnt",
+                        "[bold green]running[/bold green]",
+                        "[green]probe-a[/green]",
+                    ]
+                ]
+            },
+            True,
+            True,
+            True,
+        ),
+    ]
+    idx = {"value": 0}
+
+    def collect_status(
+        _env: Any, _gate_status: Any = None
+    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+        idx["value"] += 1
+        if idx["value"] > 12:
+            raise RuntimeError("stop-watch")
+        sample_idx = 0 if idx["value"] == 1 else 1
+        time.sleep(0.005)
+        return status_samples[sample_idx]
+
+    build_tree = mocker.Mock(return_value="tree")
+    hooks = WaitForEnvStateHooks(
+        status_poll_seconds=0.005,
+        is_quiet=lambda: False,
+        get_required_gate_tags=lambda _env: set(),
+        evaluate_gate_status=lambda _env, _tags: {},
+        collect_env_status=collect_status,
+        build_env_status=build_tree,
+        remaining_timeout_seconds=lambda _started, _timeout: None,
+    )
+
+    class FakeLive:
+        def __init__(self, *args: Any, **kwargs: Any):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> bool:
+            return False
+
+        def update(self, renderable: Any):
+            del renderable
+
+        def stop(self):
+            pass
+
+    mocker.patch("environment.status_wait.Live", FakeLive)
+    fake_console = mocker.Mock()
+    fake_console.is_terminal = True
+    mocker.patch.object(Util, "console", fake_console)
+
+    with pytest.raises(RuntimeError, match="stop-watch"):
+        wait_for_env_state(
+            env,
+            timeout_seconds=None,
+            action=None,
+            wait_until_up=True,
+            watch_after=True,
+            hooks=hooks,
+        )
+
+    flashing_calls = [
+        call.kwargs
+        for call in build_tree.call_args_list
+        if call.kwargs.get("flashing_containers")
+        or call.kwargs.get("flashing_probes")
+    ]
+    assert any(
+        "svc/cnt" in kwargs["flashing_containers"] for kwargs in flashing_calls
+    )
+    assert any(
+        ("svc", "probe-a") in kwargs["flashing_probes"]
+        for kwargs in flashing_calls
+    )
+    assert any(
+        "RUNNING" in kwargs["flashing_summary_keys"]
+        for kwargs in flashing_calls
+    )
 
 
 def test_render_moving_shadow_text_is_deterministic_per_tick():

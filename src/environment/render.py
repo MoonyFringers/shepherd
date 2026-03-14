@@ -265,11 +265,24 @@ def build_command_error_panel(
 
 def build_summary_renderable(items: list[tuple[str, str]]) -> Text:
     """Build a compact summary line renderable."""
+    return build_summary_renderable_with_flash(items, flashing_keys=None)
+
+
+def build_summary_renderable_with_flash(
+    items: list[tuple[str, str]],
+    *,
+    flashing_keys: Optional[set[str]],
+) -> Text:
+    """Build a compact summary line renderable with optional flashes."""
     summary = Text("Summary:", style="bold")
+    flashing = flashing_keys or set()
     for key, value in items:
         summary.append("  ")
         summary.append(f"{key}: ", style="dim")
-        summary.append(value)
+        if key in flashing:
+            summary.append(value, style=_summary_flash_style(key))
+        else:
+            summary.append(value)
     return summary
 
 
@@ -278,11 +291,17 @@ def build_tree_summary_group(
     summary_items: list[tuple[str, str]],
     *,
     extras: Optional[list[Any]] = None,
+    flashing_summary_keys: Optional[set[str]] = None,
 ) -> Any:
     """Combine a tree, summary, and optional extra panels."""
     renderables: list[Any] = [tree]
     if summary_items:
-        renderables.append(build_summary_renderable(summary_items))
+        renderables.append(
+            build_summary_renderable_with_flash(
+                summary_items,
+                flashing_keys=flashing_summary_keys,
+            )
+        )
     renderables.extend(extras or [])
     if len(renderables) == 1:
         return tree
@@ -352,6 +371,9 @@ def build_env_status_tree(
     command_error: Optional[dict[str, str]] = None,
     command_error_limit: Optional[int] = None,
     hidden_columns: Optional[set[str]] = None,
+    flashing_containers: Optional[set[str]] = None,
+    flashing_probes: Optional[set[tuple[str, str]]] = None,
+    flashing_summary_keys: Optional[set[str]] = None,
 ) -> Any:
     """Render the environment status as a tree with optional side panels."""
     title = f"[bold white]{env_tag}[/bold white]"
@@ -359,6 +381,8 @@ def build_env_status_tree(
         title = f"{title} {status_suffix}"
 
     hidden = hidden_columns or set()
+    flashing_container_keys = flashing_containers or set()
+    flashing_probe_keys = flashing_probes or set()
     tree = Tree(title, guide_style="dim")
 
     for service, items in grouped.items():
@@ -376,14 +400,25 @@ def build_env_status_tree(
             probe_details_text = cast(str, probe_details)
             gates_node = service_node.add("[bold magenta]gates[/bold magenta]")
             for probe_detail in probe_details_text.split(", "):
-                gates_node.add(probe_detail)
+                probe_tag = Text.from_markup(probe_detail).plain
+                probe_key = (service, probe_tag)
+                if probe_key in flashing_probe_keys:
+                    gates_node.add(_flash_markup(probe_detail))
+                else:
+                    gates_node.add(probe_detail)
         elif details_enabled and has_probe_details:
             service_node.add(f"[white]probes[/white]: {probe_details}")
 
         for item in items:
             container = item[1]
             state = item[2]
-            service_node.add(f"[white]{container}[/white]: {state}")
+            container_key = f"{service}/{container}"
+            rendered_state = (
+                _flash_markup(state)
+                if container_key in flashing_container_keys
+                else state
+            )
+            service_node.add(f"[white]{container}[/white]: {rendered_state}")
 
     panels: list[Any] = []
     if command_log is not None and command_log_limit is not None:
@@ -396,6 +431,7 @@ def build_env_status_tree(
         tree,
         build_env_status_summary(grouped),
         extras=panels,
+        flashing_summary_keys=flashing_summary_keys,
     )
 
 
@@ -426,10 +462,22 @@ def probe_status_color_tag(key: str) -> str:
     return "red"
 
 
+def _flash_markup(markup: str) -> str:
+    plain = Text.from_markup(markup).plain
+    if "[green]" in markup or "[bold green]" in markup:
+        return f"[bold black on green]{plain}[/bold black on green]"
+    if "[red]" in markup or "[bold red]" in markup:
+        return f"[bold white on red]{plain}[/bold white on red]"
+    if "[yellow]" in markup or "[bold yellow]" in markup:
+        return f"[bold black on yellow]{plain}[/bold black on yellow]"
+    return f"[bold black on white]{plain}[/bold black on white]"
+
+
 def build_probe_status_tree(
     results: Sequence[ProbeRunResultLike],
     *,
     title: str,
+    flashing_summary_keys: Optional[set[str]] = None,
 ) -> Any:
     """Render probe check results as a tree of color-coded probe tags."""
     tree = Tree(title, guide_style="dim")
@@ -440,7 +488,18 @@ def build_probe_status_tree(
     return build_tree_summary_group(
         tree,
         build_probe_status_summary(results),
+        flashing_summary_keys=flashing_summary_keys,
     )
+
+
+def _summary_flash_style(key: str) -> str:
+    if key in {"RUNNING", "GATES OK", "OK"}:
+        return "bold black on green"
+    if key in {"STOPPED", "GATES FAILED", "FAILED"}:
+        return "bold white on red"
+    if key in {"OTHER", "GATES PENDING", "TIMEOUT"}:
+        return "bold black on yellow"
+    return "bold black on white"
 
 
 def build_probe_status_summary(

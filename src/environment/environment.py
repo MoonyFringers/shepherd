@@ -893,6 +893,9 @@ class EnvironmentMng:
         command_error: Optional[dict[str, str]] = None,
         command_error_limit: Optional[int] = None,
         hidden_columns: Optional[set[str]] = None,
+        flashing_containers: Optional[set[str]] = None,
+        flashing_probes: Optional[set[tuple[str, str]]] = None,
+        flashing_summary_keys: Optional[set[str]] = None,
     ):
         return build_env_status_tree(
             env_tag,
@@ -904,6 +907,9 @@ class EnvironmentMng:
             command_error=command_error,
             command_error_limit=command_error_limit,
             hidden_columns=hidden_columns,
+            flashing_containers=flashing_containers,
+            flashing_probes=flashing_probes,
+            flashing_summary_keys=flashing_summary_keys,
         )
 
     def _build_command_log_panel(
