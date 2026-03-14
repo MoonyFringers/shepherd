@@ -40,13 +40,12 @@ from .render import (
     build_command_log_panel,
     build_env_details_tree,
     build_env_status_tree,
-    build_probe_report,
+    build_probe_status_tree,
     collect_env_status,
     dump_grouped_yaml,
     format_service_gate_details,
     format_service_gate_glyphs,
     render_env_summary,
-    render_probe_report,
 )
 from .status_wait import WaitForEnvStateHooks, wait_for_env_state
 
@@ -780,11 +779,8 @@ class EnvironmentMng:
             timeout_seconds=120,
         )
 
-        verbose = bool(self.cli_flags.get("verbose", False))
         title = f"[white]{envCfg.tag}[/white] probes"
-
-        report = self.build_probe_report(results, verbose=verbose, title=title)
-        self.render_probe_report(report)
+        Util.console.print(self._build_probe_status_tree(results, title=title))
 
         # ---- aggregate exit code ----
         for r in results:
@@ -793,19 +789,13 @@ class EnvironmentMng:
 
         return 0
 
-    # --- probe presentation policy ---
-
-    def build_probe_report(
+    def _build_probe_status_tree(
         self,
         results: list[ProbeRunResult],
         *,
-        verbose: bool,
         title: str,
-    ) -> dict[str, Any]:
-        return build_probe_report(results, verbose=verbose, title=title)
-
-    def render_probe_report(self, report: dict[str, Any]):
-        render_probe_report(report)
+    ):
+        return build_probe_status_tree(results, title=title)
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""

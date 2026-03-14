@@ -23,6 +23,7 @@ import yaml
 from rich import box
 from rich.console import Group
 from rich.panel import Panel
+from rich.text import Text
 from rich.tree import Tree
 
 from util import Util
@@ -262,6 +263,84 @@ def build_command_error_panel(
     )
 
 
+def build_summary_renderable(items: list[tuple[str, str]]) -> Text:
+    """Build a compact summary line renderable."""
+    summary = Text("Summary:", style="bold")
+    for key, value in items:
+        summary.append("  ")
+        summary.append(f"{key}: ", style="dim")
+        summary.append(value)
+    return summary
+
+
+def build_tree_summary_group(
+    tree: Tree,
+    summary_items: list[tuple[str, str]],
+    *,
+    extras: Optional[list[Any]] = None,
+) -> Any:
+    """Combine a tree, summary, and optional extra panels."""
+    renderables: list[Any] = [tree]
+    if summary_items:
+        renderables.append(build_summary_renderable(summary_items))
+    renderables.extend(extras or [])
+    if len(renderables) == 1:
+        return tree
+    return Group(*renderables)
+
+
+def build_env_status_summary(
+    grouped: dict[str, list[list[str]]],
+) -> list[tuple[str, str]]:
+    """Build a compact env status summary from grouped rows."""
+    services = len(grouped)
+    containers = running = stopped = other = 0
+    gates_ok = gates_failed = gates_pending = 0
+
+    for items in grouped.values():
+        containers += len(items)
+        for idx, item in enumerate(items):
+            state = item[2]
+            if "running" in state:
+                running += 1
+            elif "stopped" in state:
+                stopped += 1
+            else:
+                other += 1
+
+            if idx != 0 or len(item) <= 3:
+                continue
+            probe_details = item[3]
+            if probe_details == "[dim]-[/dim]":
+                continue
+            for probe_detail in probe_details.split(", "):
+                if "[green]" in probe_detail or "[bold green]" in probe_detail:
+                    gates_ok += 1
+                elif "[red]" in probe_detail or "[bold red]" in probe_detail:
+                    gates_failed += 1
+                else:
+                    gates_pending += 1
+
+    summary = [
+        ("SERVICES", str(services)),
+        ("CONTAINERS", str(containers)),
+        ("RUNNING", str(running)),
+    ]
+    if stopped:
+        summary.append(("STOPPED", str(stopped)))
+    if other:
+        summary.append(("OTHER", str(other)))
+    if gates_ok or gates_failed or gates_pending:
+        summary.extend(
+            [
+                ("GATES OK", str(gates_ok)),
+                ("GATES FAILED", str(gates_failed)),
+                ("GATES PENDING", str(gates_pending)),
+            ]
+        )
+    return summary
+
+
 def build_env_status_tree(
     env_tag: str,
     grouped: dict[str, list[list[str]]],
@@ -306,16 +385,18 @@ def build_env_status_tree(
             state = item[2]
             service_node.add(f"[white]{container}[/white]: {state}")
 
-    panels: list[Any] = [tree]
+    panels: list[Any] = []
     if command_log is not None and command_log_limit is not None:
         panels.append(build_command_log_panel(command_log, command_log_limit))
     if command_error:
         panels.append(
             build_command_error_panel(command_error, command_error_limit)
         )
-    if len(panels) == 1:
-        return tree
-    return Group(*panels)
+    return build_tree_summary_group(
+        tree,
+        build_env_status_summary(grouped),
+        extras=panels,
+    )
 
 
 class ProbeRunResultLike(Protocol):
@@ -337,41 +418,36 @@ def probe_status_key(r: ProbeRunResultLike) -> str:
     return "failed"
 
 
-def probe_status_glyph(key: str) -> str:
-    return "✔" if key == "ok" else "✖"
-
-
 def probe_status_color_tag(key: str) -> str:
     if key == "ok":
-        return "bold green"
+        return "green"
     if key == "timeout":
-        return "bold yellow"
-    return "bold red"
+        return "yellow"
+    return "red"
 
 
-def fmt_duration_ms(ms: Optional[int]) -> str:
-    return "?" if ms is None else f"{ms} ms"
-
-
-def build_probe_report(
+def build_probe_status_tree(
     results: Sequence[ProbeRunResultLike],
     *,
-    verbose: bool,
     title: str,
-) -> dict[str, Any]:
-    """
-    Convert probe execution results into a presentation-ready view model.
+) -> Any:
+    """Render probe check results as a tree of color-coded probe tags."""
+    tree = Tree(title, guide_style="dim")
+    for r in results:
+        key = probe_status_key(r)
+        color = probe_status_color_tag(key)
+        tree.add(f"[{color}]{r.tag}[/{color}]")
+    return build_tree_summary_group(
+        tree,
+        build_probe_status_summary(results),
+    )
 
-    Policy:
-    - Always include one summary row per probe.
-    - Include detail panels for failures/timeouts.
-    - Include OK detail panels only in verbose mode.
-    """
-    rows: list[list[str]] = []
-    panels: list[dict[str, Any]] = []
 
+def build_probe_status_summary(
+    results: Sequence[ProbeRunResultLike],
+) -> list[tuple[str, str]]:
+    """Build the OK/FAILED/TIMEOUT summary shown below probe trees."""
     ok = failed = timeout = 0
-
     for r in results:
         key = probe_status_key(r)
         if key == "ok":
@@ -380,73 +456,8 @@ def build_probe_report(
             timeout += 1
         else:
             failed += 1
-
-        glyph = probe_status_glyph(key)
-        label = key.upper()
-        color = probe_status_color_tag(key)
-        status_markup = f"[{color}]{glyph} {label}[/{color}]"
-
-        rows.append([r.tag, status_markup, fmt_duration_ms(r.duration_ms)])
-
-        want_details = verbose or key in ("failed", "timeout")
-        if want_details:
-            out = (r.stdout or "").strip("\n")
-            err = (r.stderr or "").strip("\n")
-
-            body_parts: list[str] = []
-            if out.strip():
-                body_parts.append("--- stdout ---")
-                body_parts.append(out)
-
-            if err.strip() and (verbose or key in ("failed", "timeout")):
-                body_parts.append("--- stderr ---")
-                body_parts.append(err)
-
-            if key != "ok":
-                body_parts.append("--- meta ---")
-                body_parts.append(f"exit_code: {r.exit_code}")
-                body_parts.append(f"timed_out: {r.timed_out}")
-
-            body = "\n".join(body_parts).strip()
-            if body:
-                border = (
-                    "green"
-                    if key == "ok"
-                    else ("yellow" if key == "timeout" else "red")
-                )
-                panels.append(
-                    {
-                        "title": f"{r.tag} ({label})",
-                        "body": body,
-                        "border_style": border,
-                    }
-                )
-    return {
-        "title": title,
-        "rows": rows,
-        "summary": [
-            ("OK", str(ok)),
-            ("FAILED", str(failed)),
-            ("TIMEOUT", str(timeout)),
-        ],
-        "panels": panels,
-    }
-
-
-def render_probe_report(report: dict[str, Any]) -> None:
-    Util.render_table(
-        title=report["title"],
-        columns=[
-            {"header": "Probe", "style": "white", "no_wrap": True},
-            {"header": "Status", "no_wrap": True},
-            {
-                "header": "Duration",
-                "justify": "right",
-                "style": "white",
-                "no_wrap": True,
-            },
-        ],
-        rows=report["rows"],
-    )
-    Util.render_kv_summary(report["summary"])
-    Util.render_panels(panels=report.get("panels") or [])
+    return [
+        ("OK", str(ok)),
+        ("FAILED", str(failed)),
+        ("TIMEOUT", str(timeout)),
+    ]

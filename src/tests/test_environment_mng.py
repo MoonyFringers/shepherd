@@ -29,7 +29,11 @@ from rich.text import Text
 from rich.tree import Tree
 
 from environment.environment import EnvironmentMng, ProbeRunResult
-from environment.render import build_env_details_tree, build_env_status_tree
+from environment.render import (
+    build_env_details_tree,
+    build_env_status_tree,
+    build_probe_status_tree,
+)
 from environment.status_wait import (
     WaitForEnvStateHooks,
     render_moving_shadow_text,
@@ -439,10 +443,13 @@ def test_status_env_renders_tree(mocker: MockerFixture):
 
     mng.status_env(cast(Any, env_cfg), watch=False)
 
-    printed_tree = cast(Tree, fake_console.print.call_args.args[0])
+    printed_group = cast(Group, fake_console.print.call_args.args[0])
+    printed_tree = cast(Tree, printed_group.renderables[0])
+    summary = cast(Text, printed_group.renderables[1])
     assert str(printed_tree.label) == "[bold white]env-1[/bold white]"
     service_node = printed_tree.children[0]
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
+    assert "RUNNING: 1" in summary.plain
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
@@ -520,6 +527,52 @@ def test_evaluate_gate_status_success_and_exception(mocker: MockerFixture):
     assert status_err == {"a": None, "b": None}
 
 
+def test_build_probe_status_tree_returns_colored_probe_nodes():
+    results = [
+        ProbeRunResult(tag="ok-probe", exit_code=0, timed_out=False),
+        ProbeRunResult(tag="failed-probe", exit_code=1, timed_out=False),
+        ProbeRunResult(tag="slow-probe", exit_code=0, timed_out=True),
+    ]
+    renderable = build_probe_status_tree(
+        results,
+        title="[white]env-1[/white] probes",
+    )
+    assert isinstance(renderable, Group)
+    tree = cast(Tree, renderable.renderables[0])
+    summary = cast(Text, renderable.renderables[1])
+    assert str(tree.label) == "[white]env-1[/white] probes"
+    child_labels = [str(child.label) for child in tree.children]
+    assert "[green]ok-probe[/green]" in child_labels
+    assert "[red]failed-probe[/red]" in child_labels
+    assert "[yellow]slow-probe[/yellow]" in child_labels
+    assert summary.plain == "Summary:  OK: 1  FAILED: 1  TIMEOUT: 1"
+
+
+def test_check_probes_renders_probe_status_tree(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    env_cfg = SimpleNamespace(tag="env-1")
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(
+        tag="env-1",
+        status=SimpleNamespace(rendered_config={"ungated": "cfg"}),
+    )
+    env.check_probes.return_value = [
+        ProbeRunResult(tag="db-ready", exit_code=0, timed_out=False)
+    ]
+    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
+    build_tree = mocker.patch.object(
+        mng, "_build_probe_status_tree", return_value="probe-tree"
+    )
+    fake_console = mocker.Mock()
+    mocker.patch.object(Util, "console", fake_console)
+
+    exit_code = mng.check_probes(cast(Any, env_cfg), probe_tag=None)
+
+    assert exit_code == 0
+    build_tree.assert_called_once()
+    fake_console.print.assert_called_once_with("probe-tree")
+
+
 def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
     mng_any = cast(Any, mng)
@@ -542,8 +595,9 @@ def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
     )
     assert isinstance(renderable, Group)
     assert isinstance(renderable.renderables[0], Tree)
-    assert isinstance(renderable.renderables[1], Panel)
-    panel = renderable.renderables[1]
+    assert isinstance(renderable.renderables[1], Text)
+    assert isinstance(renderable.renderables[2], Panel)
+    panel = renderable.renderables[2]
     assert panel.title == "Recent Commands"
     assert panel.border_style == "blue"
     assert panel.expand is True
@@ -577,8 +631,9 @@ def test_build_env_status_tree_with_error_panel(mocker: MockerFixture):
         command_error_limit=2,
     )
     assert isinstance(renderable, Group)
-    assert len(renderable.renderables) == 3
-    error_panel = renderable.renderables[2]
+    assert len(renderable.renderables) == 4
+    assert isinstance(renderable.renderables[1], Text)
+    error_panel = renderable.renderables[3]
     assert isinstance(error_panel, Panel)
     assert error_panel.title == "Command start:db failed"
     assert error_panel.border_style == "red"
@@ -604,9 +659,11 @@ def test_build_env_status_tree_returns_tree_with_service_metadata():
         details_enabled=True,
     )
 
-    assert isinstance(renderable, Tree)
-    assert str(renderable.label) == "[bold white]env-1[/bold white]"
-    service_node = renderable.children[0]
+    assert isinstance(renderable, Group)
+    tree = cast(Tree, renderable.renderables[0])
+    summary = cast(Text, renderable.renderables[1])
+    assert str(tree.label) == "[bold white]env-1[/bold white]"
+    service_node = tree.children[0]
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
     assert (
         Text.from_markup(str(service_node.children[0].label)).plain == "gates"
@@ -620,6 +677,8 @@ def test_build_env_status_tree_returns_tree_with_service_metadata():
         "[white]cnt-1[/white]: [bold green]running[/bold green]" in child_labels
     )
     assert "[white]cnt-2[/white]: [dim]stopped[/dim]" in child_labels
+    assert "SERVICES: 1" in summary.plain
+    assert "CONTAINERS: 2" in summary.plain
 
 
 def test_build_env_status_tree_manager_method_returns_tree(
@@ -640,7 +699,8 @@ def test_build_env_status_tree_manager_method_returns_tree(
 
     renderable = mng_any._build_env_status_tree("env-1", grouped)
 
-    assert isinstance(renderable, Tree)
+    assert isinstance(renderable, Group)
+    assert isinstance(renderable.renderables[0], Tree)
 
 
 def test_build_env_status_tree_omits_gates_node_without_probes():
@@ -661,8 +721,9 @@ def test_build_env_status_tree_omits_gates_node_without_probes():
         details_enabled=True,
     )
 
-    assert isinstance(renderable, Tree)
-    service_node = renderable.children[0]
+    assert isinstance(renderable, Group)
+    tree = cast(Tree, renderable.renderables[0])
+    service_node = tree.children[0]
     child_labels = [str(child.label) for child in service_node.children]
     assert "[cyan]gates[/cyan]" not in child_labels
     assert (
