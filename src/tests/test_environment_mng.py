@@ -1456,14 +1456,9 @@ def test_build_env_details_tree(mocker: MockerFixture):
     assert tree.label == "[bold]test-env[/bold]"
     assert len(tree.children) == 2
     assert tree.children[0].label == "[cyan]api[/cyan]"
-    assert (
-        tree.children[0].children[0].label == "[white]web-api-test-env[/white]"
-    )
+    assert tree.children[0].children[0].label == "[white]web[/white]"
     assert tree.children[1].label == "[cyan]db[/cyan]"
-    assert (
-        tree.children[1].children[0].label
-        == "[white]postgres-db-test-env[/white]"
-    )
+    assert tree.children[1].children[0].label == "[white]postgres[/white]"
 
 
 def test_describe_env_with_details_renders_tree(mocker: MockerFixture):

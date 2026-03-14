@@ -195,8 +195,7 @@ def build_env_details_tree(env: Environment) -> Tree:
             svc_node.add("[dim]-[/dim]")
             continue
         for container in containers:
-            name = container.run_container_name or container.tag
-            svc_node.add(f"[white]{name}[/white]")
+            svc_node.add(f"[white]{container.tag}[/white]")
     return tree
 
 
