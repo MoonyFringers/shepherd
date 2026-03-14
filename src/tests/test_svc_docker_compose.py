@@ -134,7 +134,6 @@ def test_svc_render_default_compose_service(
         "      - default\n"
         "    extra_hosts:\n"
         "      - host.docker.internal:host-gateway\n"
-        "    subject_alternative_name: null\n"
         "    inits: null\n"
         "    build:\n"
         "      context_path: '#{cfg.envs_path}/#{env.tag}/build'\n"
@@ -143,13 +142,10 @@ def test_svc_render_default_compose_service(
         "labels:\n"
         "- com.example.label1=value1\n"
         "- com.example.label2=value2\n"
-        "ingress: false\n"
-        "empty_env: null\n"
         "properties: {}\n"
         "upstreams: []\n"
         "status:\n"
         "  active: true\n"
-        "  archived: false\n"
         "  rendered_config: null\n\n"
     )
 
@@ -198,7 +194,6 @@ def test_svc_render_default_compose_service_resolved(
         "      - default\n"
         "    extra_hosts:\n"
         "      - host.docker.internal:host-gateway\n"
-        "    subject_alternative_name: null\n"
         "    inits: null\n"
         "    build:\n"
         f"     context_path: {str(shpd_path)}/envs/test-1/build\n"
@@ -206,13 +201,10 @@ def test_svc_render_default_compose_service_resolved(
         "labels:\n"
         "- com.example.label1=value1\n"
         "- com.example.label2=value2\n"
-        "ingress: false\n"
-        "empty_env: null\n"
         "properties: {}\n"
         "upstreams: []\n"
         "status:\n"
         "  active: true\n"
-        "  archived: false\n"
         "  rendered_config: null\n\n"
     )
 

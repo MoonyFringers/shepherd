@@ -87,8 +87,6 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].containers[0].build is None
     assert service_templates[0].containers[0].hostname == "ora-host"
     assert service_templates[0].containers[0].container_name == "ora-cnt-1"
-    assert service_templates[0].empty_env == "fresh-ora-19300"
-    assert not service_templates[0].is_ingress()
     assert service_templates[0].containers[0].environment == []
     assert (
         service_templates[0].containers[0].ports
@@ -109,7 +107,6 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[0].properties["sys_psw"] == "sys"
     assert service_templates[0].properties["user"] == "docker"
     assert service_templates[0].properties["psw"] == "docker"
-    assert service_templates[0].containers[0].subject_alternative_name is None
     assert service_templates[1].tag == "postgres"
     assert service_templates[1].factory == "docker"
     assert service_templates[1].containers
@@ -123,8 +120,6 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].containers[0].build.dockerfile_path == (
         "${test_path}/envs/#{env.tag}/build/Dockerfile"
     )
-    assert service_templates[1].empty_env == "fresh-pg-1735"
-    assert not service_templates[1].is_ingress()
     assert service_templates[1].containers[0].environment == []
     assert (
         service_templates[1].containers[0].ports
@@ -137,9 +132,6 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].properties["sys_psw"] == "sys"
     assert service_templates[1].properties["user"] == "docker"
     assert service_templates[1].properties["psw"] == "docker"
-    assert service_templates[1].containers[0].subject_alternative_name is None
-
-    assert config.shpd_registry.ftp_server == "ftp.example.com"
     assert config.envs[0].template == Constants.ENV_TEMPLATE_DEFAULT
     assert config.envs[0].factory == Constants.ENV_FACTORY_DEFAULT
     assert config.envs[0].tag == "sample-1"
@@ -179,7 +171,6 @@ def test_load_config(mocker: MockerFixture):
     assert not upstreams[1].is_enabled()
     assert services[1].template == "traefik"
     assert services[1].factory == "docker"
-    assert services[1].is_ingress
     assert services[2].template == "custom-1"
     assert services[2].tag == "primary"
     assert services[3].template == "nodejs"
@@ -202,28 +193,8 @@ def test_load_config(mocker: MockerFixture):
     assert config.templates_path == "${test_path}/templates"
     assert config.envs_path == "${test_path}/envs"
     assert config.volumes_path == "${test_path}/volumes"
-    assert config.host_inet_ip == "127.0.0.1"
-    assert config.domain == "sslip.io"
-    assert config.dns_type == "autoresolving"
-    assert config.ca.country == "IT"
-    assert config.ca.state == "MS"
-    assert config.ca.locality == "Carrara"
-    assert config.ca.organization == "MoonyFringe"
-    assert config.ca.organizational_unit == "Development"
-    assert config.ca.common_name == "sslip.io"
-    assert config.ca.email == "lf@sslip.io"
-    assert config.ca.passphrase == "test"
-    assert config.cert.country == "IT"
-    assert config.cert.state == "MS"
-    assert config.cert.locality == "Carrara"
-    assert config.cert.organization == "MoonyFringe"
-    assert config.cert.organizational_unit == "Development"
-    assert config.cert.common_name == "sslip.io"
-    assert config.cert.email == "lf@sslip.io"
-    assert config.cert.subject_alternative_names == []
     assert config.staging_area.volumes_path == "${test_path}/sa_volumes"
     assert config.staging_area.images_path == "${test_path}/sa_images"
-    assert config.envs[0].status.archived is False
     assert config.envs[0].status.active is True
     assert config.envs[0].status.rendered_config is None
 

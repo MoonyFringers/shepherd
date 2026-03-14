@@ -80,8 +80,6 @@ def test_add_svc_one_default(
     assert (
         env.services[0].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[0].is_ingress(), "Service ingress should be False"
     assert (
         env.services[0].containers[0].environment == []
     ), "Service environment should be empty"
@@ -91,9 +89,6 @@ def test_add_svc_one_default(
     assert (
         env.services[0].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[0].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
     assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
     assert (
@@ -106,8 +101,6 @@ def test_add_svc_one_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -117,9 +110,6 @@ def test_add_svc_one_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
 
 @pytest.mark.svc
@@ -155,8 +145,6 @@ def test_add_svc_two_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -166,9 +154,6 @@ def test_add_svc_two_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
     assert env.services[2].tag == "svc-2", "Service tag should be 'svc-2'"
     assert (
@@ -181,8 +166,6 @@ def test_add_svc_two_default(
     assert (
         env.services[2].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[2].is_ingress(), "Service ingress should be False"
     assert (
         env.services[2].containers[0].environment == []
     ), "Service environment should be empty"
@@ -192,9 +175,6 @@ def test_add_svc_two_default(
     assert (
         env.services[2].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[2].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
 
 @pytest.mark.svc
@@ -229,8 +209,6 @@ def test_add_svc_two_same_tag_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -240,9 +218,6 @@ def test_add_svc_two_same_tag_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
 
 @pytest.mark.svc
