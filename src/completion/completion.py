@@ -67,14 +67,12 @@ class CompletionMng(AbstractCompletionMng):
     )
     CONTEXT_OPTIONS = {
         ("up", None): (
-            OptionSpec(tokens=("--details",)),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("--timeout",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
         ("up", "env"): (
-            OptionSpec(tokens=("--details",)),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("--timeout",), takes_value=True),
@@ -83,19 +81,16 @@ class CompletionMng(AbstractCompletionMng):
         ("halt", None): (OptionSpec(tokens=("--no-wait",)),),
         ("halt", "env"): (OptionSpec(tokens=("--no-wait",)),),
         ("reload", "env"): (
-            OptionSpec(tokens=("--details",)),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
         ("status", None): (
-            OptionSpec(tokens=("--details",)),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
         ("status", "env"): (
-            OptionSpec(tokens=("--details",)),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
