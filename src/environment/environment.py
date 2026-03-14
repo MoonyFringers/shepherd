@@ -809,7 +809,10 @@ class EnvironmentMng:
                 progress_label="Checking",
             )
             return
-        grouped, _, _, has_containers = self._collect_env_status(env)
+        grouped, _, _, has_containers = self._collect_env_status(
+            env,
+            include_gates=False,
+        )
         if not has_containers or not grouped:
             Util.console.print(
                 f"[yellow]No services found for "
@@ -937,11 +940,13 @@ class EnvironmentMng:
         self,
         env: Environment,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
+        include_gates: bool = True,
     ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         return collect_env_status(
             env,
             details_enabled=True,
             gate_status=gate_status,
+            include_gates=include_gates,
         )
 
     def _format_service_gate_glyphs(

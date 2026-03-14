@@ -420,7 +420,7 @@ def test_status_env_renders_tree(mocker: MockerFixture):
     env_cfg = SimpleNamespace(tag="env-1")
     env = mocker.Mock()
     mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
-    mocker.patch.object(
+    collect_mock = mocker.patch.object(
         mng,
         "_collect_env_status",
         return_value=(
@@ -443,6 +443,7 @@ def test_status_env_renders_tree(mocker: MockerFixture):
 
     mng.status_env(cast(Any, env_cfg), watch=False)
 
+    collect_mock.assert_called_once_with(env, include_gates=False)
     printed_group = cast(Group, fake_console.print.call_args.args[0])
     printed_tree = cast(Tree, printed_group.renderables[0])
     summary = cast(Text, printed_group.renderables[1])
@@ -450,6 +451,7 @@ def test_status_env_renders_tree(mocker: MockerFixture):
     service_node = printed_tree.children[0]
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
     assert "RUNNING: 1" in summary.plain
+    assert "GATES" not in summary.plain
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
@@ -847,6 +849,39 @@ def test_collect_env_status_details_row_shape(mocker: MockerFixture):
     assert has_containers is True
     row = grouped["svc-a"][0]
     assert len(row) == 4
+    assert row[1] == "cnt-a"
+
+
+def test_collect_env_status_can_omit_gate_details(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    mng_any = cast(Any, mng)
+
+    container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
+    svc = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="svc-a",
+            containers=[container],
+            start=SimpleNamespace(when_probes=["p1", "p2"]),
+        )
+    )
+    env = mocker.Mock()
+    env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
+    env.get_services.return_value = [svc]
+
+    grouped, all_running, any_running, has_containers = (
+        mng_any._collect_env_status(
+            env,
+            gate_status={"p1": True, "p2": None},
+            include_gates=False,
+        )
+    )
+
+    assert all_running is True
+    assert any_running is True
+    assert has_containers is True
+    row = grouped["svc-a"][0]
+    assert len(row) == 3
+    assert row[0] == ""
     assert row[1] == "cnt-a"
 
 

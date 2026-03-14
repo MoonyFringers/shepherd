@@ -92,6 +92,7 @@ def collect_env_status(
     *,
     details_enabled: bool,
     gate_status: Optional[dict[str, Optional[bool]]] = None,
+    include_gates: bool = True,
 ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
     """
     Build grouped status rows used by table renderers and wait loops.
@@ -115,14 +116,17 @@ def collect_env_status(
 
     for svc in services:
         rows: list[list[str]] = []
-        service_gates = format_service_gate_glyphs(
-            svc,
-            gate_status=gate_status,
-        )
-        service_gate_details = format_service_gate_details(
-            svc,
-            gate_status=gate_status,
-        )
+        service_gates = ""
+        service_gate_details = ""
+        if include_gates:
+            service_gates = format_service_gate_glyphs(
+                svc,
+                gate_status=gate_status,
+            )
+            service_gate_details = format_service_gate_details(
+                svc,
+                gate_status=gate_status,
+            )
         for idx, container in enumerate(svc.svcCfg.containers or []):
             has_containers = True
             cnt_name = container.run_container_name or ""
@@ -144,7 +148,7 @@ def collect_env_status(
 
             gates_cell = service_gates if idx == 0 else ""
             row = [gates_cell, container.tag, state_colored]
-            if details_enabled:
+            if details_enabled and include_gates:
                 row.append(service_gate_details if idx == 0 else "")
             rows.append(row)
 
