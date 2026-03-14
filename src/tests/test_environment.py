@@ -17,10 +17,12 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
@@ -169,6 +171,26 @@ def test_list_env(
 
     result = runner.invoke(cli, ["list"])
     assert result.exit_code == 0
+
+
+@pytest.mark.env
+def test_get_env_json(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1", "--output", "json"])
+
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env_cfg = sm.configMng.get_environment("test-1")
+    assert env_cfg is not None
+    assert json.loads(result.output) == yaml.safe_load(env_cfg.get_yaml())
 
 
 @pytest.mark.env

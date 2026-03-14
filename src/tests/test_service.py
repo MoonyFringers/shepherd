@@ -17,15 +17,22 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
+from rich.tree import Tree
 from test_util import read_fixture
 
+from service import ServiceMng
+from service.render import build_svc_details_tree
 from shepctl import ShepherdMng, cli
+from util.util import Util
 
 
 @pytest.fixture
@@ -80,8 +87,6 @@ def test_add_svc_one_default(
     assert (
         env.services[0].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[0].is_ingress(), "Service ingress should be False"
     assert (
         env.services[0].containers[0].environment == []
     ), "Service environment should be empty"
@@ -91,9 +96,6 @@ def test_add_svc_one_default(
     assert (
         env.services[0].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[0].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
     assert env.services[1].tag == "svc-1", "Service tag should be 'svc-1'"
     assert (
@@ -106,8 +108,6 @@ def test_add_svc_one_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -117,9 +117,6 @@ def test_add_svc_one_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
 
 @pytest.mark.svc
@@ -155,8 +152,6 @@ def test_add_svc_two_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -166,9 +161,6 @@ def test_add_svc_two_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
     assert env.services[2].tag == "svc-2", "Service tag should be 'svc-2'"
     assert (
@@ -181,8 +173,6 @@ def test_add_svc_two_default(
     assert (
         env.services[2].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[2].is_ingress(), "Service ingress should be False"
     assert (
         env.services[2].containers[0].environment == []
     ), "Service environment should be empty"
@@ -192,9 +182,30 @@ def test_add_svc_two_default(
     assert (
         env.services[2].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[2].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
+
+
+@pytest.mark.svc
+def test_get_svc_json(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    result = runner.invoke(cli, ["add", "env", "default", "test-svc-json"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["checkout", "test-svc-json"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["get", "svc", "svc-1", "--output", "json"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_active_environment()
+    assert env is not None
+    svc_cfg = env.get_service("svc-1")
+    assert svc_cfg is not None
+    assert json.loads(result.output) == yaml.safe_load(svc_cfg.get_yaml())
 
 
 @pytest.mark.svc
@@ -229,8 +240,6 @@ def test_add_svc_two_same_tag_default(
     assert (
         env.services[1].containers[0].image == ""
     ), "Service image should be ''"
-
-    assert not env.services[1].is_ingress(), "Service ingress should be False"
     assert (
         env.services[1].containers[0].environment == []
     ), "Service environment should be empty"
@@ -240,9 +249,6 @@ def test_add_svc_two_same_tag_default(
     assert (
         env.services[1].properties == {}
     ), "Service properties should be empty"
-    assert (
-        env.services[1].containers[0].subject_alternative_name is None
-    ), "Service SAN should be None"
 
 
 @pytest.mark.svc
@@ -277,3 +283,82 @@ def test_add_svc_one_with_template(
     assert (
         env.services[0].tag == "service-default"
     ), "Service tag should be 'service-default'"
+
+
+def test_describe_svc_renders_summary_table(mocker: MockerFixture):
+    mng = ServiceMng(
+        cli_flags={},
+        configMng=mocker.Mock(),
+        svcFactory=mocker.Mock(),
+    )
+    env_cfg = mocker.Mock()
+    service = mocker.Mock()
+    service.svcCfg = SimpleNamespace(
+        tag="svc-1",
+        template="default",
+        service_class="database",
+        factory="docker",
+        containers=[object(), object()],
+        status=SimpleNamespace(active=True),
+    )
+    mocker.patch.object(mng, "get_service", return_value=service)
+    render_table = mocker.patch.object(Util, "render_table")
+
+    mng.describe_svc(env_cfg, "svc-1")
+
+    render_table.assert_called_once_with(
+        title=None,
+        columns=[
+            {"header": "NAME", "style": "cyan"},
+            {"header": "TEMPLATE", "style": "magenta"},
+            {"header": "CONTAINERS", "style": "white", "justify": "right"},
+            {"header": "ACTIVE", "style": "white"},
+        ],
+        rows=[["svc-1", "default", "2", "yes"]],
+    )
+
+
+def test_build_svc_details_tree(mocker: MockerFixture):
+    service = mocker.Mock()
+    service.svcCfg = SimpleNamespace(
+        tag="svc-1",
+        containers=[
+            SimpleNamespace(tag="web", run_container_name="web-svc-1-test"),
+            SimpleNamespace(
+                tag="worker", run_container_name="worker-svc-1-test"
+            ),
+        ],
+    )
+
+    tree = build_svc_details_tree(service)
+
+    assert isinstance(tree, Tree)
+    assert tree.label == "[bold]svc-1[/bold]"
+    assert len(tree.children) == 2
+    assert tree.children[0].label == "[white]web-svc-1-test[/white]"
+    assert tree.children[1].label == "[white]worker-svc-1-test[/white]"
+
+
+def test_describe_svc_with_details_renders_tree(mocker: MockerFixture):
+    mng = ServiceMng(
+        cli_flags={"details": True},
+        configMng=mocker.Mock(),
+        svcFactory=mocker.Mock(),
+    )
+    env_cfg = mocker.Mock()
+    service = mocker.Mock()
+    service.svcCfg = SimpleNamespace(
+        tag="svc-1",
+        template="default",
+        containers=[object()],
+        status=SimpleNamespace(active=True),
+    )
+    mocker.patch.object(mng, "get_service", return_value=service)
+    mocker.patch.object(mng, "_build_svc_details_tree", return_value="tree")
+    render_table = mocker.patch.object(Util, "render_table")
+    console_print = mocker.patch.object(Util.console, "print")
+
+    mng.describe_svc(env_cfg, "svc-1")
+
+    render_table.assert_called_once()
+    console_print.assert_called_once_with("tree")

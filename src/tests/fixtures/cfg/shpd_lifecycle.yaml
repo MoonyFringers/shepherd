@@ -1,33 +1,6 @@
-shpd_registry:
-  ftp_server: ${shpd_registry}
-  ftp_user: ${shpd_registry_ftp_usr}
-  ftp_psw: ${shpd_registry_ftp_psw}
-  ftp_shpd_path: ${shpd_registry_ftp_shpd_path}
-  ftp_env_imgs_path: ${shpd_registry_ftp_imgs_path}
 templates_path: ${templates_path}
 envs_path: ${envs_path}
 volumes_path: ${volumes_path}
-host_inet_ip: ${host_inet_ip}
-domain: ${domain}
-dns_type: ${dns_type}
-ca:
-  country: ${ca_country}
-  state: ${ca_state}
-  locality: ${ca_locality}
-  organization: ${ca_org}
-  organizational_unit: ${ca_org_unit}
-  common_name: ${ca_cn}
-  email: ${ca_email}
-  passphrase: ${ca_passphrase}
-cert:
-  country: ${cert_country}
-  state: ${cert_state}
-  locality: ${cert_locality}
-  organization: ${cert_org}
-  organizational_unit: ${cert_org_unit}
-  common_name: ${cert_cn}
-  email: ${cert_email}
-  subject_alternative_names: []
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
@@ -51,7 +24,6 @@ env_templates:
           ports: []
           networks: []
           extra_hosts: []
-          subject_alternative_name: null
           build: null
         script: |
           sh -c '
@@ -75,7 +47,6 @@ env_templates:
           networks:
             - "#{env.tag}"
           extra_hosts: []
-          subject_alternative_name: null
           build: null
         script: "sh -c 'pg_isready -h db -p 5432 -U sys -d docker'"
         script_path: null
@@ -108,8 +79,6 @@ service_templates:
     factory: docker
     labels: []
     properties: {}
-    empty_env: ${pg_empty_env}
-    ingress: false
     containers:
       - tag: pg
         image: ${pg_image}
@@ -127,7 +96,6 @@ service_templates:
         networks:
           - "#{env.tag}"
         extra_hosts: []
-        subject_alternative_name: null
         build: null
         inits:
           - tag: create-docker-user
@@ -148,8 +116,6 @@ envs:
         tag: db
         service_class: null
         labels: []
-        ingress: null
-        empty_env: null
         properties: {}
         upstreams: []
         containers:
@@ -163,7 +129,6 @@ envs:
             ports: []
             networks: []
             extra_hosts: []
-            subject_alternative_name: null
             build: null
             inits: null
         start:
@@ -171,7 +136,6 @@ envs:
             - sample-1-test-probe
         status:
           active: true
-          archived: false
           rendered_config: null
     probes: []
     networks:
@@ -186,5 +150,4 @@ envs:
     volumes: []
     status:
       active: true
-      archived: false
       rendered_config: null

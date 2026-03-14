@@ -18,6 +18,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import threading
@@ -27,6 +28,8 @@ from collections import deque
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+import yaml
+
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
 from util import Constants, Util
@@ -35,12 +38,14 @@ from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 from .render import (
     build_command_error_panel,
     build_command_log_panel,
+    build_env_details_tree,
     build_env_status_table,
     build_probe_report,
     collect_env_status,
     dump_grouped_yaml,
     format_service_gate_details,
     format_service_gate_glyphs,
+    render_env_summary,
     render_probe_report,
 )
 from .status_wait import WaitForEnvStateHooks, wait_for_env_state
@@ -710,17 +715,42 @@ class EnvironmentMng:
         Util.print(env.envCfg.tag)
 
     def render_env(
-        self, env_tag: str, target: bool, resolved: bool, grouped: bool = False
+        self,
+        env_tag: str,
+        target: bool,
+        resolved: bool,
+        output: str = "yaml",
+        grouped: bool = False,
     ) -> Optional[str]:
         """Render an environment configuration."""
         env = self.get_environment_from_tag(env_tag)
         if env:
             if target:
                 if grouped:
-                    return env.render_target_grouped(resolved)
-                return env.render_target_merged(resolved)
+                    rendered = env.render_target_grouped(resolved)
+                else:
+                    rendered = env.render_target_merged(resolved)
+                if output == "json":
+                    return json.dumps(yaml.safe_load(rendered), indent=2)
+                return rendered
+            if output == "json":
+                return env.envCfg.get_json(resolved)
             return env.render(resolved)
         return None
+
+    def describe_env(self, env_tag: Optional[str]) -> None:
+        """Render a kubectl-like single-row environment summary."""
+        env = self.get_environment_from_tag(env_tag)
+        if not env:
+            return
+
+        render_env_summary(env)
+        if self._is_details():
+            Util.console.print(self._build_env_details_tree(env))
+
+    def _build_env_details_tree(self, env: Environment):
+        """Build the details tree shown below the environment summary."""
+        return build_env_details_tree(env)
 
     def render_probes(
         self,

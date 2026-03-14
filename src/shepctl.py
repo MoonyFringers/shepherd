@@ -139,7 +139,7 @@ def _apply_show_commands_flags(
 
 
 def _apply_details_flag(shepherd: ShepherdMng, details: bool) -> None:
-    """Apply shared status-table detail visibility flag."""
+    """Apply shared details-mode flag to the live CLI state."""
     shepherd.cli_flags["details"] = details
 
 
@@ -174,9 +174,7 @@ def get():
 
 @get.command(name="env")
 @click.argument("tag", required=False)
-@click.option(
-    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
-)
+@click.option("-o", "--output", type=click.Choice(["yaml", "json"]))
 @click.option(
     "-t", "--target", is_flag=True, help="Get the target configuration."
 )
@@ -188,6 +186,7 @@ def get():
 @click.option(
     "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
 )
+@click.option("--details", is_flag=True, help="Show container details.")
 @click.pass_obj
 def get_env(
     shepherd: ShepherdMng,
@@ -196,16 +195,20 @@ def get_env(
     target: bool,
     by_gate: bool,
     resolved: bool,
+    details: bool,
 ):
     """Get environment details or config."""
     if by_gate and not target:
         raise click.UsageError("--by-gate requires --target")
+    _apply_details_flag(shepherd, details)
     if output:
         click.echo(
             shepherd.environmentMng.render_env(
-                tag, target, resolved, grouped=by_gate
+                tag, target, resolved, output=output, grouped=by_gate
             )
         )
+        return
+    shepherd.environmentMng.describe_env(tag)
 
 
 @get.command(name="probe")
@@ -244,15 +247,14 @@ def get_probe(
 
 @get.command(name="svc")
 @click.argument("tag", required=True)
-@click.option(
-    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
-)
+@click.option("-o", "--output", type=click.Choice(["yaml", "json"]))
 @click.option(
     "-t", "--target", is_flag=True, help="Get the target configuration."
 )
 @click.option(
     "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
 )
+@click.option("--details", is_flag=True, help="Show container details.")
 @click.pass_obj
 @require_active_env
 def get_svc(
@@ -262,12 +264,18 @@ def get_svc(
     output: Optional[str],
     target: bool,
     resolved: bool,
+    details: bool,
 ):
     """Get service details or config."""
+    _apply_details_flag(shepherd, details)
     if output:
         click.echo(
-            shepherd.serviceMng.render_svc(envCfg, tag, target, resolved)
+            shepherd.serviceMng.render_svc(
+                envCfg, tag, target, resolved, output=output
+            )
         )
+        return
+    shepherd.serviceMng.describe_svc(envCfg, tag)
 
 
 # =====================================================

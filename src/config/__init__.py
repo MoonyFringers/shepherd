@@ -17,27 +17,21 @@
 
 
 from .config import (
-    CACfg,
-    CertCfg,
     Config,
     ConfigMng,
     EnvironmentCfg,
     EnvironmentTemplateCfg,
     ServiceCfg,
     ServiceTemplateCfg,
-    ShpdRegistryCfg,
     UpstreamCfg,
 )
 
 __all__ = [
-    "CACfg",
-    "CertCfg",
     "Config",
     "EnvironmentTemplateCfg",
     "EnvironmentCfg",
     "ServiceTemplateCfg",
     "ServiceCfg",
-    "ShpdRegistryCfg",
     "UpstreamCfg",
     "ConfigMng",
 ]
