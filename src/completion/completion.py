@@ -354,6 +354,9 @@ class CompletionMng(AbstractCompletionMng):
         )
         last_token = args[-1] if args else ""
         last_option = self._match_option(last_token) if last_token else None
+        option_prefix: Optional[str] = None
+        if last_token.startswith("-"):
+            option_prefix = last_token
 
         if expect_value_for is not None:
             if last_token in expect_value_for.tokens:
@@ -366,24 +369,18 @@ class CompletionMng(AbstractCompletionMng):
                 ]
 
         if not verb:
-            base = list(self.VERBS)
-            base.extend(
-                self._get_option_suggestions(
-                    list(self.GLOBAL_OPTIONS), used_options=used_options
-                )
-            )
-            if last_token.startswith("-"):
+            if option_prefix is not None:
                 return self._get_option_suggestions(
                     list(self.GLOBAL_OPTIONS),
                     used_options=used_options,
-                    prefix=last_token,
+                    prefix=option_prefix,
                 )
-            return self._unique(base)
+            return list(self.VERBS)
 
         auto_category = self.get_auto_category(sanitized_args)
         context_options = self._get_context_options(verb, category)
 
-        if last_token.startswith("-") and not (
+        if option_prefix is not None and not (
             last_option is not None
             and last_option.takes_value
             and last_token not in last_option.tokens
@@ -391,17 +388,18 @@ class CompletionMng(AbstractCompletionMng):
             return self._get_option_suggestions(
                 context_options,
                 used_options=used_options,
-                prefix=last_token,
+                prefix=option_prefix,
             )
 
         if not auto_category and not self.is_category_chosen(sanitized_args):
             # suggest only valid categories for this verb
             suggestions = list(self.VERB_CATEGORIES.get(verb, []))
-            suggestions.extend(
-                self._get_option_suggestions(
-                    context_options, used_options=used_options
+            if not suggestions:
+                suggestions.extend(
+                    self._get_option_suggestions(
+                        context_options, used_options=used_options
+                    )
                 )
-            )
             return self._unique(suggestions)
 
         completion_manager = self.get_completion_manager(
@@ -409,11 +407,20 @@ class CompletionMng(AbstractCompletionMng):
         )
         if completion_manager:
             suggestions = completion_manager.get_completions(sanitized_args)
-            suggestions.extend(
-                self._get_option_suggestions(
-                    context_options, used_options=used_options
+            if option_prefix is not None:
+                suggestions.extend(
+                    self._get_option_suggestions(
+                        context_options,
+                        used_options=used_options,
+                        prefix=option_prefix,
+                    )
                 )
-            )
+            elif not suggestions:
+                suggestions.extend(
+                    self._get_option_suggestions(
+                        context_options, used_options=used_options
+                    )
+                )
             return self._unique(suggestions)
 
         return []

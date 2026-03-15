@@ -82,7 +82,7 @@ class CompletionSvcMng(AbstractCompletionMng):
         if len(args) < 2:
             return False
         cnt_tag = args[1]
-        return cnt_tag in self.get_svc_tags(args)
+        return cnt_tag in self.get_cnt_tags(args)
 
     def get_cnt_tags(self, args: list[str]) -> list[str]:
         env = self.configMng.get_active_environment()

@@ -198,6 +198,10 @@ def get_env(
     details: bool,
 ):
     """Get environment details or config."""
+    if (target or resolved or by_gate) and not output:
+        raise click.UsageError(
+            "--target, --resolved, and --by-gate require --output"
+        )
     if by_gate and not target:
         raise click.UsageError("--by-gate requires --target")
     _apply_details_flag(shepherd, details)
@@ -267,6 +271,8 @@ def get_svc(
     details: bool,
 ):
     """Get service details or config."""
+    if (target or resolved) and not output:
+        raise click.UsageError("--target and --resolved require --output")
     _apply_details_flag(shepherd, details)
     if output:
         click.echo(

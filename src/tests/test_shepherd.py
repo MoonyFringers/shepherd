@@ -298,7 +298,7 @@ def test_reload_flags_show_commands_limit(
 
 
 @pytest.mark.shpd
-def test_cli_get_env_by_gate_requires_target(
+def test_cli_get_env_by_gate_requires_output(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mocker.patch.object(ShepherdMng, "__init__", return_value=None)
@@ -306,7 +306,54 @@ def test_cli_get_env_by_gate_requires_target(
     result = runner.invoke(cli, ["get", "env", "--by-gate"])
 
     assert result.exit_code != 0
+    assert (
+        "--target, --resolved, and --by-gate require --output" in result.output
+    )
+
+
+@pytest.mark.shpd
+def test_cli_get_env_by_gate_requires_target_when_output_present(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["get", "env", "--output", "yaml", "--by-gate"])
+
+    assert result.exit_code != 0
     assert "--by-gate requires --target" in result.output
+
+
+@pytest.mark.shpd
+@pytest.mark.parametrize(
+    ("args", "expected_message"),
+    [
+        (
+            ["get", "env", "test-1", "--target"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+        (
+            ["get", "env", "test-1", "--resolved"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+        (
+            ["get", "env", "test-1", "--target", "--by-gate"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+    ],
+)
+def test_cli_get_env_render_flags_require_output(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+    expected_message: str,
+):
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code != 0
+    assert expected_message in result.output
 
 
 @pytest.mark.shpd
@@ -399,6 +446,32 @@ def test_cli_get_svc_without_output_describes_svc(
     assert result.exit_code == 0
     describe_svc.assert_called_once()
     render_svc.assert_not_called()
+
+
+@pytest.mark.shpd
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["get", "svc", "test", "--target"],
+        ["get", "svc", "test", "--resolved"],
+    ],
+)
+def test_cli_get_svc_render_flags_require_output(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code != 0
+    assert "--target and --resolved require --output" in result.output
 
 
 @pytest.mark.shpd
