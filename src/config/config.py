@@ -367,8 +367,8 @@ class EntityStatus(Resolvable):
     """
     Represents the lifecycle and activation status of an entity.
 
-    This class captures both static flags (e.g. archival state) and
-    runtime-derived information used during orchestration.
+    This class captures runtime-derived information used during
+    orchestration.
 
     Field semantics:
 
@@ -378,17 +378,6 @@ class EntityStatus(Resolvable):
       Note: this flag does *not* represent the actual runtime state,
       which is evaluated dynamically by the target engine.
 
-    - `archived`:
-      Marks the entity as archived (e.g. deprecated or no longer in use).
-      Archived entities are typically ignored by orchestration logic.
-
-      The special probe identifier `base` is reserved and is guaranteed
-      to be present. It always evaluates to `true` and represents the
-      unconditional activation fallback.
-
-      When a probe evaluates to `true`, the corresponding configuration
-      entry is selected and may be started.
-
     - `rendered_config`:
       The rendered, engine-specific configuration (e.g. Docker Compose)
       associated with the entity. This field is populated during `start`
@@ -397,7 +386,6 @@ class EntityStatus(Resolvable):
     """
 
     active: bool = False
-    archived: bool = False
     rendered_config: Optional[dict[str, str]] = None
 
 
@@ -502,7 +490,6 @@ class ContainerCfg(Resolvable):
     ports: Optional[list[str]] = None
     networks: Optional[list[str]] = None
     extra_hosts: Optional[list[str]] = None
-    subject_alternative_name: Optional[str] = None
     build: Optional[BuildCfg] = None
     inits: Optional[list[InitCfg]] = None
 
@@ -556,15 +543,8 @@ class ServiceTemplateCfg(Resolvable):
     factory: str
     labels: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
-    empty_env: Optional[str] = None
-    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     containers: Optional[list[ContainerCfg]] = None
     start: Optional[StartCfg] = None
-
-    def is_ingress(self) -> bool:
-        return str_to_bool(
-            self.ingress if self.ingress is not None else "false"
-        )
 
 
 @dataclass
@@ -589,19 +569,12 @@ class ServiceCfg(Resolvable):
     service_class: Optional[str] = None
     labels: Optional[list[str]] = None
     properties: Optional[dict[str, str]] = None
-    empty_env: Optional[str] = None
-    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
     upstreams: Optional[list[UpstreamCfg]] = None
     containers: Optional[list[ContainerCfg]] = None
     start: Optional[StartCfg] = None
     status: EntityStatus = field(
         default_factory=lambda: EntityStatus(active=True)
     )
-
-    def is_ingress(self) -> bool:
-        return str_to_bool(
-            self.ingress if self.ingress is not None else "false"
-        )
 
     def get_yaml(self, resolved: bool = False) -> str:
         """
@@ -769,65 +742,14 @@ class StagingAreaCfg(Resolvable):
 
 
 @dataclass
-class ShpdRegistryCfg(Resolvable):
-    """
-    Represents the configuration for the shepherd registry.
-    """
-
-    ftp_server: str
-    ftp_user: str
-    ftp_psw: str
-    ftp_shpd_path: str
-    ftp_env_imgs_path: str
-
-
-@dataclass
-class CACfg(Resolvable):
-    """
-    Represents the configuration for the Certificate Authority.
-    """
-
-    country: str
-    state: str
-    locality: str
-    organization: str
-    organizational_unit: str
-    common_name: str
-    email: str
-    passphrase: str
-
-
-@dataclass
-class CertCfg(Resolvable):
-    """
-    Represents the configuration for the certificate.
-    """
-
-    country: str
-    state: str
-    locality: str
-    organization: str
-    organizational_unit: str
-    common_name: str
-    email: str
-    subject_alternative_names: Optional[list[str]] = None
-
-
-@dataclass
 class Config(Resolvable):
     """
     Represents the shepherd configuration.
     """
 
-    shpd_registry: ShpdRegistryCfg
     templates_path: str
     envs_path: str
     volumes_path: str
-    host_inet_ip: str
-    domain: str
-    dns_type: str
-    ca: CACfg
-    cert: CertCfg
     staging_area: StagingAreaCfg
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
@@ -847,7 +769,6 @@ def parse_config(yaml_str: str) -> Config:
     def parse_status(item: Any) -> EntityStatus:
         return EntityStatus(
             active=item.get("active", False),
-            archived=item.get("archived", False),
             rendered_config=item.get("rendered_config"),
         )
 
@@ -886,7 +807,6 @@ def parse_config(yaml_str: str) -> Config:
             ports=item.get("ports", []),
             networks=item.get("networks", []),
             extra_hosts=item.get("extra_hosts", []),
-            subject_alternative_name=item.get("subject_alternative_name"),
             build=parse_build(item["build"]) if item.get("build") else None,
             inits=inits,
         )
@@ -927,12 +847,6 @@ def parse_config(yaml_str: str) -> Config:
             factory=item["factory"],
             labels=item.get("labels", []),
             properties=item.get("properties", {}),
-            empty_env=item.get("empty_env"),
-            ingress=(
-                bool_to_str(val)
-                if isinstance(val := item["ingress"], bool)
-                else val
-            ),
             containers=[
                 parse_container(container)
                 for container in item.get("containers", [])
@@ -948,12 +862,6 @@ def parse_config(yaml_str: str) -> Config:
             service_class=item.get("service_class"),
             labels=item.get("labels", []),
             properties=item.get("properties", {}),
-            empty_env=item.get("empty_env"),
-            ingress=(
-                bool_to_str(val)
-                if isinstance(val := item["ingress"], bool)
-                else val
-            ),
             upstreams=[
                 parse_upstream(upstream)
                 for upstream in item.get("upstreams", [])
@@ -1050,39 +958,6 @@ def parse_config(yaml_str: str) -> Config:
             status=parse_status(item["status"]),
         )
 
-    def parse_shpd_registry(item: Any) -> ShpdRegistryCfg:
-        return ShpdRegistryCfg(
-            ftp_server=item["ftp_server"],
-            ftp_user=item["ftp_user"],
-            ftp_psw=item["ftp_psw"],
-            ftp_shpd_path=item["ftp_shpd_path"],
-            ftp_env_imgs_path=item["ftp_env_imgs_path"],
-        )
-
-    def parse_ca_config(item: Any) -> CACfg:
-        return CACfg(
-            country=item["country"],
-            state=item["state"],
-            locality=item["locality"],
-            organization=item["organization"],
-            organizational_unit=item["organizational_unit"],
-            common_name=item["common_name"],
-            email=item["email"],
-            passphrase=item["passphrase"],
-        )
-
-    def parse_cert_config(item: Any) -> CertCfg:
-        return CertCfg(
-            country=item["country"],
-            state=item["state"],
-            locality=item["locality"],
-            organization=item["organization"],
-            organizational_unit=item["organizational_unit"],
-            common_name=item["common_name"],
-            email=item["email"],
-            subject_alternative_names=item.get("subject_alternative_names", []),
-        )
-
     return Config(
         env_templates=[
             parse_environment_template(environment_template)
@@ -1092,15 +967,9 @@ def parse_config(yaml_str: str) -> Config:
             parse_service_template(service_template)
             for service_template in data.get("service_templates", [])
         ],
-        shpd_registry=parse_shpd_registry(data["shpd_registry"]),
         templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
-        host_inet_ip=data["host_inet_ip"],
-        domain=data["domain"],
-        dns_type=data["dns_type"],
-        ca=parse_ca_config(data["ca"]),
-        cert=parse_cert_config(data["cert"]),
         staging_area=parse_staging_area(data["staging_area"]),
         envs=[parse_environment(env) for env in data["envs"]],
     )
@@ -1597,8 +1466,6 @@ class ConfigMng:
             tag=other.tag,
             factory=other.factory,
             labels=deepcopy(other.labels),
-            ingress=other.ingress,
-            empty_env=other.empty_env,
             properties=deepcopy(other.properties),
             containers=deepcopy(other.containers),
             start=deepcopy(other.start),
@@ -1619,8 +1486,6 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             labels=[],
-            ingress="false",
-            empty_env=None,
             properties={},
             upstreams=[],
             containers=[],
@@ -1642,8 +1507,6 @@ class ConfigMng:
             tag=service_tag,
             service_class=service_class,
             labels=deepcopy(service_template.labels),
-            ingress=service_template.ingress,
-            empty_env=service_template.empty_env,
             properties=deepcopy(service_template.properties),
             upstreams=[],
             containers=deepcopy(service_template.containers),

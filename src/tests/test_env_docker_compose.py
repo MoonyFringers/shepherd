@@ -133,18 +133,14 @@ services:
     - default
     extra_hosts:
     - host.docker.internal:host-gateway
-    subject_alternative_name: null
     inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
-  - domain=${domain}
-  ingress: false
-  empty_env: null
+  - domain=sslip.io
   properties: {}
   status:
     active: true
-    archived: false
     rendered_config: null
 - template: default
   factory: docker
@@ -171,17 +167,13 @@ services:
     - default
     extra_hosts:
     - host.docker.internal:host-gateway
-    subject_alternative_name: null
     inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
-  ingress: false
-  empty_env: null
   properties: {}
   status:
     active: true
-    archived: false
     rendered_config: null
 probes:
   - tag: db-ready
@@ -197,7 +189,6 @@ probes:
       networks:
         - "#{env.tag}"
       extra_hosts: []
-      subject_alternative_name: null
       inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
@@ -215,7 +206,6 @@ probes:
       networks:
         - "#{env.tag}"
       extra_hosts: []
-      subject_alternative_name: null
       inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
@@ -238,7 +228,6 @@ volumes:
   labels: null
 status:
   active: true
-  archived: false
   rendered_config: null
 """
 
@@ -294,18 +283,14 @@ services:
     - default
     extra_hosts:
     - host.docker.internal:host-gateway
-    subject_alternative_name: null
     inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
   - domain=sslip.io
-  ingress: false
-  empty_env: null
   properties: {}
   status:
     active: true
-    archived: false
     rendered_config: null
 - template: default
   factory: docker
@@ -332,17 +317,13 @@ services:
     - default
     extra_hosts:
     - host.docker.internal:host-gateway
-    subject_alternative_name: null
     inits: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
-  ingress: false
-  empty_env: null
   properties: {}
   status:
     active: true
-    archived: false
     rendered_config: null
 probes:
   - tag: db-ready
@@ -358,7 +339,6 @@ probes:
       networks:
         - test-1
       extra_hosts: []
-      subject_alternative_name: null
       inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
@@ -376,7 +356,6 @@ probes:
       networks:
         - test-1
       extra_hosts: []
-      subject_alternative_name: null
       inits: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
@@ -399,7 +378,6 @@ volumes:
   labels: null
 status:
   active: true
-  archived: false
   rendered_config: null
 """
 
@@ -436,7 +414,7 @@ def test_env_render_target_compose_env_ext_net(
         "    labels:\n"
         "    - com.example.label1=value1\n"
         "    - com.example.label2=value2\n"
-        "    - domain=${domain}\n"
+        "    - domain=sslip.io\n"
         "    volumes:\n"
         "    - /home/test/.ssh:/home/test/.ssh\n"
         "    - /etc/ssh:/etc/ssh\n"
@@ -663,7 +641,6 @@ def test_start_env(
     env = sm.configMng.get_environment("test-1")
     assert env
     assert env.status.active is True
-    assert env.status.archived is False
     assert env.status.rendered_config
 
 
@@ -1391,7 +1368,6 @@ def test_stop_env(
     env = sm.configMng.get_environment("test-1")
     assert env
     assert env.status.active is True
-    assert env.status.archived is False
     assert env.status.rendered_config is None
 
 
@@ -1429,7 +1405,6 @@ def test_reload_env(
     env = sm.configMng.get_environment("test-1")
     assert env
     assert env.status.active is True
-    assert env.status.archived is False
     assert env.status.rendered_config
 
 
@@ -1517,7 +1492,6 @@ probes:
     networks:
     - '#{env.tag}'
     extra_hosts: []
-    subject_alternative_name: null
     inits: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
@@ -1559,7 +1533,6 @@ probes:
     networks:
     - test-1
     extra_hosts: []
-    subject_alternative_name: null
     inits: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
