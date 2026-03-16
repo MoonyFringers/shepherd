@@ -17,15 +17,20 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Protocol, Sequence, cast
+from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence, cast
 
 import yaml
 from rich import box
 from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
+from rich.tree import Tree
 
 from util import Util
+
+# Import only for static analysis to avoid a runtime cycle with environment.py.
+if TYPE_CHECKING:
+    from .environment import Environment
 
 
 def format_service_gate_glyphs(
@@ -150,6 +155,49 @@ def collect_env_status(
         all_running = False
 
     return grouped, all_running, any_running, has_containers
+
+
+def render_env_summary(env: Environment) -> None:
+    """Render the default single-row environment summary table."""
+    env_cfg = env.envCfg
+    services = env_cfg.services or []
+    probes = env_cfg.probes or []
+    Util.render_table(
+        title=None,
+        columns=[
+            {"header": "NAME", "style": "cyan"},
+            {"header": "TEMPLATE", "style": "magenta"},
+            {"header": "ENGINE", "style": "yellow"},
+            {"header": "ACTIVE", "style": "white"},
+            {"header": "SERVICES", "style": "white", "justify": "right"},
+            {"header": "PROBES", "style": "white", "justify": "right"},
+        ],
+        rows=[
+            [
+                env_cfg.tag,
+                env_cfg.template,
+                env_cfg.factory,
+                "yes" if env_cfg.status.active else "no",
+                str(len(services)),
+                str(len(probes)),
+            ]
+        ],
+    )
+
+
+def build_env_details_tree(env: Environment) -> Tree:
+    """Build the details tree shown below the environment summary."""
+    tree = Tree(f"[bold]{env.envCfg.tag}[/bold]", guide_style="dim")
+    for svc in env.get_services():
+        svc_node = tree.add(f"[cyan]{svc.svcCfg.tag}[/cyan]")
+        containers = svc.svcCfg.containers or []
+        if not containers:
+            svc_node.add("[dim]-[/dim]")
+            continue
+        for container in containers:
+            name = container.run_container_name or container.tag
+            svc_node.add(f"[white]{name}[/white]")
+    return tree
 
 
 class _LiteralDumper(yaml.SafeDumper):

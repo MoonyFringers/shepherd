@@ -27,8 +27,10 @@ from rich.console import Group
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
 
 from environment.environment import EnvironmentMng, ProbeRunResult
+from environment.render import build_env_details_tree
 from environment.status_wait import (
     WaitForEnvStateHooks,
     render_moving_shadow_text,
@@ -976,3 +978,97 @@ def test_wait_for_env_state_uses_custom_progress_label(
         if "status_suffix" in call.kwargs
     ]
     assert "Checking" in suffixes
+
+
+def test_describe_env_renders_summary_table(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(
+        tag="env-1",
+        template="default",
+        factory="docker-compose",
+        services=[object(), object()],
+        probes=[object()],
+        status=SimpleNamespace(active=True),
+    )
+    mocker.patch.object(mng, "get_environment_from_tag", return_value=env)
+    render_table = mocker.patch.object(Util, "render_table")
+
+    mng.describe_env("env-1")
+
+    render_table.assert_called_once_with(
+        title=None,
+        columns=[
+            {"header": "NAME", "style": "cyan"},
+            {"header": "TEMPLATE", "style": "magenta"},
+            {"header": "ENGINE", "style": "yellow"},
+            {"header": "ACTIVE", "style": "white"},
+            {"header": "SERVICES", "style": "white", "justify": "right"},
+            {"header": "PROBES", "style": "white", "justify": "right"},
+        ],
+        rows=[["env-1", "default", "docker-compose", "yes", "2", "1"]],
+    )
+
+
+def test_build_env_details_tree(mocker: MockerFixture):
+    svc_1 = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="api",
+            containers=[
+                SimpleNamespace(
+                    tag="web", run_container_name="web-api-test-env"
+                )
+            ],
+        )
+    )
+    svc_2 = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="db",
+            containers=[
+                SimpleNamespace(
+                    tag="postgres",
+                    run_container_name="postgres-db-test-env",
+                )
+            ],
+        )
+    )
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_services.return_value = [svc_1, svc_2]
+
+    tree = build_env_details_tree(env)
+
+    assert isinstance(tree, Tree)
+    assert tree.label == "[bold]test-env[/bold]"
+    assert len(tree.children) == 2
+    assert tree.children[0].label == "[cyan]api[/cyan]"
+    assert (
+        tree.children[0].children[0].label == "[white]web-api-test-env[/white]"
+    )
+    assert tree.children[1].label == "[cyan]db[/cyan]"
+    assert (
+        tree.children[1].children[0].label
+        == "[white]postgres-db-test-env[/white]"
+    )
+
+
+def test_describe_env_with_details_renders_tree(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker, cli_flags={"details": True})
+    env = mocker.Mock()
+    env.envCfg = SimpleNamespace(
+        tag="env-1",
+        template="default",
+        factory="docker-compose",
+        services=[object()],
+        probes=[],
+        status=SimpleNamespace(active=True),
+    )
+    mocker.patch.object(mng, "get_environment_from_tag", return_value=env)
+    mocker.patch.object(mng, "_build_env_details_tree", return_value="tree")
+    render_table = mocker.patch.object(Util, "render_table")
+    console_print = mocker.patch.object(Util.console, "print")
+
+    mng.describe_env("env-1")
+
+    render_table.assert_called_once()
+    console_print.assert_called_once_with("tree")

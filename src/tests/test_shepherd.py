@@ -198,6 +198,56 @@ def test_status_flags_details(
 
 
 @pytest.mark.shpd
+def test_get_env_flags_details(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    def assert_flags(
+        env_mng: EnvironmentMng,
+        env_tag: str,
+    ) -> None:
+        assert env_mng.cli_flags["details"] is True
+        assert env_tag == "test-1"
+
+    mocker.patch.object(
+        EnvironmentMng, "describe_env", autospec=True, side_effect=assert_flags
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1", "--details"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.shpd
+def test_get_svc_flags_details(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    def assert_flags(
+        svc_mng: ServiceMng,
+        env_cfg: EnvironmentCfg,
+        svc_tag: str,
+    ) -> None:
+        assert svc_mng.cli_flags["details"] is True
+        assert env_cfg.tag == "test-1"
+        assert svc_tag == "test"
+
+    mocker.patch.object(
+        ServiceMng, "describe_svc", autospec=True, side_effect=assert_flags
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "svc", "test", "--details"])
+    assert result.exit_code == 0
+
+
+@pytest.mark.shpd
 def test_status_flags_show_commands(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
@@ -248,7 +298,7 @@ def test_reload_flags_show_commands_limit(
 
 
 @pytest.mark.shpd
-def test_cli_get_env_by_gate_requires_target(
+def test_cli_get_env_by_gate_requires_output(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
     mocker.patch.object(ShepherdMng, "__init__", return_value=None)
@@ -256,7 +306,97 @@ def test_cli_get_env_by_gate_requires_target(
     result = runner.invoke(cli, ["get", "env", "--by-gate"])
 
     assert result.exit_code != 0
+    assert (
+        "--target, --resolved, and --by-gate require --output" in result.output
+    )
+
+
+@pytest.mark.shpd
+def test_cli_get_env_by_gate_requires_target_when_output_present(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["get", "env", "--output", "yaml", "--by-gate"])
+
+    assert result.exit_code != 0
     assert "--by-gate requires --target" in result.output
+
+
+@pytest.mark.shpd
+@pytest.mark.parametrize(
+    ("args", "expected_message"),
+    [
+        (
+            ["get", "env", "test-1", "--target"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+        (
+            ["get", "env", "test-1", "--resolved"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+        (
+            ["get", "env", "test-1", "--target", "--by-gate"],
+            "--target, --resolved, and --by-gate require --output",
+        ),
+    ],
+)
+def test_cli_get_env_render_flags_require_output(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+    expected_message: str,
+):
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code != 0
+    assert expected_message in result.output
+
+
+@pytest.mark.shpd
+def test_cli_get_env_without_output_describes_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    describe_env = mocker.patch.object(EnvironmentMng, "describe_env")
+    render_env = mocker.patch.object(EnvironmentMng, "render_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1"])
+
+    assert result.exit_code == 0
+    describe_env.assert_called_once_with("test-1")
+    render_env.assert_not_called()
+
+
+@pytest.mark.shpd
+def test_cli_get_env_with_output_renders_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    describe_env = mocker.patch.object(EnvironmentMng, "describe_env")
+    render_env = mocker.patch.object(
+        EnvironmentMng, "render_env", return_value="env-yaml"
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "env", "test-1", "--output", "yaml"])
+
+    assert result.exit_code == 0
+    assert "env-yaml" in result.output
+    render_env.assert_called_once_with(
+        "test-1", False, False, output="yaml", grouped=False
+    )
+    describe_env.assert_not_called()
 
 
 # completion tests
@@ -287,6 +427,75 @@ def test_cli_build_svc(
     result = runner.invoke(cli, ["build", "service_tag"])
     assert result.exit_code == 0
     mock_build.assert_called_once()
+
+
+@pytest.mark.shpd
+def test_cli_get_svc_without_output_describes_svc(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    describe_svc = mocker.patch.object(ServiceMng, "describe_svc")
+    render_svc = mocker.patch.object(ServiceMng, "render_svc")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "svc", "test"])
+
+    assert result.exit_code == 0
+    describe_svc.assert_called_once()
+    render_svc.assert_not_called()
+
+
+@pytest.mark.shpd
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["get", "svc", "test", "--target"],
+        ["get", "svc", "test", "--resolved"],
+    ],
+)
+def test_cli_get_svc_render_flags_require_output(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code != 0
+    assert "--target and --resolved require --output" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_get_svc_with_output_renders_svc(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    describe_svc = mocker.patch.object(ServiceMng, "describe_svc")
+    render_svc = mocker.patch.object(
+        ServiceMng, "render_svc", return_value="svc-yaml"
+    )
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["get", "svc", "test", "--output", "yaml"])
+
+    assert result.exit_code == 0
+    assert "svc-yaml" in result.output
+    render_svc.assert_called_once_with(
+        mocker.ANY, "test", False, False, output="yaml"
+    )
+    describe_svc.assert_not_called()
 
 
 @pytest.mark.shpd
