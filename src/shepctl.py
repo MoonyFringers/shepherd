@@ -400,11 +400,6 @@ def list(shepherd: ShepherdMng):
 # =====================================================
 @cli.group(invoke_without_command=True)
 @click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
-@click.option(
     "--show-commands",
     is_flag=True,
     help="Show recent commands in status panels.",
@@ -434,7 +429,6 @@ def list(shepherd: ShepherdMng):
 def up(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
-    details: bool,
     show_commands: bool,
     show_commands_limit: int,
     timeout: Optional[int],
@@ -449,7 +443,6 @@ def up(
     # If no subcommand is given, default to environment startup.
     ctx = click.get_current_context()
     if ctx.invoked_subcommand is None:
-        _apply_details_flag(shepherd, details)
         _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
         shepherd.environmentMng.start_env(
             envCfg, timeout_seconds=timeout, watch=watch
@@ -457,11 +450,6 @@ def up(
 
 
 @up.command(name="env")
-@click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
 @click.option(
     "--show-commands",
     is_flag=True,
@@ -492,14 +480,12 @@ def up(
 def up_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
-    details: bool,
     show_commands: bool,
     show_commands_limit: int,
     timeout: Optional[int],
     watch: bool,
 ):
     """Start environment."""
-    _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.start_env(
         envCfg, timeout_seconds=timeout, watch=watch
@@ -584,11 +570,6 @@ def reload():
 
 @reload.command(name="env")
 @click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
-@click.option(
     "--show-commands",
     is_flag=True,
     help="Show recent commands in status panels.",
@@ -611,13 +592,11 @@ def reload():
 def reload_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
-    details: bool,
     show_commands: bool,
     show_commands_limit: int,
     watch: bool,
 ):
     """Reload environment."""
-    _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.reload_env(envCfg, watch=watch)
 
@@ -696,11 +675,6 @@ def shell(
 # =====================================================
 @cli.group(invoke_without_command=True)
 @click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
-@click.option(
     "--show-commands",
     is_flag=True,
     help="Show recent commands in status panels.",
@@ -723,7 +697,6 @@ def shell(
 def status(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
-    details: bool,
     show_commands: bool,
     show_commands_limit: int,
     watch: bool,
@@ -738,18 +711,12 @@ def status(
     if ctx.invoked_subcommand is not None:
         return
 
-    _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
 
     shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
 @status.command(name="env")
-@click.option(
-    "--details",
-    is_flag=True,
-    help="Show additional details in status tables.",
-)
 @click.option(
     "--show-commands",
     is_flag=True,
@@ -773,13 +740,11 @@ def status(
 def status_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
-    details: bool,
     show_commands: bool,
     show_commands_limit: int,
     watch: bool,
 ):
     """Show environment status."""
-    _apply_details_flag(shepherd, details)
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.status_env(envCfg, watch=watch)
 

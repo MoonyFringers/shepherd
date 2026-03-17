@@ -25,12 +25,17 @@ from typing import Any, Callable, Optional, TypeAlias
 
 from rich.live import Live
 from rich.markup import escape
+from rich.text import Text
 
+from environment.render import build_env_status_summary
 from util.util import Util
 
 GroupedStatus: TypeAlias = dict[str, list[list[str]]]
 GateStatus: TypeAlias = dict[str, Optional[bool]]
 CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
+ContainerStateMap: TypeAlias = dict[str, str]
+ProbeStateMap: TypeAlias = dict[tuple[str, str], str]
+SummaryStateMap: TypeAlias = dict[str, str]
 
 # Default/guard timing knobs used by wait loops.
 # With the default manager poll of 1.0s:
@@ -39,6 +44,8 @@ CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
 MIN_STATUS_POLL_SECONDS = 0.001
 MIN_LIVE_REFRESH_PER_SECOND = 8
 MIN_GATE_EVAL_INTERVAL_SECONDS = 1.0
+TRANSITION_FLASH_DURATION_SECONDS = 1.5
+READY_HIGHLIGHT_DURATION_SECONDS = 3.0
 
 
 def render_moving_shadow_text(
@@ -94,6 +101,45 @@ def render_moving_shadow_text(
     return "".join(out)
 
 
+def _plain_markup(markup: str) -> str:
+    return Text.from_markup(markup).plain
+
+
+def _probe_state_key(markup: str) -> str:
+    if "[green]" in markup or "[bold green]" in markup:
+        return "ok"
+    if "[red]" in markup or "[bold red]" in markup:
+        return "failed"
+    return "pending"
+
+
+def _collect_container_states(grouped: GroupedStatus) -> ContainerStateMap:
+    states: ContainerStateMap = {}
+    for service, items in grouped.items():
+        for item in items:
+            container = item[1]
+            states[f"{service}/{container}"] = _plain_markup(item[2])
+    return states
+
+
+def _collect_probe_states(grouped: GroupedStatus) -> ProbeStateMap:
+    states: ProbeStateMap = {}
+    for service, items in grouped.items():
+        if not items or len(items[0]) <= 3:
+            continue
+        probe_details = items[0][3]
+        if not probe_details or probe_details == "[dim]-[/dim]":
+            continue
+        for probe_detail in probe_details.split(", "):
+            probe_tag = _plain_markup(probe_detail)
+            states[(service, probe_tag)] = _probe_state_key(probe_detail)
+    return states
+
+
+def _collect_summary_states(grouped: GroupedStatus) -> SummaryStateMap:
+    return dict(build_env_status_summary(grouped))
+
+
 @dataclass(frozen=True)
 class WaitForEnvStateHooks:
     """
@@ -110,7 +156,7 @@ class WaitForEnvStateHooks:
     collect_env_status: Callable[
         [Any, Optional[GateStatus]], CollectStatusResult
     ]
-    build_env_status_table: Callable[..., Any]
+    build_env_status: Callable[..., Any]
     remaining_timeout_seconds: Callable[[float, Optional[int]], Optional[int]]
 
 
@@ -186,6 +232,14 @@ def wait_for_env_state(
     # Gates are only meaningful while waiting for readiness, not for stop.
     hidden_columns = {"Gates"} if not wait_until_up else None
     ready_status = "[bold green]Ready[/bold green]"
+    ready_flash_status = "[bold black on green]Ready[/bold black on green]"
+    ready_transition_started_at: Optional[float] = None
+    last_container_states: ContainerStateMap = {}
+    last_probe_states: ProbeStateMap = {}
+    last_summary_states: SummaryStateMap = {}
+    container_transition_started_at: dict[str, float] = {}
+    probe_transition_started_at: dict[tuple[str, str], float] = {}
+    summary_transition_started_at: dict[str, float] = {}
 
     if wait_until_up:
         # Only "up" waits care about readiness probes. "Down" waits complete
@@ -250,13 +304,24 @@ def wait_for_env_state(
         *,
         show_ready: bool = False,
     ) -> Optional[str]:
+        nonlocal ready_transition_started_at
         # Only "up" waits decorate the table title with animated/progressive
         # readiness text. Stop waits use plain tables plus separate progress
         # lines while the action is still in flight.
         if not wait_until_up:
             return None
         if show_ready:
+            now = time.monotonic()
+            if ready_transition_started_at is None:
+                ready_transition_started_at = now
+            elapsed = now - ready_transition_started_at
+            if (
+                Util.console.is_terminal
+                and elapsed < READY_HIGHLIGHT_DURATION_SECONDS
+            ):
+                return ready_flash_status
             return ready_status
+        ready_transition_started_at = None
         return starting_suffix(remaining, tick)
 
     def build_status_renderable(
@@ -266,9 +331,25 @@ def wait_for_env_state(
         tick: int,
         show_ready: bool = False,
     ) -> Any:
+        now = time.monotonic()
+        flashing_containers = {
+            key
+            for key, started_at in container_transition_started_at.items()
+            if now - started_at < TRANSITION_FLASH_DURATION_SECONDS
+        }
+        flashing_probes = {
+            key
+            for key, started_at in probe_transition_started_at.items()
+            if now - started_at < TRANSITION_FLASH_DURATION_SECONDS
+        }
+        flashing_summary_keys = {
+            key
+            for key, started_at in summary_transition_started_at.items()
+            if now - started_at < TRANSITION_FLASH_DURATION_SECONDS
+        }
         # Centralize all table-side decorations so the render loops can focus
         # on state transitions instead of repeatedly wiring optional panels.
-        return hooks.build_env_status_table(
+        return hooks.build_env_status(
             env.envCfg.tag,
             grouped,
             hidden_columns=hidden_columns,
@@ -289,6 +370,9 @@ def wait_for_env_state(
                 if env.is_command_log_enabled()
                 else None
             ),
+            flashing_containers=flashing_containers,
+            flashing_probes=flashing_probes,
+            flashing_summary_keys=flashing_summary_keys,
         )
 
     def render_progress_text(remaining: Optional[int], tick: int) -> str:
@@ -441,6 +525,7 @@ def wait_for_env_state(
         # one complete status sample. Until then, the UI can only show a
         # generic progress line because there is no stable table data yet.
         has_snapshot = False
+        snapshot_revision: int = 0
 
         def run_status_polling() -> None:
             nonlocal poll_error
@@ -451,6 +536,7 @@ def wait_for_env_state(
             nonlocal any_running
             nonlocal has_containers
             nonlocal has_snapshot
+            nonlocal snapshot_revision
             while not stop_polling.is_set():
                 now = time.monotonic()
                 if now < next_status_poll_at:
@@ -471,6 +557,7 @@ def wait_for_env_state(
                         any_running = poll_any_running
                         has_containers = poll_has_containers
                         has_snapshot = True
+                        snapshot_revision += 1
                     logging.debug(
                         "wait_for_env_%s poll env='%s': groups=%d "
                         "has_containers=%s all_running=%s any_running=%s "
@@ -492,6 +579,7 @@ def wait_for_env_state(
         next_status_poll_at = 0.0
         poll_thread = threading.Thread(target=run_status_polling, daemon=True)
         poll_thread.start()
+        seen_snapshot_revision: int = -1
         try:
             while True:
                 raise_action_error()
@@ -504,9 +592,51 @@ def wait_for_env_state(
                     snap_all_running = all_running
                     snap_any_running = any_running
                     snap_gate_status = latest_gate_status
+                    snap_revision = snapshot_revision
                 remaining = hooks.remaining_timeout_seconds(
                     started, timeout_seconds
                 )
+
+                if snap_revision != seen_snapshot_revision:
+                    current_container_states = _collect_container_states(
+                        snap_grouped
+                    )
+                    current_probe_states = _collect_probe_states(snap_grouped)
+                    current_summary_states = _collect_summary_states(
+                        snap_grouped
+                    )
+                    now = time.monotonic()
+
+                    for key, state in current_container_states.items():
+                        if key in last_container_states and (
+                            last_container_states[key] != state
+                        ):
+                            container_transition_started_at[key] = now
+                    for key, state in current_probe_states.items():
+                        if key in last_probe_states and (
+                            last_probe_states[key] != state
+                        ):
+                            probe_transition_started_at[key] = now
+                    for key, value in current_summary_states.items():
+                        if key in last_summary_states and (
+                            last_summary_states[key] != value
+                        ):
+                            summary_transition_started_at[key] = now
+
+                    for key in list(container_transition_started_at):
+                        if key not in current_container_states:
+                            container_transition_started_at.pop(key, None)
+                    for key in list(probe_transition_started_at):
+                        if key not in current_probe_states:
+                            probe_transition_started_at.pop(key, None)
+                    for key in list(summary_transition_started_at):
+                        if key not in current_summary_states:
+                            summary_transition_started_at.pop(key, None)
+
+                    last_container_states = current_container_states
+                    last_probe_states = current_probe_states
+                    last_summary_states = current_summary_states
+                    seen_snapshot_revision = snap_revision
 
                 if not snap_has_snapshot:
                     # No poll has completed yet, so we have no trustworthy

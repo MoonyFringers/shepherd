@@ -39,14 +39,13 @@ from .render import (
     build_command_error_panel,
     build_command_log_panel,
     build_env_details_tree,
-    build_env_status_table,
-    build_probe_report,
+    build_env_status_tree,
+    build_probe_status_tree,
     collect_env_status,
     dump_grouped_yaml,
     format_service_gate_details,
     format_service_gate_glyphs,
     render_env_summary,
-    render_probe_report,
 )
 from .status_wait import WaitForEnvStateHooks, wait_for_env_state
 
@@ -780,11 +779,8 @@ class EnvironmentMng:
             timeout_seconds=120,
         )
 
-        verbose = bool(self.cli_flags.get("verbose", False))
         title = f"[white]{envCfg.tag}[/white] probes"
-
-        report = self.build_probe_report(results, verbose=verbose, title=title)
-        self.render_probe_report(report)
+        Util.console.print(self._build_probe_status_tree(results, title=title))
 
         # ---- aggregate exit code ----
         for r in results:
@@ -793,19 +789,13 @@ class EnvironmentMng:
 
         return 0
 
-    # --- probe presentation policy ---
-
-    def build_probe_report(
+    def _build_probe_status_tree(
         self,
         results: list[ProbeRunResult],
         *,
-        verbose: bool,
         title: str,
-    ) -> dict[str, Any]:
-        return build_probe_report(results, verbose=verbose, title=title)
-
-    def render_probe_report(self, report: dict[str, Any]):
-        render_probe_report(report)
+    ):
+        return build_probe_status_tree(results, title=title)
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""
@@ -819,7 +809,10 @@ class EnvironmentMng:
                 progress_label="Checking",
             )
             return
-        grouped, _, _, has_containers = self._collect_env_status(env)
+        grouped, _, _, has_containers = self._collect_env_status(
+            env,
+            include_gates=False,
+        )
         if not has_containers or not grouped:
             Util.console.print(
                 f"[yellow]No services found for "
@@ -827,10 +820,9 @@ class EnvironmentMng:
             )
             return
         Util.console.print(
-            self._build_env_status_table(
+            self._build_env_status_tree(
                 envCfg.tag,
                 grouped,
-                hidden_columns={"Gates"},
             )
         )
 
@@ -881,7 +873,7 @@ class EnvironmentMng:
             get_required_gate_tags=self._get_required_gate_tags,
             evaluate_gate_status=self._evaluate_gate_status,
             collect_env_status=self._collect_env_status,
-            build_env_status_table=self._build_env_status_table,
+            build_env_status=self._build_env_status_tree,
             remaining_timeout_seconds=self._remaining_timeout_seconds,
         )
         wait_for_env_state(
@@ -894,7 +886,7 @@ class EnvironmentMng:
             hooks=hooks,
         )
 
-    def _build_env_status_table(
+    def _build_env_status_tree(
         self,
         env_tag: str,
         grouped: dict[str, list[list[str]]],
@@ -904,8 +896,11 @@ class EnvironmentMng:
         command_error: Optional[dict[str, str]] = None,
         command_error_limit: Optional[int] = None,
         hidden_columns: Optional[set[str]] = None,
+        flashing_containers: Optional[set[str]] = None,
+        flashing_probes: Optional[set[tuple[str, str]]] = None,
+        flashing_summary_keys: Optional[set[str]] = None,
     ):
-        return build_env_status_table(
+        return build_env_status_tree(
             env_tag,
             grouped,
             details_enabled=self._is_details(),
@@ -915,6 +910,9 @@ class EnvironmentMng:
             command_error=command_error,
             command_error_limit=command_error_limit,
             hidden_columns=hidden_columns,
+            flashing_containers=flashing_containers,
+            flashing_probes=flashing_probes,
+            flashing_summary_keys=flashing_summary_keys,
         )
 
     def _build_command_log_panel(
@@ -942,11 +940,13 @@ class EnvironmentMng:
         self,
         env: Environment,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
+        include_gates: bool = True,
     ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
         return collect_env_status(
             env,
-            details_enabled=self._is_details(),
+            details_enabled=True,
             gate_status=gate_status,
+            include_gates=include_gates,
         )
 
     def _format_service_gate_glyphs(

@@ -342,7 +342,6 @@ def test_completion_start_env(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["up", "env"])
     assert completions == [
-        "--details",
         "--show-commands",
         "--show-commands-limit",
         "--timeout",
@@ -515,7 +514,6 @@ def test_completion_reload_env(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["reload", "env"])
     assert completions == [
-        "--details",
         "--show-commands",
         "--show-commands-limit",
         "-w",
@@ -785,7 +783,6 @@ def test_completion_status_env(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["status", "env"])
     assert completions == [
-        "--details",
         "--show-commands",
         "--show-commands-limit",
         "-w",
