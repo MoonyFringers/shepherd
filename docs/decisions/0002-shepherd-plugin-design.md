@@ -1,5 +1,5 @@
 ---
-status: "proposed"
+status: "superseded by ADR-0004"
 date: 2025-09-09
 decision-makers:
   - '@luca-c-xcv'
