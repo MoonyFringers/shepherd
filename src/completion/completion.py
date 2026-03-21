@@ -35,6 +35,14 @@ class CompletionMng(AbstractCompletionMng):
     """
 
     SCOPE_VERBS = {
+        "plugin": [
+            "install",
+            "list",
+            "get",
+            "enable",
+            "disable",
+            "remove",
+        ],
         "env": [
             "get",
             "add",
@@ -244,6 +252,23 @@ class CompletionMng(AbstractCompletionMng):
     def _unique(self, values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
 
+    def _get_plugin_completions(
+        self, sanitized_args: list[str], verb: str, last_token: str
+    ) -> list[str]:
+        if verb in {"get", "enable", "disable", "remove"}:
+            if len(sanitized_args) <= 3:
+                plugin_ids = sorted(
+                    [plugin.id for plugin in self.configMng.get_plugins()]
+                )
+                if len(sanitized_args) == 3 and last_token:
+                    return [
+                        plugin_id
+                        for plugin_id in plugin_ids
+                        if plugin_id.startswith(last_token)
+                    ]
+                return plugin_ids
+        return []
+
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
         sanitized_args, scope, verb, used_options, expect_value_for = (
@@ -296,6 +321,11 @@ class CompletionMng(AbstractCompletionMng):
                     )
                 )
             return self._unique(suggestions)
+
+        if scope == "plugin":
+            return self._get_plugin_completions(
+                sanitized_args, verb, last_token
+            )
 
         completion_manager = self.get_completion_manager(scope)
         if completion_manager:

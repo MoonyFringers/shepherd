@@ -17,10 +17,13 @@
 
 from __future__ import annotations
 
+import io
 import os
+import tarfile
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
@@ -404,6 +407,203 @@ def test_cli_build_svc(
     result = runner.invoke(cli, ["svc", "build", "service_tag"])
     assert result.exit_code == 0
     mock_build.assert_called_once()
+
+
+def _write_plugin_archive(
+    archive_path: Path,
+    plugin_id: str = "acme-extra",
+    version: str = "1.0.0",
+    descriptor_content: str | None = None,
+) -> None:
+    with tarfile.open(archive_path, "w:gz") as archive:
+        descriptor = descriptor_content or f"""id: {plugin_id}
+name: Acme Extra
+version: {version}
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+capabilities:
+  commands: true
+default_config:
+  region: eu-west-1
+"""
+        descriptor_bytes = descriptor.encode("utf-8")
+        descriptor_info = tarfile.TarInfo("acme-extra/plugin.yaml")
+        descriptor_info.size = len(descriptor_bytes)
+        archive.addfile(descriptor_info, fileobj=io.BytesIO(descriptor_bytes))
+
+        module_bytes = b"class AcmePlugin:\n    pass\n"
+        module_info = tarfile.TarInfo("acme-extra/plugin/main.py")
+        module_info.size = len(module_bytes)
+        archive.addfile(module_info, fileobj=io.BytesIO(module_bytes))
+
+
+def _write_cli_config_with_plugins(config_path: Path) -> None:
+    shpd_config = yaml.safe_load(read_fixture("shpd", "shpd.yaml"))
+    shpd_config["plugins"] = [
+        {
+            "id": "acme",
+            "enabled": True,
+            "version": "1.2.3",
+            "config": {
+                "region": "eu-west-1",
+                "enabled_feature": True,
+            },
+        }
+    ]
+    config_path.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+
+@pytest.mark.shpd
+def test_cli_plugin_list(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    result = runner.invoke(cli, ["plugin", "list"])
+
+    assert result.exit_code == 0
+    assert "acme" in result.output
+    assert "1.2.3" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_plugin_get_yaml(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    result = runner.invoke(cli, ["plugin", "get", "acme"])
+
+    assert result.exit_code == 0
+    rendered = yaml.safe_load(result.output)
+    assert rendered["id"] == "acme"
+    assert rendered["enabled"] is True
+    assert rendered["version"] == "1.2.3"
+
+
+@pytest.mark.shpd
+def test_cli_plugin_enable_disable(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    result = runner.invoke(cli, ["plugin", "disable", "acme"])
+    assert result.exit_code == 0
+    assert "Plugin 'acme' disabled." in result.output
+
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    assert stored["plugins"][0]["enabled"] is False
+
+    result = runner.invoke(cli, ["plugin", "enable", "acme"])
+    assert result.exit_code == 0
+    assert "Plugin 'acme' enabled." in result.output
+
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    assert stored["plugins"][0]["enabled"] is True
+
+
+@pytest.mark.shpd
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["plugin", "enable", "missing"],
+        ["plugin", "disable", "missing"],
+    ],
+)
+def test_cli_plugin_enable_disable_missing_plugin(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    result = runner.invoke(cli, args)
+
+    assert result.exit_code == 1
+    assert "Error: Plugin 'missing' not found." in result.output
+
+
+@pytest.mark.shpd
+def test_cli_plugin_install_and_remove(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    archive_path = shpd_path / "acme-extra.tar.gz"
+    _write_plugin_archive(archive_path)
+
+    result = runner.invoke(cli, ["plugin", "install", str(archive_path)])
+    assert result.exit_code == 0
+    assert "Plugin 'acme-extra' installed." in result.output
+
+    plugin_dir = shpd_path / "plugins" / "acme-extra"
+    assert plugin_dir.is_dir()
+    assert (plugin_dir / "plugin.yaml").is_file()
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    plugin_cfg = next(
+        plugin for plugin in stored["plugins"] if plugin["id"] == "acme-extra"
+    )
+    assert plugin_cfg["enabled"] is True
+    assert plugin_cfg["version"] == "1.0.0"
+    assert plugin_cfg["config"] == {"region": "eu-west-1"}
+
+    result = runner.invoke(cli, ["plugin", "remove", "acme-extra"])
+    assert result.exit_code == 0
+    assert "Plugin 'acme-extra' removed." in result.output
+    assert not plugin_dir.exists()
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    assert all(plugin["id"] != "acme-extra" for plugin in stored["plugins"])
+
+
+@pytest.mark.shpd
+def test_cli_plugin_install_invalid_descriptor(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    archive_path = shpd_path / "invalid-plugin.tar.gz"
+    _write_plugin_archive(
+        archive_path,
+        descriptor_content="""id: broken
+name: Broken Plugin
+version: 1.0.0
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: BrokenPlugin
+capabilities:
+  commands: "false"
+""",
+    )
+
+    result = runner.invoke(cli, ["plugin", "install", str(archive_path)])
+
+    assert result.exit_code == 1
+    assert "Error: Invalid plugin descriptor" in result.output
+    assert "Plugin capability values must" in result.output
+    assert "be booleans." in result.output
+    assert not (shpd_path / "plugins" / "broken").exists()
 
 
 @pytest.mark.shpd

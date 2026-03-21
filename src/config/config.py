@@ -1417,6 +1417,39 @@ class ConfigMng:
         """Return the managed install directory for one plugin id."""
         return os.path.join(self.constants.SHPD_PLUGINS_DIR, plugin_id)
 
+    def set_plugin(self, plugin_cfg: PluginCfg) -> None:
+        """Add or replace one plugin entry and persist the config."""
+        plugins = list(self.config.plugins or [])
+        for index, plugin in enumerate(plugins):
+            if plugin.id == plugin_cfg.id:
+                plugins[index] = plugin_cfg
+                self.config.plugins = plugins
+                self.store()
+                return
+        plugins.append(plugin_cfg)
+        self.config.plugins = plugins
+        self.store()
+
+    def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> PluginCfg:
+        """Update one plugin enabled flag and persist the config."""
+        plugin = self.get_plugin(plugin_id)
+        if plugin is None:
+            raise ValueError(f"Plugin '{plugin_id}' not found.")
+        plugin.enabled = bool_to_str(enabled)
+        self.store()
+        return plugin
+
+    def remove_plugin(self, plugin_id: str) -> PluginCfg:
+        """Remove one plugin entry from config and persist the change."""
+        plugins = list(self.config.plugins or [])
+        for index, plugin in enumerate(plugins):
+            if plugin.id == plugin_id:
+                del plugins[index]
+                self.config.plugins = plugins
+                self.store()
+                return plugin
+        raise ValueError(f"Plugin '{plugin_id}' not found.")
+
     def get_environments(self) -> list[EnvironmentCfg]:
         """
         Retrieves all environments.

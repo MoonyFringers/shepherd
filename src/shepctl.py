@@ -28,6 +28,7 @@ from completion import CompletionMng
 from config import ConfigMng, EnvironmentCfg
 from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
+from plugin import PluginMng
 from service import ServiceMng
 from util import Util, setup_logging
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
@@ -70,6 +71,7 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
+        self.pluginMng = PluginMng(self.cli_flags, self.configMng)
 
 
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -620,6 +622,73 @@ def check_probe(
         probe_tag = None
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
     exit(exit_code)
+
+
+# =====================================================
+# PLUGIN
+# =====================================================
+@cli.group()
+def plugin():
+    """Manage plugins."""
+    pass
+
+
+@plugin.command(name="list")
+@click.pass_obj
+def list_plugins(shepherd: ShepherdMng):
+    """List installed plugins."""
+    shepherd.pluginMng.list_plugins()
+
+
+@plugin.command(name="get")
+@click.argument("plugin_id", required=True)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Choice(["yaml", "json"]),
+    default="yaml",
+    show_default=True,
+)
+@click.pass_obj
+def get_plugin(shepherd: ShepherdMng, plugin_id: str, output: str):
+    """Get plugin details."""
+    click.echo(shepherd.pluginMng.render_plugin(plugin_id, output))
+
+
+@plugin.command(name="install")
+@click.argument(
+    "archive_path",
+    required=True,
+    type=click.Path(exists=True, dir_okay=False, path_type=str),
+)
+@click.pass_obj
+def install_plugin(shepherd: ShepherdMng, archive_path: str):
+    """Install a plugin archive into the managed plugin root."""
+    shepherd.pluginMng.install_plugin(archive_path)
+
+
+@plugin.command(name="enable")
+@click.argument("plugin_id", required=True)
+@click.pass_obj
+def enable_plugin(shepherd: ShepherdMng, plugin_id: str):
+    """Enable one installed plugin."""
+    shepherd.pluginMng.enable_plugin(plugin_id)
+
+
+@plugin.command(name="disable")
+@click.argument("plugin_id", required=True)
+@click.pass_obj
+def disable_plugin(shepherd: ShepherdMng, plugin_id: str):
+    """Disable one installed plugin."""
+    shepherd.pluginMng.disable_plugin(plugin_id)
+
+
+@plugin.command(name="remove")
+@click.argument("plugin_id", required=True)
+@click.pass_obj
+def remove_plugin(shepherd: ShepherdMng, plugin_id: str):
+    """Remove one installed plugin."""
+    shepherd.pluginMng.remove_plugin(plugin_id)
 
 
 if __name__ == "__main__":
