@@ -358,6 +358,7 @@ class Util:
             "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
             "SHPD_SSH_DIR": constants.SHPD_SSH_DIR,
             "SHPD_SSHD_DIR": constants.SHPD_SSHD_DIR,
+            "SHPD_PLUGINS_DIR": constants.SHPD_PLUGINS_DIR,
         }
 
         for desc, dir_path in dirs.items():
