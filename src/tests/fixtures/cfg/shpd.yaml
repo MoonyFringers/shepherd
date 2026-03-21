@@ -4,6 +4,13 @@ volumes_path: ${volumes_path}
 staging_area:
   volumes_path: ${staging_area_volumes_path}
   images_path: ${staging_area_images_path}
+plugins:
+  - id: acme
+    enabled: true
+    version: 1.2.3
+    config:
+      region: eu-west-1
+      enabled_feature: true
 env_templates:
   - tag: default
     factory: docker-compose

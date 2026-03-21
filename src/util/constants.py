@@ -48,6 +48,10 @@ class Constants:
     def SHPD_SSHD_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, ".sshd")
 
+    @property
+    def SHPD_PLUGINS_DIR(self) -> str:
+        return os.path.join(self.SHPD_PATH, "plugins")
+
     # Logging configuration
 
     LOG_FILE: str
@@ -165,6 +169,7 @@ class Constants:
                 "volumes_path": "${staging_area_volumes_path}",
                 "images_path": "${staging_area_images_path}",
             },
+            "plugins": [],
             "envs": [],
         }
 

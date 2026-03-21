@@ -24,7 +24,7 @@ import yaml
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
-from config import Config, ConfigMng
+from config import Config, ConfigMng, parse_config, parse_plugin_descriptor
 from util import Constants
 
 
@@ -195,6 +195,15 @@ def test_load_config(mocker: MockerFixture):
     assert config.volumes_path == "${test_path}/volumes"
     assert config.staging_area.volumes_path == "${test_path}/sa_volumes"
     assert config.staging_area.images_path == "${test_path}/sa_images"
+    assert config.plugins is not None
+    assert config.plugins[0].id == "acme"
+    assert config.plugins[0].enabled == "true"
+    assert config.plugins[0].is_enabled() is True
+    assert config.plugins[0].version == "1.2.3"
+    assert config.plugins[0].config == {
+        "region": "eu-west-1",
+        "enabled_feature": True,
+    }
     assert config.envs[0].status.active is True
     assert config.envs[0].status.rendered_config is None
 
@@ -300,6 +309,99 @@ def test_load_config_change_resolve_status(mocker: MockerFixture):
     config.set_resolved()
     config.envs[0].get_yaml(False)
     config.envs[0].services[0].get_yaml(False)
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+description: Example plugin
+capabilities:
+  templates: true
+  commands: false
+default_config:
+  region: eu-west-1
+"""
+
+    descriptor = parse_plugin_descriptor(descriptor_yaml)
+
+    assert descriptor.id == "acme"
+    assert descriptor.name == "Acme Plugin"
+    assert descriptor.version == "1.2.3"
+    assert descriptor.plugin_api_version == 1
+    assert descriptor.entrypoint.module == "plugin.main"
+    assert descriptor.entrypoint.class_name == "AcmePlugin"
+    assert descriptor.description == "Example plugin"
+    assert descriptor.capabilities == {
+        "templates": True,
+        "commands": False,
+    }
+    assert descriptor.default_config == {"region": "eu-west-1"}
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_requires_entrypoint():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+"""
+
+    with pytest.raises(ValueError):
+        parse_plugin_descriptor(descriptor_yaml)
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_rejects_non_boolean_capabilities():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+capabilities:
+  commands: "false"
+  completion: "0"
+"""
+
+    with pytest.raises(ValueError):
+        parse_plugin_descriptor(descriptor_yaml)
+
+
+@pytest.mark.cfg
+def test_parse_plugin_enabled_supports_bool_and_placeholder():
+    config_yaml = """
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+plugins:
+  - id: acme
+    enabled: false
+    version: 1.2.3
+  - id: beta
+    enabled: ${plugin_enabled}
+    version: 2.0.0
+envs: []
+"""
+
+    config = parse_config(config_yaml)
+
+    assert config.plugins is not None
+    assert config.plugins[0].enabled == "false"
+    assert config.plugins[0].is_enabled() is False
+    assert config.plugins[1].enabled == "${plugin_enabled}"
 
 
 @pytest.mark.cfg
@@ -422,6 +524,7 @@ def test_store_config_with_refs_with_real_files():
                 item.setdefault("ready", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
+            expected.setdefault("plugins", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 

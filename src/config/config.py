@@ -787,6 +787,41 @@ class StagingAreaCfg(Resolvable):
 
 
 @dataclass
+class PluginCfg(Resolvable):
+    """Represents one installed plugin entry in the main config."""
+
+    id: str
+    enabled: str = field(default="true", metadata={"boolify": True})
+    version: Optional[str] = None
+    config: Optional[dict[str, Any]] = None
+
+    def is_enabled(self) -> bool:
+        return str_to_bool(self.enabled)
+
+
+@dataclass
+class PluginEntrypointCfg(Resolvable):
+    """Represents the importable entrypoint declared by a plugin."""
+
+    module: str
+    class_name: str
+
+
+@dataclass
+class PluginDescriptorCfg(Resolvable):
+    """Represents the install-time plugin descriptor."""
+
+    id: str
+    name: str
+    version: str
+    plugin_api_version: int
+    entrypoint: PluginEntrypointCfg
+    description: Optional[str] = None
+    capabilities: Optional[dict[str, bool]] = None
+    default_config: Optional[dict[str, Any]] = None
+
+
+@dataclass
 class Config(Resolvable):
     """
     Represents the shepherd configuration.
@@ -798,7 +833,61 @@ class Config(Resolvable):
     staging_area: StagingAreaCfg
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
+    plugins: Optional[list[PluginCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
+
+
+def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
+    """
+    Parse a plugin descriptor YAML into the strongly typed descriptor model.
+    """
+
+    data = yaml.safe_load(yaml_str)
+    if not isinstance(data, dict):
+        raise ValueError("Plugin descriptor must be a YAML mapping.")
+    descriptor = cast(dict[str, Any], data)
+
+    entrypoint = descriptor.get("entrypoint")
+    if not isinstance(entrypoint, dict):
+        raise ValueError("Plugin descriptor must declare an entrypoint.")
+    entrypoint_cfg = cast(dict[str, Any], entrypoint)
+
+    normalized_capabilities: Optional[dict[str, bool]]
+    capabilities = descriptor.get("capabilities")
+    if capabilities is not None:
+        if not isinstance(capabilities, dict):
+            raise ValueError("Plugin capabilities must be a mapping.")
+        capabilities_cfg = cast(dict[str, Any], capabilities)
+        capabilities_map: dict[str, bool] = {}
+        for key, value in capabilities_cfg.items():
+            if not isinstance(value, bool):
+                raise ValueError("Plugin capability values must be booleans.")
+            capabilities_map[str(key)] = value
+        normalized_capabilities = capabilities_map
+    else:
+        normalized_capabilities = None
+
+    default_config = descriptor.get("default_config")
+    if default_config is not None and not isinstance(default_config, dict):
+        raise ValueError("Plugin default_config must be a mapping.")
+
+    return PluginDescriptorCfg(
+        id=str(descriptor["id"]),
+        name=str(descriptor["name"]),
+        version=str(descriptor["version"]),
+        plugin_api_version=int(descriptor["plugin_api_version"]),
+        entrypoint=PluginEntrypointCfg(
+            module=str(entrypoint_cfg["module"]),
+            class_name=str(entrypoint_cfg["class"]),
+        ),
+        description=(
+            str(description)
+            if (description := descriptor.get("description")) is not None
+            else None
+        ),
+        capabilities=normalized_capabilities,
+        default_config=cast(Optional[dict[str, Any]], default_config),
+    )
 
 
 def parse_config(yaml_str: str) -> Config:
@@ -984,6 +1073,18 @@ def parse_config(yaml_str: str) -> Config:
             images_path=item["images_path"],
         )
 
+    def parse_plugin(item: Any) -> PluginCfg:
+        return PluginCfg(
+            id=item["id"],
+            enabled=(
+                bool_to_str(val)
+                if isinstance(val := item.get("enabled", True), bool)
+                else val
+            ),
+            version=item.get("version"),
+            config=item.get("config"),
+        )
+
     def parse_environment(item: Any) -> EnvironmentCfg:
         return EnvironmentCfg(
             template=item["template"],
@@ -1016,6 +1117,11 @@ def parse_config(yaml_str: str) -> Config:
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
         staging_area=parse_staging_area(data["staging_area"]),
+        plugins=(
+            [parse_plugin(plugin) for plugin in data.get("plugins", [])]
+            if data.get("plugins") is not None
+            else None
+        ),
         envs=[parse_environment(env) for env in data["envs"]],
     )
 
@@ -1295,6 +1401,21 @@ class ConfigMng:
             if env.tag == envTag:
                 return env
         return None
+
+    def get_plugins(self) -> list[PluginCfg]:
+        """Return the configured plugin inventory."""
+        return list(self.config.plugins or [])
+
+    def get_plugin(self, plugin_id: str) -> Optional[PluginCfg]:
+        """Return one configured plugin by id."""
+        for plugin in self.get_plugins():
+            if plugin.id == plugin_id:
+                return plugin
+        return None
+
+    def get_plugin_dir(self, plugin_id: str) -> str:
+        """Return the managed install directory for one plugin id."""
+        return os.path.join(self.constants.SHPD_PLUGINS_DIR, plugin_id)
 
     def get_environments(self) -> list[EnvironmentCfg]:
         """
