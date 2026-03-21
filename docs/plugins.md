@@ -7,6 +7,7 @@ The current implementation scope is limited to:
 - plugin descriptor format
 - plugin inventory persisted in the main Shepherd config
 - managed plugin installation directory layout
+- plugin lifecycle commands for install, inspect, enable, disable, and remove
 
 Runtime loading, command extension, completion extension, and factory/template
 registration are introduced in later steps of the plugin rollout.
@@ -29,6 +30,20 @@ not persisted as a free-form path in the main config.
 
 This keeps plugin discovery deterministic and avoids config drift caused by
 external paths moving or disappearing.
+
+## Plugin Lifecycle Commands
+
+The current CLI exposes plugin inventory management under the `plugin` scope:
+
+- `shepctl plugin list`
+- `shepctl plugin get <plugin-id>`
+- `shepctl plugin install <archive>`
+- `shepctl plugin enable <plugin-id>`
+- `shepctl plugin disable <plugin-id>`
+- `shepctl plugin remove <plugin-id>`
+
+These commands operate on the persisted plugin inventory in the main config and
+on the managed plugin root under `~/.shpd/plugins/`.
 
 ## Plugin Inventory In Config
 
@@ -60,7 +75,7 @@ config fields. YAML booleans are normalized, and placeholders such as
 ## Plugin Descriptor
 
 Each installed plugin ships a descriptor that defines its metadata and
-entrypoint.
+entrypoint. The descriptor file name is currently fixed to `plugin.yaml`.
 
 Example:
 
@@ -118,10 +133,11 @@ introduced.
 This documentation matches the current implementation step. At this stage,
 Shepherd does not yet:
 
-- install plugin archives through `shepctl plugin ...`
 - import plugin Python entrypoints with `importlib`
 - load plugin commands into the CLI
 - load plugin completion providers
 - register plugin factories or templates at runtime
 
-Those capabilities are added in follow-up PRs from the plugin rollout plan.
+Plugin archive installation and persisted inventory management are available
+now. Runtime loading and extension points are added in follow-up PRs from the
+plugin rollout plan.

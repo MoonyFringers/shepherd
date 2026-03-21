@@ -16,6 +16,7 @@ These options apply to every command:
 Top-level scopes currently available:
 
 - `env`
+- `plugin`
 - `probe`
 - `svc`
 
@@ -135,6 +136,42 @@ Options:
 
 Requires an active environment.
 
+### `plugin`
+
+Manage installed plugins.
+
+#### `plugin list`
+
+List the persisted plugin inventory from the main config.
+
+#### `plugin get PLUGIN_ID`
+
+Get one plugin entry from the persisted inventory.
+
+Options:
+
+- `-o`, `--output [yaml|json]`: output format
+
+#### `plugin install ARCHIVE_PATH`
+
+Install a plugin archive into the managed plugin root under
+`~/.shpd/plugins/<plugin-id>/`.
+
+The archive must contain exactly one `plugin.yaml` descriptor.
+
+#### `plugin enable PLUGIN_ID`
+
+Enable one installed plugin in the persisted inventory.
+
+#### `plugin disable PLUGIN_ID`
+
+Disable one installed plugin in the persisted inventory.
+
+#### `plugin remove PLUGIN_ID`
+
+Remove one installed plugin from both the persisted inventory and the managed
+plugin root.
+
 ### `svc`
 
 Manage services.
@@ -196,6 +233,7 @@ Requires an active environment.
 ## Notes
 
 - Many commands operate on the active environment selected with `env checkout`.
+- Plugin lifecycle commands are grouped under `plugin`.
 - Commands that manage environment runtime state are centered around
   `env up`, `env halt`, `env reload`, and `env status`.
 - Service-oriented commands (`svc build`, `svc logs`, `svc shell`,
