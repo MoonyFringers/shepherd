@@ -72,6 +72,7 @@ class Constants:
     APP_AUTHOR: str = "Moony Fringers"
     APP_LICENSE: str = "AGPL-3.0"
     APP_URL: str = "https://github.com/MoonyFringers/shepherd"
+    PLUGIN_DESCRIPTOR_FILE: str = "plugin.yaml"
 
     # Environment templates:
 

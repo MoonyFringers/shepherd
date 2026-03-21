@@ -21,6 +21,7 @@ import os
 from pathlib import Path
 
 import pytest
+import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
@@ -45,6 +46,25 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
 @pytest.fixture
 def runner() -> CliRunner:
     return CliRunner()
+
+
+def _write_completion_config_with_plugins(config_path: Path) -> None:
+    shpd_config = yaml.safe_load(read_fixture("completion", "shpd.yaml"))
+    shpd_config["plugins"] = [
+        {
+            "id": "acme",
+            "enabled": True,
+            "version": "1.2.3",
+            "config": {"region": "eu-west-1"},
+        },
+        {
+            "id": "acme-extra",
+            "enabled": False,
+            "version": "1.0.0",
+            "config": None,
+        },
+    ]
+    config_path.write_text(yaml.dump(shpd_config, sort_keys=False))
 
 
 @pytest.mark.compl
@@ -100,6 +120,67 @@ def test_completion_add(
     assert (
         completions == sm.completionMng.SCOPE_VERBS["env"]
     ), "Expected env verbs"
+
+
+@pytest.mark.compl
+def test_completion_plugin_scope(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["plugin"])
+    assert (
+        completions == sm.completionMng.SCOPE_VERBS["plugin"]
+    ), "Expected plugin verbs"
+
+
+@pytest.mark.compl
+@pytest.mark.parametrize(
+    "args",
+    [
+        ["plugin", "get"],
+        ["plugin", "enable"],
+        ["plugin", "disable"],
+        ["plugin", "remove"],
+    ],
+)
+def test_completion_plugin_id_verbs(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_completion_config_with_plugins(shpd_yaml)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(args)
+    assert completions == [
+        "acme",
+        "acme-extra",
+    ], "Expected plugin id completion"
+
+
+@pytest.mark.compl
+def test_completion_plugin_id_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_completion_config_with_plugins(shpd_yaml)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["plugin", "get", "ac"])
+    assert completions == [
+        "acme",
+        "acme-extra",
+    ], "Expected filtered plugin id completion"
 
 
 @pytest.mark.compl
