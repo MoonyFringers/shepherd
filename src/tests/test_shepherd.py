@@ -193,7 +193,7 @@ def test_get_env_flags_details(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "--details"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "--details"])
     assert result.exit_code == 0
 
 
@@ -219,7 +219,7 @@ def test_get_svc_flags_details(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test", "--details"])
+    result = runner.invoke(cli, ["svc", "get", "test", "--details"])
     assert result.exit_code == 0
 
 
@@ -244,7 +244,7 @@ def test_status_flags_show_commands(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["status", "--show-commands"])
+    result = runner.invoke(cli, ["env", "status", "--show-commands"])
     assert result.exit_code == 0
 
 
@@ -269,7 +269,7 @@ def test_reload_flags_show_commands_limit(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["reload", "env", "--show-commands-limit", "8"])
+    result = runner.invoke(cli, ["env", "reload", "--show-commands-limit", "8"])
     assert result.exit_code == 0
 
 
@@ -279,7 +279,7 @@ def test_cli_get_env_by_gate_requires_output(
 ):
     mocker.patch.object(ShepherdMng, "__init__", return_value=None)
 
-    result = runner.invoke(cli, ["get", "env", "--by-gate"])
+    result = runner.invoke(cli, ["env", "get", "--by-gate"])
 
     assert result.exit_code != 0
     assert (
@@ -293,7 +293,7 @@ def test_cli_get_env_by_gate_requires_target_when_output_present(
 ):
     mocker.patch.object(ShepherdMng, "__init__", return_value=None)
 
-    result = runner.invoke(cli, ["get", "env", "--output", "yaml", "--by-gate"])
+    result = runner.invoke(cli, ["env", "get", "--output", "yaml", "--by-gate"])
 
     assert result.exit_code != 0
     assert "--by-gate requires --target" in result.output
@@ -304,15 +304,15 @@ def test_cli_get_env_by_gate_requires_target_when_output_present(
     ("args", "expected_message"),
     [
         (
-            ["get", "env", "test-1", "--target"],
+            ["env", "get", "test-1", "--target"],
             "--target, --resolved, and --by-gate require --output",
         ),
         (
-            ["get", "env", "test-1", "--resolved"],
+            ["env", "get", "test-1", "--resolved"],
             "--target, --resolved, and --by-gate require --output",
         ),
         (
-            ["get", "env", "test-1", "--target", "--by-gate"],
+            ["env", "get", "test-1", "--target", "--by-gate"],
             "--target, --resolved, and --by-gate require --output",
         ),
     ],
@@ -344,7 +344,7 @@ def test_cli_get_env_without_output_describes_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1"])
+    result = runner.invoke(cli, ["env", "get", "test-1"])
 
     assert result.exit_code == 0
     describe_env.assert_called_once_with("test-1")
@@ -365,7 +365,7 @@ def test_cli_get_env_with_output_renders_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "--output", "yaml"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "--output", "yaml"])
 
     assert result.exit_code == 0
     assert "env-yaml" in result.output
@@ -400,7 +400,7 @@ def test_cli_build_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["build", "service_tag"])
+    result = runner.invoke(cli, ["svc", "build", "service_tag"])
     assert result.exit_code == 0
     mock_build.assert_called_once()
 
@@ -417,7 +417,7 @@ def test_cli_get_svc_without_output_describes_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test"])
+    result = runner.invoke(cli, ["svc", "get", "test"])
 
     assert result.exit_code == 0
     describe_svc.assert_called_once()
@@ -428,8 +428,8 @@ def test_cli_get_svc_without_output_describes_svc(
 @pytest.mark.parametrize(
     "args",
     [
-        ["get", "svc", "test", "--target"],
-        ["get", "svc", "test", "--resolved"],
+        ["svc", "get", "test", "--target"],
+        ["svc", "get", "test", "--resolved"],
     ],
 )
 def test_cli_get_svc_render_flags_require_output(
@@ -464,7 +464,7 @@ def test_cli_get_svc_with_output_renders_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test", "--output", "yaml"])
+    result = runner.invoke(cli, ["svc", "get", "test", "--output", "yaml"])
 
     assert result.exit_code == 0
     assert "svc-yaml" in result.output
@@ -485,7 +485,7 @@ def test_cli_start_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["up", "svc", "service_tag"])
+    result = runner.invoke(cli, ["svc", "up", "service_tag"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
 
@@ -501,7 +501,7 @@ def test_cli_stop_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["halt", "svc", "service_tag"])
+    result = runner.invoke(cli, ["svc", "halt", "service_tag"])
     assert result.exit_code == 0
     mock_stop.assert_called_once()
 
@@ -517,7 +517,7 @@ def test_cli_reload_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["reload", "svc", "service_tag"])
+    result = runner.invoke(cli, ["svc", "reload", "service_tag"])
     assert result.exit_code == 0
     mock_reload.assert_called_once()
 
@@ -533,7 +533,7 @@ def test_cli_logs_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["logs", "service_tag"])
+    result = runner.invoke(cli, ["svc", "logs", "service_tag"])
     assert result.exit_code == 0
     mock_logs.assert_called_once()
 
@@ -549,7 +549,7 @@ def test_cli_shell_svc(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["shell", "service_tag"])
+    result = runner.invoke(cli, ["svc", "shell", "service_tag"])
     assert result.exit_code == 0
     mock_shell.assert_called_once()
 
@@ -563,7 +563,7 @@ def test_cli_add_env(
 ):
     mock_add = mocker.patch.object(EnvironmentMng, "add_env")
 
-    result = runner.invoke(cli, ["add", "env", "docker-compose", "env_tag"])
+    result = runner.invoke(cli, ["env", "add", "docker-compose", "env_tag"])
     assert result.exit_code == 0
     mock_add.assert_called_once_with("docker-compose", "env_tag")
 
@@ -574,7 +574,7 @@ def test_cli_clone_env(
 ):
     mock_clone = mocker.patch.object(EnvironmentMng, "clone_env")
 
-    result = runner.invoke(cli, ["clone", "env", "src_env_tag", "dst_env_tag"])
+    result = runner.invoke(cli, ["env", "clone", "src_env_tag", "dst_env_tag"])
     assert result.exit_code == 0
     mock_clone.assert_called_once_with("src_env_tag", "dst_env_tag")
 
@@ -585,7 +585,7 @@ def test_cli_checkout_env(
 ):
     mock_checkout = mocker.patch.object(EnvironmentMng, "checkout_env")
 
-    result = runner.invoke(cli, ["checkout", "env_tag"])
+    result = runner.invoke(cli, ["env", "checkout", "env_tag"])
     assert result.exit_code == 0
     mock_checkout.assert_called_once_with("env_tag")
 
@@ -596,7 +596,7 @@ def test_cli_list_env(
 ):
     mock_list = mocker.patch.object(EnvironmentMng, "list_envs")
 
-    result = runner.invoke(cli, ["list"])
+    result = runner.invoke(cli, ["env", "list"])
     assert result.exit_code == 0
     mock_list.assert_called_once()
 
@@ -612,7 +612,7 @@ def test_cli_start_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
         mocker.ANY, timeout_seconds=60, watch=False
@@ -630,7 +630,7 @@ def test_cli_start_env_watch(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["up", "env", "--watch"])
+    result = runner.invoke(cli, ["env", "up", "--watch"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
         mocker.ANY, timeout_seconds=60, watch=True
@@ -648,7 +648,7 @@ def test_cli_start_env_with_timeout(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["up", "env", "--timeout", "30"])
+    result = runner.invoke(cli, ["env", "up", "--timeout", "30"])
     assert result.exit_code == 0
     mock_start.assert_called_once()
     assert mock_start.call_args.kwargs == {
@@ -668,7 +668,7 @@ def test_cli_stop_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["halt", "env"])
+    result = runner.invoke(cli, ["env", "halt"])
     assert result.exit_code == 0
     mock_stop.assert_called_once_with(mocker.ANY, wait=True)
 
@@ -684,7 +684,7 @@ def test_cli_stop_env_no_wait(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["halt", "env", "--no-wait"])
+    result = runner.invoke(cli, ["env", "halt", "--no-wait"])
     assert result.exit_code == 0
     mock_stop.assert_called_once_with(mocker.ANY, wait=False)
 
@@ -700,7 +700,7 @@ def test_cli_reload_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["reload", "env"])
+    result = runner.invoke(cli, ["env", "reload"])
     assert result.exit_code == 0
     mock_reload.assert_called_once_with(mocker.ANY, watch=False)
 
@@ -716,7 +716,7 @@ def test_cli_reload_env_watch(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["reload", "env", "--watch"])
+    result = runner.invoke(cli, ["env", "reload", "--watch"])
     assert result.exit_code == 0
     mock_reload.assert_called_once_with(mocker.ANY, watch=True)
 
@@ -732,7 +732,7 @@ def test_cli_status_env(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["status", "env"])
+    result = runner.invoke(cli, ["env", "status"])
     assert result.exit_code == 0
     mock_status.assert_called_once_with(mocker.ANY, watch=False)
 
@@ -748,7 +748,7 @@ def test_cli_status_env_watch(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["status", "env", "--watch"])
+    result = runner.invoke(cli, ["env", "status", "--watch"])
     assert result.exit_code == 0
     mock_status.assert_called_once_with(mocker.ANY, watch=True)
 
@@ -764,7 +764,7 @@ def test_cli_status_watch_default(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["status", "--watch"])
+    result = runner.invoke(cli, ["env", "status", "--watch"])
     assert result.exit_code == 0
     mock_status.assert_called_once_with(mocker.ANY, watch=True)
 
@@ -783,7 +783,7 @@ def test_cli_get_probe_no_args(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe"])
+    result = runner.invoke(cli, ["probe", "get"])
     assert result.exit_code == 0
     render_probes.assert_called_once()
 
@@ -799,7 +799,7 @@ def test_cli_get_probe_flag_output(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "--output", "json"])
+    result = runner.invoke(cli, ["probe", "get", "--output", "json"])
     assert result.exit_code == 0
     render_probes.assert_called_once()
 
@@ -816,7 +816,7 @@ def test_cli_get_probe_flag_target(
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(
-        cli, ["get", "probe", "--output", "json", "--target"]
+        cli, ["probe", "get", "--output", "json", "--target"]
     )
     assert result.exit_code == 0
     render_probes.assert_called_once()
@@ -834,7 +834,7 @@ def test_cli_get_probe_flag_resolved(
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(
-        cli, ["get", "probe", "--output", "json", "--resolved"]
+        cli, ["probe", "get", "--output", "json", "--resolved"]
     )
     assert result.exit_code == 0
     render_probes.assert_called_once()
@@ -851,7 +851,7 @@ def test_cli_get_probe_flag_all(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "--all"])
+    result = runner.invoke(cli, ["probe", "get", "--all"])
     assert result.exit_code == 0
     render_probes.assert_called_once()
 
@@ -867,7 +867,7 @@ def test_cli_get_probe_flag_all_with_probe_tag(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "db-ready", "--all"])
+    result = runner.invoke(cli, ["probe", "get", "db-ready", "--all"])
     assert result.exit_code == 0
     render_probes.assert_called_once()
 
@@ -883,7 +883,7 @@ def test_cli_get_probe_with_probe_tag(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "db-ready"])
+    result = runner.invoke(cli, ["probe", "get", "db-ready"])
     assert result.exit_code == 0
     render_probes.assert_called_once()
 
@@ -901,7 +901,7 @@ def test_cli_check_probe_no_args(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["check", "probe"])
+    result = runner.invoke(cli, ["probe", "check"])
     assert result.exit_code == 0
     check_probes.assert_called_once()
 
@@ -919,7 +919,7 @@ def test_cli_check_probe_with_probe_tag(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+    result = runner.invoke(cli, ["probe", "check", "db-ready"])
     assert result.exit_code == 0
     check_probes.assert_called_once()
 
@@ -937,7 +937,7 @@ def test_cli_check_probe_with_probe_tag_failed(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+    result = runner.invoke(cli, ["probe", "check", "db-ready"])
     assert result.exit_code == 1
     check_probes.assert_called_once()
 
@@ -955,7 +955,7 @@ def test_cli_check_probe_flag_all(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["check", "probe", "--all"])
+    result = runner.invoke(cli, ["probe", "check", "--all"])
     assert result.exit_code == 0
     check_probes.assert_called_once()
 
@@ -973,6 +973,6 @@ def test_cli_check_probe_flag_all_with_probe_tag(
     shpd_config = read_fixture("shpd", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["check", "probe", "db-ready", "--all"])
+    result = runner.invoke(cli, ["probe", "check", "db-ready", "--all"])
     assert result.exit_code == 0
     check_probes.assert_called_once()

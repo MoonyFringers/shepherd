@@ -164,15 +164,15 @@ def complete(shepherd: ShepherdMng, args: Any):
 
 
 # =====================================================
-# GET
+# ENV
 # =====================================================
 @cli.group()
-def get():
-    """Get resources."""
+def env():
+    """Manage environments."""
     pass
 
 
-@get.command(name="env")
+@env.command(name="get")
 @click.argument("tag", required=False)
 @click.option("-o", "--output", type=click.Choice(["yaml", "json"]))
 @click.option(
@@ -215,85 +215,7 @@ def get_env(
     shepherd.environmentMng.describe_env(tag)
 
 
-@get.command(name="probe")
-@click.argument("probe_tag", required=False)
-@click.option(
-    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
-)
-@click.option(
-    "-t", "--target", is_flag=True, help="Get the target configuration."
-)
-@click.option(
-    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
-)
-@click.option("-a", "--all", is_flag=True, help="Get all probes.")
-@click.pass_obj
-@require_active_env
-def get_probe(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    probe_tag: Optional[str],
-    output: Optional[str],
-    target: bool,
-    resolved: bool,
-    all: bool,
-):
-    """Get probe details."""
-    if all:
-        probe_tag = None
-    if output:
-        click.echo(
-            shepherd.environmentMng.render_probes(
-                envCfg, probe_tag, target, resolved
-            )
-        )
-
-
-@get.command(name="svc")
-@click.argument("tag", required=True)
-@click.option("-o", "--output", type=click.Choice(["yaml", "json"]))
-@click.option(
-    "-t", "--target", is_flag=True, help="Get the target configuration."
-)
-@click.option(
-    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
-)
-@click.option("--details", is_flag=True, help="Show container details.")
-@click.pass_obj
-@require_active_env
-def get_svc(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    tag: str,
-    output: Optional[str],
-    target: bool,
-    resolved: bool,
-    details: bool,
-):
-    """Get service details or config."""
-    if (target or resolved) and not output:
-        raise click.UsageError("--target and --resolved require --output")
-    _apply_details_flag(shepherd, details)
-    if output:
-        click.echo(
-            shepherd.serviceMng.render_svc(
-                envCfg, tag, target, resolved, output=output
-            )
-        )
-        return
-    shepherd.serviceMng.describe_svc(envCfg, tag)
-
-
-# =====================================================
-# ADD
-# =====================================================
-@cli.group()
-def add():
-    """Add resources."""
-    pass
-
-
-@add.command(name="env")
+@env.command(name="add")
 @click.argument("template", required=True)
 @click.argument("tag", required=True)
 @click.pass_obj
@@ -302,35 +224,7 @@ def add_env(shepherd: ShepherdMng, template: str, tag: str):
     shepherd.environmentMng.add_env(template, tag)
 
 
-@add.command(name="svc")
-@click.argument("svc_template", required=True)
-@click.argument("svc_tag", required=True)
-@click.argument("svc_class", required=False)
-@click.pass_obj
-@require_active_env
-def add_svc(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_template: str,
-    svc_tag: str,
-    svc_class: Optional[str] = None,
-):
-    """Add a new service."""
-    shepherd.environmentMng.add_service(
-        envCfg.tag, svc_tag, svc_template, svc_class
-    )
-
-
-# =====================================================
-# CLONE
-# =====================================================
-@cli.group()
-def clone():
-    """Clone resources."""
-    pass
-
-
-@clone.command(name="env")
+@env.command(name="clone")
 @click.argument("src_tag", required=True)
 @click.argument("dst_tag", required=True)
 @click.pass_obj
@@ -339,16 +233,7 @@ def clone_env(shepherd: ShepherdMng, src_tag: str, dst_tag: str):
     shepherd.environmentMng.clone_env(src_tag, dst_tag)
 
 
-# =====================================================
-# RENAME
-# =====================================================
-@cli.group()
-def rename():
-    """Rename resources."""
-    pass
-
-
-@rename.command(name="env")
+@env.command(name="rename")
 @click.argument("src_tag", required=True)
 @click.argument("dst_tag", required=True)
 @click.pass_obj
@@ -360,7 +245,7 @@ def rename_env(shepherd: ShepherdMng, src_tag: str, dst_tag: str):
 # =====================================================
 # CHECKOUT
 # =====================================================
-@cli.command(name="checkout")
+@env.command(name="checkout")
 @click.argument("tag", required=True)
 @click.pass_obj
 def checkout(shepherd: ShepherdMng, tag: str):
@@ -371,13 +256,7 @@ def checkout(shepherd: ShepherdMng, tag: str):
 # =====================================================
 # DELETE
 # =====================================================
-@cli.group()
-def delete():
-    """Delete resources."""
-    pass
-
-
-@delete.command(name="env")
+@env.command(name="delete")
 @click.argument("tag", required=True)
 @click.pass_obj
 def delete_env(shepherd: ShepherdMng, tag: str):
@@ -388,7 +267,7 @@ def delete_env(shepherd: ShepherdMng, tag: str):
 # =====================================================
 # LIST
 # =====================================================
-@cli.command(name="list")
+@env.command(name="list")
 @click.pass_obj
 def list(shepherd: ShepherdMng):
     """List environments."""
@@ -398,58 +277,7 @@ def list(shepherd: ShepherdMng):
 # =====================================================
 # UP
 # =====================================================
-@cli.group(invoke_without_command=True)
-@click.option(
-    "--show-commands",
-    is_flag=True,
-    help="Show recent commands in status panels.",
-)
-@click.option(
-    "--show-commands-limit",
-    type=int,
-    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
-    show_default=True,
-    help="Number of recent commands to display.",
-)
-@click.option(
-    "--timeout",
-    type=int,
-    default=60,
-    show_default=True,
-    help="Maximum seconds to wait for all containers to be running.",
-)
-@click.option(
-    "-w",
-    "--watch",
-    is_flag=True,
-    help="Keep updating the output until interrupted.",
-)
-@click.pass_obj
-@require_active_env
-def up(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    show_commands: bool,
-    show_commands_limit: int,
-    timeout: Optional[int],
-    watch: bool,
-):
-    """
-    Start resources.
-
-    `up` is an umbrella group: when called without a subcommand it behaves as
-    `up env`, while `up svc ...` routes to direct service-level startup.
-    """
-    # If no subcommand is given, default to environment startup.
-    ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
-        _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-        shepherd.environmentMng.start_env(
-            envCfg, timeout_seconds=timeout, watch=watch
-        )
-
-
-@up.command(name="env")
+@env.command(name="up")
 @click.option(
     "--show-commands",
     is_flag=True,
@@ -492,46 +320,10 @@ def up_env(
     )
 
 
-@up.command(name="svc")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def up_svc(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Start service."""
-    shepherd.serviceMng.start_svc(envCfg, svc_tag, cnt_tag)
-
-
 # =====================================================
-# STOP
+# HALT
 # =====================================================
-@cli.group(invoke_without_command=True)
-@click.option(
-    "--no-wait",
-    is_flag=True,
-    help="Return after issuing the stop command without waiting.",
-)
-@click.pass_obj
-@require_active_env
-def halt(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
-    """
-    Stop resources.
-
-    `stop` (wired to `halt`) defaults to stopping the active environment when
-    no subcommand is provided.
-    """
-    # If no subcommand is given, default to environment stop.
-    ctx = click.get_current_context()
-    if ctx.invoked_subcommand is None:
-        shepherd.environmentMng.stop_env(envCfg, wait=not no_wait)
-
-
-@halt.command(name="env")
+@env.command(name="halt")
 @click.option(
     "--no-wait",
     is_flag=True,
@@ -544,31 +336,10 @@ def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
     shepherd.environmentMng.stop_env(envCfg, wait=not no_wait)
 
 
-@halt.command(name="svc")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def halt_svc(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Stop service."""
-    shepherd.serviceMng.stop_svc(envCfg, svc_tag, cnt_tag)
-
-
 # =====================================================
 # RELOAD
 # =====================================================
-@cli.group()
-def reload():
-    """Reload resources."""
-    pass
-
-
-@reload.command(name="env")
+@env.command(name="reload")
 @click.option(
     "--show-commands",
     is_flag=True,
@@ -601,122 +372,10 @@ def reload_env(
     shepherd.environmentMng.reload_env(envCfg, watch=watch)
 
 
-@reload.command(name="svc")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def reload_svc(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Reload service."""
-    shepherd.serviceMng.reload_svc(envCfg, svc_tag, cnt_tag)
-
-
-# =====================================================
-# BUILD
-# =====================================================
-@cli.command(name="build")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def build(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Build service."""
-    shepherd.serviceMng.build_svc(envCfg, svc_tag, cnt_tag)
-
-
-# =====================================================
-# LOGS
-# =====================================================
-@cli.command(name="logs")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def logs(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Show service logs."""
-    shepherd.serviceMng.logs_svc(envCfg, svc_tag, cnt_tag)
-
-
-# =====================================================
-# SHELL
-# =====================================================
-@cli.command(name="shell")
-@click.argument("svc_tag", required=True)
-@click.argument("cnt_tag", required=False)
-@click.pass_obj
-@require_active_env
-def shell(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    svc_tag: str,
-    cnt_tag: Optional[str] = None,
-):
-    """Get a shell session for a service."""
-    shepherd.serviceMng.shell_svc(envCfg, svc_tag, cnt_tag)
-
-
 # =====================================================
 # STATUS
 # =====================================================
-@cli.group(invoke_without_command=True)
-@click.option(
-    "--show-commands",
-    is_flag=True,
-    help="Show recent commands in status panels.",
-)
-@click.option(
-    "--show-commands-limit",
-    type=int,
-    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
-    show_default=True,
-    help="Number of recent commands to display.",
-)
-@click.option(
-    "-w",
-    "--watch",
-    is_flag=True,
-    help="Keep updating the output until interrupted.",
-)
-@click.pass_obj
-@require_active_env
-def status(
-    shepherd: ShepherdMng,
-    envCfg: EnvironmentCfg,
-    show_commands: bool,
-    show_commands_limit: int,
-    watch: bool,
-):
-    """
-    Show status of resources.
-
-    Like `up`, this group defaults to environment status when no subcommand is
-    provided; subcommands can offer narrower views.
-    """
-    ctx = click.get_current_context()
-    if ctx.invoked_subcommand is not None:
-        return
-
-    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
-
-    shepherd.environmentMng.status_env(envCfg, watch=watch)
-
-
-@status.command(name="env")
+@env.command(name="status")
 @click.option(
     "--show-commands",
     is_flag=True,
@@ -750,15 +409,202 @@ def status_env(
 
 
 # =====================================================
-# CHECK
+# SVC
 # =====================================================
 @cli.group()
-def check():
-    """Check resources."""
+def svc():
+    """Manage services."""
     pass
 
 
-@check.command(name="probe")
+@svc.command(name="get")
+@click.argument("tag", required=True)
+@click.option("-o", "--output", type=click.Choice(["yaml", "json"]))
+@click.option(
+    "-t", "--target", is_flag=True, help="Get the target configuration."
+)
+@click.option(
+    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
+)
+@click.option("--details", is_flag=True, help="Show container details.")
+@click.pass_obj
+@require_active_env
+def get_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    tag: str,
+    output: Optional[str],
+    target: bool,
+    resolved: bool,
+    details: bool,
+):
+    """Get service details or config."""
+    if (target or resolved) and not output:
+        raise click.UsageError("--target and --resolved require --output")
+    _apply_details_flag(shepherd, details)
+    if output:
+        click.echo(
+            shepherd.serviceMng.render_svc(
+                envCfg, tag, target, resolved, output=output
+            )
+        )
+        return
+    shepherd.serviceMng.describe_svc(envCfg, tag)
+
+
+@svc.command(name="add")
+@click.argument("svc_template", required=True)
+@click.argument("svc_tag", required=True)
+@click.argument("svc_class", required=False)
+@click.pass_obj
+@require_active_env
+def add_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_template: str,
+    svc_tag: str,
+    svc_class: Optional[str] = None,
+):
+    """Add a new service."""
+    shepherd.environmentMng.add_service(
+        envCfg.tag, svc_tag, svc_template, svc_class
+    )
+
+
+@svc.command(name="up")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def up_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Start service."""
+    shepherd.serviceMng.start_svc(envCfg, svc_tag, cnt_tag)
+
+
+@svc.command(name="halt")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def halt_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Stop service."""
+    shepherd.serviceMng.stop_svc(envCfg, svc_tag, cnt_tag)
+
+
+@svc.command(name="reload")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def reload_svc(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Reload service."""
+    shepherd.serviceMng.reload_svc(envCfg, svc_tag, cnt_tag)
+
+
+@svc.command(name="build")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def build(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Build service."""
+    shepherd.serviceMng.build_svc(envCfg, svc_tag, cnt_tag)
+
+
+@svc.command(name="logs")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def logs(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Show service logs."""
+    shepherd.serviceMng.logs_svc(envCfg, svc_tag, cnt_tag)
+
+
+@svc.command(name="shell")
+@click.argument("svc_tag", required=True)
+@click.argument("cnt_tag", required=False)
+@click.pass_obj
+@require_active_env
+def shell(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    svc_tag: str,
+    cnt_tag: Optional[str] = None,
+):
+    """Get a shell session for a service."""
+    shepherd.serviceMng.shell_svc(envCfg, svc_tag, cnt_tag)
+
+
+# =====================================================
+# PROBE
+# =====================================================
+@cli.group()
+def probe():
+    """Manage probes."""
+    pass
+
+
+@probe.command(name="get")
+@click.argument("probe_tag", required=False)
+@click.option(
+    "-o", "--output", type=click.Choice(["yaml", "json"]), default="yaml"
+)
+@click.option(
+    "-t", "--target", is_flag=True, help="Get the target configuration."
+)
+@click.option(
+    "-r", "--resolved", is_flag=True, help="Get the resolved configuration."
+)
+@click.option("-a", "--all", is_flag=True, help="Get all probes.")
+@click.pass_obj
+@require_active_env
+def get_probe(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    probe_tag: Optional[str],
+    output: Optional[str],
+    target: bool,
+    resolved: bool,
+    all: bool,
+):
+    """Get probe details."""
+    if all:
+        probe_tag = None
+    if output:
+        click.echo(
+            shepherd.environmentMng.render_probes(
+                envCfg, probe_tag, target, resolved
+            )
+        )
+
+
+@probe.command(name="check")
 @click.argument("probe_tag", required=False)
 @click.option("-a", "--all", is_flag=True, help="Check all probes.")
 @click.pass_obj
@@ -769,8 +615,7 @@ def check_probe(
     probe_tag: Optional[str],
     all: bool,
 ):
-    """Run probe checks and return a process exit code based on
-    probe results."""
+    """Run probe checks and return a process exit code based on results."""
     if all:
         probe_tag = None
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)

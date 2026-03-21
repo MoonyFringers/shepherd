@@ -13,31 +13,19 @@ These options apply to every command:
 
 ## Command Overview
 
-Top-level commands currently available:
+Top-level scopes currently available:
 
-- `add`
-- `build`
-- `check`
-- `checkout`
-- `clone`
-- `delete`
-- `get`
-- `halt`
-- `list`
-- `logs`
-- `reload`
-- `rename`
-- `shell`
-- `status`
-- `up`
+- `env`
+- `probe`
+- `svc`
 
 ## Commands
 
-### `get`
+### `env`
 
-Read configuration data without changing runtime state.
+Manage environments.
 
-#### `get env [TAG]`
+#### `env get [TAG]`
 
 Get environment configuration.
 
@@ -48,7 +36,82 @@ Options:
 - `--by-gate`: group target configuration by gate, requires `--target`
 - `-r`, `--resolved`: return resolved configuration
 
-#### `get probe [PROBE_TAG]`
+#### `env add TEMPLATE TAG`
+
+Create a new environment from an environment template.
+
+#### `env clone SRC_TAG DST_TAG`
+
+Clone an environment.
+
+#### `env rename SRC_TAG DST_TAG`
+
+Rename an environment.
+
+#### `env checkout TAG`
+
+Set the active environment.
+
+#### `env delete TAG`
+
+Delete an environment.
+
+#### `env list`
+
+List environments.
+
+#### `env up`
+
+Start the active environment.
+
+Shared environment options:
+
+- `--show-commands`: show recent command history in status panels
+- `--show-commands-limit INTEGER`: number of commands to display
+- `--timeout INTEGER`: max seconds to wait for containers to be running
+- `-w`, `--watch`: keep updating output until interrupted
+
+Requires an active environment.
+
+#### `env halt`
+
+Stop the active environment.
+
+Options:
+
+- `--no-wait`: return immediately after sending the stop command
+
+Requires an active environment.
+
+#### `env reload`
+
+Reload the active environment.
+
+Options:
+
+- `--show-commands`: show recent command history in status panels
+- `--show-commands-limit INTEGER`: number of commands to display
+- `-w`, `--watch`: keep updating output until interrupted
+
+Requires an active environment.
+
+#### `env status`
+
+Show status for the active environment.
+
+Options:
+
+- `--show-commands`: show recent command history in status panels
+- `--show-commands-limit INTEGER`: number of commands to display
+- `-w`, `--watch`: keep updating output until interrupted
+
+Requires an active environment.
+
+### `probe`
+
+Manage probes.
+
+#### `probe get [PROBE_TAG]`
 
 Get probe configuration for the active environment.
 
@@ -61,7 +124,22 @@ Options:
 
 Requires an active environment.
 
-#### `get svc TAG`
+#### `probe check [PROBE_TAG]`
+
+Run probes for the active environment and exit with a probe-based status
+code.
+
+Options:
+
+- `-a`, `--all`: run all probes
+
+Requires an active environment.
+
+### `svc`
+
+Manage services.
+
+#### `svc get TAG`
 
 Get service configuration for the active environment.
 
@@ -73,176 +151,52 @@ Options:
 
 Requires an active environment.
 
-### `add`
-
-Create resources.
-
-#### `add env TEMPLATE TAG`
-
-Create a new environment from an environment template.
-
-#### `add svc SVC_TEMPLATE SVC_TAG [SVC_CLASS]`
+#### `svc add SVC_TEMPLATE SVC_TAG [SVC_CLASS]`
 
 Add a service to the active environment.
 
 Requires an active environment.
 
-### `clone`
-
-#### `clone env SRC_TAG DST_TAG`
-
-Clone an environment.
-
-### `rename`
-
-#### `rename env SRC_TAG DST_TAG`
-
-Rename an environment.
-
-### `checkout TAG`
-
-Set the active environment.
-
-### `delete`
-
-#### `delete env TAG`
-
-Delete an environment.
-
-### `list`
-
-List environments.
-
-### `up`
-
-Start resources.
-
-When used without a subcommand, `up` behaves like `up env` for the active
-environment.
-
-Shared environment options:
-
-- `--details`: show extra details in status tables
-- `--show-commands`: show recent command history in status panels
-- `--show-commands-limit INTEGER`: number of commands to display
-- `--timeout INTEGER`: max seconds to wait for containers to be running
-- `-w`, `--watch`: keep updating output until interrupted
-
-#### `up env`
-
-Start the active environment explicitly.
-
-Requires an active environment.
-
-#### `up svc SVC_TAG [CNT_TAG]`
+#### `svc up SVC_TAG [CNT_TAG]`
 
 Start a service, optionally targeting one container.
 
 Requires an active environment.
 
-### `halt`
-
-Stop resources.
-
-When used without a subcommand, `halt` behaves like `halt env` for the
-active environment.
-
-Shared environment options:
-
-- `--no-wait`: return immediately after sending the stop command
-
-#### `halt env`
-
-Stop the active environment explicitly.
-
-Requires an active environment.
-
-#### `halt svc SVC_TAG [CNT_TAG]`
+#### `svc halt SVC_TAG [CNT_TAG]`
 
 Stop a service, optionally targeting one container.
 
 Requires an active environment.
 
-### `reload`
-
-Reload resources.
-
-#### `reload env`
-
-Reload the active environment.
-
-Options:
-
-- `--details`: show extra details in status tables
-- `--show-commands`: show recent command history in status panels
-- `--show-commands-limit INTEGER`: number of commands to display
-- `-w`, `--watch`: keep updating output until interrupted
-
-Requires an active environment.
-
-#### `reload svc SVC_TAG [CNT_TAG]`
+#### `svc reload SVC_TAG [CNT_TAG]`
 
 Reload a service, optionally targeting one container.
 
 Requires an active environment.
 
-### `build SVC_TAG [CNT_TAG]`
+#### `svc build SVC_TAG [CNT_TAG]`
 
 Build a service, optionally targeting one container.
 
 Requires an active environment.
 
-### `logs SVC_TAG [CNT_TAG]`
+#### `svc logs SVC_TAG [CNT_TAG]`
 
 Show service logs, optionally for a specific container.
 
 Requires an active environment.
 
-### `shell SVC_TAG [CNT_TAG]`
+#### `svc shell SVC_TAG [CNT_TAG]`
 
 Open a shell for a service, optionally for a specific container.
 
 Requires an active environment.
 
-### `status`
-
-Show resource status.
-
-When used without a subcommand, `status` behaves like `status env` for the
-active environment.
-
-Shared environment options:
-
-- `--details`: show extra details in status tables
-- `--show-commands`: show recent command history in status panels
-- `--show-commands-limit INTEGER`: number of commands to display
-- `-w`, `--watch`: keep updating output until interrupted
-
-#### `status env`
-
-Show status for the active environment explicitly.
-
-Requires an active environment.
-
-### `check`
-
-Run validation commands.
-
-#### `check probe [PROBE_TAG]`
-
-Run probes for the active environment and exit with a probe-based status
-code.
-
-Options:
-
-- `-a`, `--all`: run all probes
-
-Requires an active environment.
-
 ## Notes
 
-- Many commands operate on the active environment selected with `checkout`.
+- Many commands operate on the active environment selected with `env checkout`.
 - Commands that manage environment runtime state are centered around
-  `up`, `halt`, `reload`, and `status`.
-- Service-oriented commands (`build`, `logs`, `shell`, `up svc`,
-  `halt svc`, `reload svc`) all target the active environment.
+  `env up`, `env halt`, `env reload`, and `env status`.
+- Service-oriented commands (`svc build`, `svc logs`, `svc shell`,
+  `svc up`, `svc halt`, `svc reload`) all target the active environment.

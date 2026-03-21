@@ -100,7 +100,7 @@ def test_env_render_compose_env_ext_net(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "-oyaml"])
     assert result.exit_code == 0
 
     expected = """
@@ -250,7 +250,7 @@ def test_env_render_compose_env_resolved(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-r"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "-oyaml", "-r"])
     assert result.exit_code == 0
 
     expected = """
@@ -400,7 +400,7 @@ def test_env_render_target_compose_env_ext_net(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "-oyaml", "-t"])
     assert result.exit_code == 0
 
     expected = (
@@ -472,7 +472,7 @@ def test_env_render_target_compose_env_resolved(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "-oyaml", "-t", "-r"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "-oyaml", "-t", "-r"])
     assert result.exit_code == 0
 
     expected = (
@@ -544,7 +544,7 @@ def test_env_render_target_compose_env_int_net(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-2", "-oyaml", "-t"])
+    result = runner.invoke(cli, ["env", "get", "test-2", "-oyaml", "-t"])
     assert result.exit_code == 0
 
     expected = (
@@ -629,7 +629,7 @@ def test_start_env(
     shpd_yaml.write_text(shpd_config)
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
     assert mock_subproc.call_count >= 2
     assert any(
@@ -1344,7 +1344,7 @@ def test_stop_env(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -1356,7 +1356,7 @@ def test_stop_env(
         ),
     )
 
-    result = runner.invoke(cli, ["halt", "env"])
+    result = runner.invoke(cli, ["env", "halt"])
     assert result.exit_code == 0
     assert mock_subproc.call_count >= 2
     assert any(
@@ -1385,7 +1385,7 @@ def test_reload_env(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -1397,7 +1397,7 @@ def test_reload_env(
         ),
     )
 
-    result = runner.invoke(cli, ["reload", "env"])
+    result = runner.invoke(cli, ["env", "reload"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -1430,7 +1430,7 @@ def test_reload_env_env_not_started(
         ),
     )
 
-    result = runner.invoke(cli, ["reload", "env"])
+    result = runner.invoke(cli, ["env", "reload"])
     assert result.exit_code != 0
     mock_subproc.assert_not_called()
 
@@ -1457,7 +1457,7 @@ def test_status_env(
         ),
     )
 
-    result = runner.invoke(cli, ["status", "env"])
+    result = runner.invoke(cli, ["env", "status"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -1474,7 +1474,7 @@ def test_probe_render(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml"])
+    result = runner.invoke(cli, ["probe", "get", "db-ready", "-oyaml"])
     assert result.exit_code == 0
 
     expected = """
@@ -1515,7 +1515,7 @@ def test_probe_render_resolved(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml", "-r"])
+    result = runner.invoke(cli, ["probe", "get", "db-ready", "-oyaml", "-r"])
     assert result.exit_code == 0
 
     expected = """
@@ -1556,7 +1556,7 @@ def test_probe_render_target(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "probe", "db-ready", "-oyaml", "-t"])
+    result = runner.invoke(cli, ["probe", "get", "db-ready", "-oyaml", "-t"])
     assert result.exit_code == 0
 
     expected = """
@@ -1589,7 +1589,7 @@ def test_probe_render_target_resolved(
     shpd_yaml.write_text(shpd_config)
 
     result = runner.invoke(
-        cli, ["get", "probe", "db-ready", "-oyaml", "-t", "-r"]
+        cli, ["probe", "get", "db-ready", "-oyaml", "-t", "-r"]
     )
     assert result.exit_code == 0
 
@@ -1624,7 +1624,7 @@ def test_check_probe(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
     mock_subproc = mocker.patch(
@@ -1637,7 +1637,7 @@ def test_check_probe(
         ),
     )
 
-    result = runner.invoke(cli, ["check", "probe"])
+    result = runner.invoke(cli, ["probe", "check"])
     assert result.exit_code == 0
     mock_subproc.assert_called()
 
@@ -1664,7 +1664,7 @@ def test_check_prob_env_not_started(
         ),
     )
 
-    result = runner.invoke(cli, ["check", "probe"])
+    result = runner.invoke(cli, ["probe", "check"])
     assert result.exit_code != 0
     mock_subproc.assert_not_called()
 
@@ -1683,7 +1683,7 @@ def test_check_probe_flag_verbose(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
     mock_subproc = mocker.patch(
@@ -1696,7 +1696,7 @@ def test_check_probe_flag_verbose(
         ),
     )
 
-    result = runner.invoke(cli, ["-v", "check", "probe"])
+    result = runner.invoke(cli, ["-v", "probe", "check"])
     assert result.exit_code == 0
     mock_subproc.assert_called()
 
@@ -1715,7 +1715,7 @@ def test_check_probe_with_probe_tag(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
     mock_subproc = mocker.patch(
@@ -1728,7 +1728,7 @@ def test_check_probe_with_probe_tag(
         ),
     )
 
-    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+    result = runner.invoke(cli, ["probe", "check", "db-ready"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -1747,7 +1747,7 @@ def test_check_probe_with_missing_probe_tag(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
     mock_subproc = mocker.patch(
@@ -1760,7 +1760,7 @@ def test_check_probe_with_missing_probe_tag(
         ),
     )
 
-    result = runner.invoke(cli, ["check", "probe", "no-such-probe"])
+    result = runner.invoke(cli, ["probe", "check", "no-such-probe"])
     assert result.exit_code == 1
     assert "Probe 'no-such-probe' not found" in result.output
     mock_subproc.assert_not_called()
@@ -1779,7 +1779,7 @@ def test_check_probe_timeout(
 
     mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
     # 2) "check probe" triggers timeout
@@ -1790,7 +1790,7 @@ def test_check_probe_timeout(
         ),
     )
 
-    result = runner.invoke(cli, ["check", "probe", "db-ready"])
+    result = runner.invoke(cli, ["probe", "check", "db-ready"])
 
     assert result.exit_code != 0
     mock_subproc.assert_called_once()

@@ -58,13 +58,13 @@ def runner() -> CliRunner:
 def test_add_svc_one_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -123,16 +123,16 @@ def test_add_svc_one_default(
 def test_add_svc_two_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-2"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -188,16 +188,16 @@ def test_add_svc_two_default(
 def test_get_svc_json(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-json"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-json"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-json"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-json"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["get", "svc", "svc-1", "--output", "json"])
+    result = runner.invoke(cli, ["svc", "get", "svc-1", "--output", "json"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -212,16 +212,16 @@ def test_get_svc_json(
 def test_add_svc_two_same_tag_default(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "default", "svc-1"])
+    result = runner.invoke(cli, ["svc", "add", "default", "svc-1"])
     assert result.exit_code == 1
 
     sm = ShepherdMng()
@@ -261,13 +261,13 @@ def test_add_svc_one_with_template(
     shpd_config = read_fixture("svc", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "postgres", "pg-1", "database"])
+    result = runner.invoke(cli, ["svc", "add", "postgres", "pg-1", "database"])
 
     # no 'postgres' factory, so this should fail
     assert result.exit_code == 1

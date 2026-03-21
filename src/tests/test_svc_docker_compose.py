@@ -105,7 +105,7 @@ def test_svc_render_default_compose_service(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml"])
+    result = runner.invoke(cli, ["svc", "get", "test", "-oyaml"])
     assert result.exit_code == 0
 
     expected = (
@@ -164,7 +164,7 @@ def test_svc_render_default_compose_service_resolved(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-r"])
+    result = runner.invoke(cli, ["svc", "get", "test", "-oyaml", "-r"])
     assert result.exit_code == 0
 
     expected = (
@@ -223,7 +223,7 @@ def test_svc_render_target_compose_service(
     shpd_config = read_fixture("svc_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "svc", "test", "-oyaml", "-t"])
+    result = runner.invoke(cli, ["svc", "get", "test", "-oyaml", "-t"])
     assert result.exit_code == 0
 
     expected = (
@@ -272,7 +272,7 @@ def test_start_svc(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -284,7 +284,7 @@ def test_start_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["up", "svc", "test"])
+    result = runner.invoke(cli, ["svc", "up", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -303,7 +303,7 @@ def test_start_svc_cnt_2(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -315,7 +315,7 @@ def test_start_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["up", "svc", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "up", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -334,7 +334,7 @@ def test_stop_svc(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -346,7 +346,7 @@ def test_stop_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["halt", "svc", "test"])
+    result = runner.invoke(cli, ["svc", "halt", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -365,7 +365,7 @@ def test_stop_svc_cnt_2(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -377,7 +377,7 @@ def test_stop_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["halt", "svc", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "halt", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -396,7 +396,7 @@ def test_reload_svc(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -408,7 +408,7 @@ def test_reload_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["reload", "svc", "test"])
+    result = runner.invoke(cli, ["svc", "reload", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -427,7 +427,7 @@ def test_reload_svc_cnt_2(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -439,7 +439,7 @@ def test_reload_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["reload", "svc", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "reload", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -458,7 +458,7 @@ def test_logs_svc(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -470,7 +470,7 @@ def test_logs_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["logs", "test"])
+    result = runner.invoke(cli, ["svc", "logs", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -489,7 +489,7 @@ def test_logs_svc_cnt_2(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -501,7 +501,7 @@ def test_logs_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["logs", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "logs", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -520,7 +520,7 @@ def test_shell_svc(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -532,7 +532,7 @@ def test_shell_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["shell", "test"])
+    result = runner.invoke(cli, ["svc", "shell", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -551,7 +551,7 @@ def test_shell_svc_cnt_2(
 
     mock_subproc = mock_subprocess_with_running_ps(mocker)
 
-    result = runner.invoke(cli, ["up", "env"])
+    result = runner.invoke(cli, ["env", "up"])
 
     mock_subproc = mocker.patch(
         "docker.docker_compose_util.subprocess.run",
@@ -563,7 +563,7 @@ def test_shell_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["shell", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "shell", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -590,7 +590,7 @@ def test_build_svc(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test"])
+    result = runner.invoke(cli, ["svc", "build", "test"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -617,7 +617,7 @@ def test_build_svc_cnt_2(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test-1", "container-2"])
+    result = runner.invoke(cli, ["svc", "build", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
 
@@ -644,7 +644,7 @@ def test_build_svc_missing_build(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test-1"])
+    result = runner.invoke(cli, ["svc", "build", "test-1"])
     assert result.exit_code == 1
     mock_subproc.assert_not_called()
 
@@ -671,7 +671,7 @@ def test_build_svc_missing_build_dockerfile(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test-2"])
+    result = runner.invoke(cli, ["svc", "build", "test-2"])
     assert result.exit_code == 1
     mock_subproc.assert_not_called()
 
@@ -698,7 +698,7 @@ def test_build_svc_missing_build_context_path(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test-3"])
+    result = runner.invoke(cli, ["svc", "build", "test-3"])
     assert result.exit_code == 1
     mock_subproc.assert_not_called()
 
@@ -725,6 +725,6 @@ def test_build_svc_dockerfile_does_not_exist(
         ),
     )
 
-    result = runner.invoke(cli, ["build", "test-4"])
+    result = runner.invoke(cli, ["svc", "build", "test-4"])
     assert result.exit_code == 1
     mock_subproc.assert_not_called()

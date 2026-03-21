@@ -36,21 +36,23 @@ class CompletionSvcMng(AbstractCompletionMng):
 
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
-        """Dispatch completion by verb using command-specific arg offsets."""
-        command = args[0]
+        """Dispatch completion by verb using scope-local arg offsets."""
+        if len(args) < 2:
+            return []
+        command = args[1]
         match command:
             case "add":
                 return self.get_add_completions(args[2:])
             case "build":
-                return self.get_build_completions(args[1:])
+                return self.get_build_completions(args[2:])
             case "up":
                 return self.get_start_completions(args[2:])
             case "halt":
                 return self.get_stop_completions(args[2:])
             case "logs":
-                return self.get_logs_completions(args[1:])
+                return self.get_logs_completions(args[2:])
             case "shell":
-                return self.get_shell_completions(args[1:])
+                return self.get_shell_completions(args[2:])
             case "get":
                 return self.get_render_completions(args[2:])
             case "reload":
