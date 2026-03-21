@@ -55,7 +55,7 @@ def test_add_env(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-init-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-init-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -75,11 +75,11 @@ def test_clone_env(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-clone-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-clone-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
-        cli, ["clone", "env", "test-clone-1", "test-clone-2"]
+        cli, ["env", "clone", "test-clone-1", "test-clone-2"]
     )
     assert result.exit_code == 0
 
@@ -104,11 +104,11 @@ def test_rename_env(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-rename-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-rename-1"])
     assert result.exit_code == 0
 
     result = runner.invoke(
-        cli, ["rename", "env", "test-rename-1", "test-rename-2"]
+        cli, ["env", "rename", "test-rename-1", "test-rename-2"]
     )
     assert result.exit_code == 0
 
@@ -133,17 +133,17 @@ def test_checkout_env(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "env", "default", "test-2"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
     env = sm.configMng.get_active_environment()
     assert env is None
 
-    result = runner.invoke(cli, ["checkout", "test-1"])
+    result = runner.invoke(cli, ["env", "checkout", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -151,7 +151,7 @@ def test_checkout_env(
     assert env is not None
     assert env.tag == "test-1"
 
-    result = runner.invoke(cli, ["checkout", "test-2"])
+    result = runner.invoke(cli, ["env", "checkout", "test-2"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -166,10 +166,10 @@ def test_list_env(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["list"])
+    result = runner.invoke(cli, ["env", "list"])
     assert result.exit_code == 0
 
 
@@ -183,7 +183,7 @@ def test_get_env_json(
     shpd_config = read_fixture("env", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    result = runner.invoke(cli, ["get", "env", "test-1", "--output", "json"])
+    result = runner.invoke(cli, ["env", "get", "test-1", "--output", "json"])
 
     assert result.exit_code == 0
 
@@ -201,18 +201,18 @@ def test_delete_env_yes(
 ):
     mocker.patch("builtins.input", return_value="y")
 
-    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["delete", "env", "test-1"])
+    result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-1"])
     assert result.exit_code == 0
 
     mocker.patch("builtins.input", return_value="y")
 
-    result = runner.invoke(cli, ["delete", "env", "test-1"])
+    result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -234,10 +234,10 @@ def test_delete_env_no(
 ):
     mocker.patch("builtins.input", return_value="n")
 
-    result = runner.invoke(cli, ["add", "env", "default", "test-1"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-1"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["delete", "env", "test-1"])
+    result = runner.invoke(cli, ["env", "delete", "test-1"])
     assert result.exit_code == 0
 
     sm = ShepherdMng()
@@ -257,11 +257,11 @@ def test_add_nonexisting_service(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    result = runner.invoke(cli, ["add", "env", "default", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "add", "default", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["checkout", "test-svc-add"])
+    result = runner.invoke(cli, ["env", "checkout", "test-svc-add"])
     assert result.exit_code == 0
 
-    result = runner.invoke(cli, ["add", "svc", "foo", "foo-1"])
+    result = runner.invoke(cli, ["svc", "add", "foo", "foo-1"])
     assert result.exit_code == 1

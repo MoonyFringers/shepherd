@@ -30,28 +30,26 @@ class CompletionMng(AbstractCompletionMng):
     """
     Top-level completion router.
 
-    It first resolves the command verb, then routes to a domain-specific
-    completion manager (`env`, `svc`, `probe`) based on either explicit
-    category tokens or implicit `auto-*` categories.
+    Completion is now routed by `scope` first and then by verb within that
+    scope, mirroring the Click command tree.
     """
 
-    # Mapping of verbs to valid categories
-    VERB_CATEGORIES = {
-        "get": ["env", "svc", "probe"],
-        "add": ["env", "svc"],
-        "clone": ["env"],
-        "rename": ["env"],
-        "checkout": ["auto-env"],
-        "delete": ["env"],
-        "list": ["auto-env"],
-        "up": ["env", "svc"],
-        "halt": ["env", "svc"],
-        "reload": ["env", "svc"],
-        "status": ["env"],
-        "logs": ["auto-svc"],
-        "shell": ["auto-svc"],
-        "build": ["auto-svc"],
-        "check": ["probe"],
+    SCOPE_VERBS = {
+        "env": [
+            "get",
+            "add",
+            "clone",
+            "rename",
+            "checkout",
+            "delete",
+            "list",
+            "up",
+            "halt",
+            "reload",
+            "status",
+        ],
+        "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
+        "probe": ["get", "check"],
     }
 
     @dataclass(frozen=True)
@@ -66,36 +64,24 @@ class CompletionMng(AbstractCompletionMng):
         OptionSpec(tokens=("-y", "--yes")),
     )
     CONTEXT_OPTIONS = {
-        ("up", None): (
+        ("env", "up"): (
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("--timeout",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
-        ("up", "env"): (
-            OptionSpec(tokens=("--show-commands",)),
-            OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
-            OptionSpec(tokens=("--timeout",), takes_value=True),
-            OptionSpec(tokens=("-w", "--watch")),
-        ),
-        ("halt", None): (OptionSpec(tokens=("--no-wait",)),),
-        ("halt", "env"): (OptionSpec(tokens=("--no-wait",)),),
-        ("reload", "env"): (
+        ("env", "halt"): (OptionSpec(tokens=("--no-wait",)),),
+        ("env", "reload"): (
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
-        ("status", None): (
+        ("env", "status"): (
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
         ),
-        ("status", "env"): (
-            OptionSpec(tokens=("--show-commands",)),
-            OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
-            OptionSpec(tokens=("-w", "--watch")),
-        ),
-        ("get", "env"): (
+        ("env", "get"): (
             OptionSpec(
                 tokens=("-o", "--output"),
                 takes_value=True,
@@ -106,7 +92,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-r", "--resolved")),
             OptionSpec(tokens=("--details",)),
         ),
-        ("get", "probe"): (
+        ("probe", "get"): (
             OptionSpec(
                 tokens=("-o", "--output"),
                 takes_value=True,
@@ -116,7 +102,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-r", "--resolved")),
             OptionSpec(tokens=("-a", "--all")),
         ),
-        ("get", "svc"): (
+        ("svc", "get"): (
             OptionSpec(
                 tokens=("-o", "--output"),
                 takes_value=True,
@@ -126,7 +112,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-r", "--resolved")),
             OptionSpec(tokens=("--details",)),
         ),
-        ("check", "probe"): (OptionSpec(tokens=("-a", "--all")),),
+        ("probe", "check"): (OptionSpec(tokens=("-a", "--all")),),
     }
 
     def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
@@ -145,69 +131,33 @@ class CompletionMng(AbstractCompletionMng):
                     self._option_by_token[token] = spec
 
     @property
-    def VERBS(self) -> list[str]:
-        """return all verbs from the mapping."""
-        return list(self.VERB_CATEGORIES.keys())
+    def SCOPES(self) -> list[str]:
+        return list(self.SCOPE_VERBS.keys())
+
+    def is_scope_chosen(self, args: list[str]) -> bool:
+        return bool(args) and args[0] in self.SCOPES
 
     def is_verb_chosen(self, args: list[str]) -> bool:
-        if not args or len(args) < 1:
+        if len(args) < 2:
             return False
-        return args[0] in self.VERBS
-
-    def is_category_chosen(self, args: list[str]) -> bool:
-        if not args or len(args) < 2:
-            return False
-        verb = args[0]
-        category = args[1]
-        return category in self.VERB_CATEGORIES.get(verb, [])
-
-    def get_auto_category(self, args: list[str]) -> Optional[str]:
-        """
-        Resolve implicit category for verbs that do not expose it in argv.
-
-        Example: `logs <svc>` maps to `auto-svc`, so completion is delegated
-        directly to the service completion manager.
-        """
-        if not args:
-            return None
-        verb = args[0]
-        if self.VERB_CATEGORIES.get(verb, [])[0].startswith("auto-"):
-            return self.VERB_CATEGORIES[verb][0].split("-")[1]
-        else:
-            return None
+        return args[1] in self.SCOPE_VERBS.get(args[0], [])
 
     def get_completion_manager(
-        self, args: list[str], auto_category: Optional[str] = None
+        self, scope: Optional[str]
     ) -> Optional[AbstractCompletionMng]:
-        """Select the concrete completion manager for the resolved category."""
-        # Priority: use auto_category if provided, otherwise try args[1]
-        category = auto_category or (args[1] if len(args) > 1 else None)
-        if not category:
-            return None
-
-        if category == "env":
+        if scope == "env":
             return self.completionEnvMng
-        if category == "svc":
+        if scope == "svc":
             return self.completionSvcMng
-        if category == "probe":
+        if scope == "probe":
             return self.completionProbeMng
-
         return None
 
     def _match_option(self, token: str) -> Optional[OptionSpec]:
-        """
-        Resolve one raw argv token to a known option spec.
-
-        The matcher accepts:
-        - exact flag tokens like `--watch`
-        - long options with inline values like `--output=yaml`
-        - compact short options with inline values like `-oyaml`
-        """
         spec = self._option_by_token.get(token)
         if spec:
             return spec
         if token.startswith("--") and "=" in token:
-            # Support long-form inline values like `--output=yaml`.
             name, _, _value = token.partition("=")
             return self._option_by_token.get(name)
         for name, candidate in self._option_by_token.items():
@@ -218,7 +168,6 @@ class CompletionMng(AbstractCompletionMng):
                 and token.startswith(name)
                 and token != name
             ):
-                # Support compact short-form values like `-oyaml`.
                 return candidate
         return None
 
@@ -227,44 +176,17 @@ class CompletionMng(AbstractCompletionMng):
     ) -> tuple[
         list[str], Optional[str], Optional[str], set[str], Optional[OptionSpec]
     ]:
-        """
-        Split raw argv into positional routing tokens and option state.
-
-        Completion needs more than a simple "strip flags" pass because shell
-        completion usually sends the argument currently being edited as the
-        final token in `args`. For value-taking options this means the last
-        token can be:
-        - the option name itself: `--output`
-        - an empty current arg after a space: `--output ""`
-        - a partial value: `--output y`
-        - a fully typed value: `--output yaml`
-
-        This parser returns:
-        - `sanitized`: argv with option tokens and consumed option values
-          removed, used for verb/category/positional completion routing
-        - `verb` / `category`: resolved command context from positional tokens
-        - `used_options`: flags already present, so we do not keep suggesting
-          them
-        - `expect_value_for`: the option that still owns the current final
-          token when that token is an empty or partial value
-        """
         sanitized: list[str] = []
+        scope: Optional[str] = None
         verb: Optional[str] = None
-        category: Optional[str] = None
         used_options: set[str] = set()
         expect_value_for: Optional[CompletionMng.OptionSpec] = None
 
         for idx, token in enumerate(args):
             if expect_value_for is not None:
                 if idx == len(args) - 1:
-                    # Shell completion often passes the "current" argument as
-                    # the final token. Keep the option in a pending state for
-                    # empty or partial values so `get_completions_impl` can
-                    # suggest the option's allowed choices.
                     if token == "" or token not in expect_value_for.choices:
                         break
-                    # A fully matched final token (e.g. `yaml`) is treated as
-                    # consumed so completion can move on to the next argument.
                 expect_value_for = None
                 continue
 
@@ -280,40 +202,27 @@ class CompletionMng(AbstractCompletionMng):
                         if name.startswith("-") and not name.startswith("--")
                     ):
                         continue
-                    # Defer the next raw token to the option-value parser.
                     expect_value_for = option
                 continue
 
             sanitized.append(token)
-            if verb is None and token in self.VERBS:
-                verb = token
+            if scope is None and token in self.SCOPES:
+                scope = token
                 continue
-            if (
-                verb is not None
-                and category is None
-                and token in self.VERB_CATEGORIES.get(verb, [])
-            ):
-                category = token
+            if verb is None and scope is not None:
+                if token in self.SCOPE_VERBS.get(scope, []):
+                    verb = token
 
-        return sanitized, verb, category, used_options, expect_value_for
+        return sanitized, scope, verb, used_options, expect_value_for
 
     def _get_context_options(
-        self, verb: Optional[str], category: Optional[str]
+        self, scope: Optional[str], verb: Optional[str]
     ) -> list[OptionSpec]:
-        if verb is None:
+        if scope is None:
             return list(self.GLOBAL_OPTIONS)
-        if category is None:
-            options = list(self.CONTEXT_OPTIONS.get((verb, None), ()))
-        else:
-            options = list(self.CONTEXT_OPTIONS.get((verb, category), ()))
-        seen: set[tuple[str, ...]] = set()
-        deduped: list[CompletionMng.OptionSpec] = []
-        for spec in options:
-            if spec.tokens in seen:
-                continue
-            seen.add(spec.tokens)
-            deduped.append(spec)
-        return deduped
+        if verb is None:
+            return []
+        return list(self.CONTEXT_OPTIONS.get((scope, verb), ()))
 
     def _get_option_suggestions(
         self,
@@ -337,21 +246,14 @@ class CompletionMng(AbstractCompletionMng):
 
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
-        """
-        Completion flow:
-        1. parse raw argv into positional routing tokens plus option state
-        2. if a value-taking option owns the current token, complete values
-        3. otherwise complete verbs / categories / positional args by context
-        4. merge in context-appropriate flag suggestions
-        """
-        sanitized_args, verb, category, used_options, expect_value_for = (
+        sanitized_args, scope, verb, used_options, expect_value_for = (
             self._parse_args(args)
         )
         last_token = args[-1] if args else ""
         last_option = self._match_option(last_token) if last_token else None
-        option_prefix: Optional[str] = None
-        if last_token.startswith("-"):
-            option_prefix = last_token
+        option_prefix: Optional[str] = (
+            last_token if last_token.startswith("-") else None
+        )
 
         if expect_value_for is not None:
             if last_token in expect_value_for.tokens:
@@ -363,17 +265,16 @@ class CompletionMng(AbstractCompletionMng):
                     if not last_token or choice.startswith(last_token)
                 ]
 
-        if not verb:
+        if not scope:
             if option_prefix is not None:
                 return self._get_option_suggestions(
                     list(self.GLOBAL_OPTIONS),
                     used_options=used_options,
                     prefix=option_prefix,
                 )
-            return list(self.VERBS)
+            return list(self.SCOPES)
 
-        auto_category = self.get_auto_category(sanitized_args)
-        context_options = self._get_context_options(verb, category)
+        context_options = self._get_context_options(scope, verb)
 
         if option_prefix is not None and not (
             last_option is not None
@@ -386,9 +287,8 @@ class CompletionMng(AbstractCompletionMng):
                 prefix=option_prefix,
             )
 
-        if not auto_category and not self.is_category_chosen(sanitized_args):
-            # suggest only valid categories for this verb
-            suggestions = list(self.VERB_CATEGORIES.get(verb, []))
+        if not verb:
+            suggestions = list(self.SCOPE_VERBS.get(scope, []))
             if not suggestions:
                 suggestions.extend(
                     self._get_option_suggestions(
@@ -397,9 +297,7 @@ class CompletionMng(AbstractCompletionMng):
                 )
             return self._unique(suggestions)
 
-        completion_manager = self.get_completion_manager(
-            sanitized_args, auto_category
-        )
+        completion_manager = self.get_completion_manager(scope)
         if completion_manager:
             suggestions = completion_manager.get_completions(sanitized_args)
             if option_prefix is not None:

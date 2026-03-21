@@ -55,7 +55,7 @@ def test_completion_no_args(
 ):
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions([])
-    assert completions == sm.completionMng.VERBS, "Expected verbs only"
+    assert completions == sm.completionMng.SCOPES, "Expected scopes only"
 
 
 @pytest.mark.compl
@@ -67,6 +67,19 @@ def test_completion_global_flags_prefix(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["--q"])
     assert completions == ["--quiet"], "Expected filtered global flag"
+
+
+@pytest.mark.compl
+@pytest.mark.parametrize("args", [["env", "-"], ["svc", "-"], ["probe", "-"]])
+def test_completion_scope_prefix_does_not_suggest_root_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    args: list[str],
+):
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(args)
+    assert completions == [], "Expected no root flags after choosing a scope"
 
 
 @pytest.mark.compl
@@ -83,10 +96,10 @@ def test_completion_add(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["add"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["add"]
-    ), "Expected add completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -102,7 +115,7 @@ def test_completion_add_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["add", "env"])
+    completions = sm.completionMng.get_completions(["env", "add"])
     assert (
         completions == sm.configMng.get_environment_template_tags()
     ), "Expected add-env completion"
@@ -121,7 +134,7 @@ def test_completion_add_svc_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["add", "svc"])
+    completions = sm.completionMng.get_completions(["svc", "add"])
     assert completions == ["t1", "t2"], "Expected add svc -1- completion"
 
 
@@ -138,7 +151,7 @@ def test_completion_add_svc_2(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["add", "svc", "t1"])
+    completions = sm.completionMng.get_completions(["svc", "add", "t1"])
     assert completions == [], "Expected add svc -2- completion"
 
 
@@ -156,7 +169,7 @@ def test_completion_add_svc_3(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(
-        ["add", "svc", "t1", "svc-tag"]
+        ["svc", "add", "t1", "svc-tag"]
     )
     assert completions == ["foo-class"], "Expected add svc -3- completion"
 
@@ -174,10 +187,10 @@ def test_completion_clone(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["clone"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["clone"]
-    ), "Expected clone completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -193,7 +206,7 @@ def test_completion_clone_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["clone", "env"])
+    completions = sm.completionMng.get_completions(["env", "clone"])
     assert completions == ["test-1", "test-2"], "Expected env clone completion"
 
 
@@ -210,10 +223,10 @@ def test_completion_rename(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["rename"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["rename"]
-    ), "Expected rename completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -229,7 +242,7 @@ def test_completion_rename_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["rename", "env"])
+    completions = sm.completionMng.get_completions(["env", "rename"])
     assert completions == ["test-1", "test-2"], "Expected env rename completion"
 
 
@@ -246,7 +259,7 @@ def test_completion_checkout_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["checkout"])
+    completions = sm.completionMng.get_completions(["env", "checkout"])
     assert completions == [
         "test-2",
     ], "Expected env checkout completion"
@@ -265,10 +278,10 @@ def test_completion_delete(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["delete"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["delete"]
-    ), "Expected delete completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -284,7 +297,7 @@ def test_completion_delete_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["delete", "env"])
+    completions = sm.completionMng.get_completions(["env", "delete"])
     assert completions == [
         "test-1",
         "test-2",
@@ -304,7 +317,7 @@ def test_completion_list(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["list"])
+    completions = sm.completionMng.get_completions(["env", "list"])
     assert completions == [], "Expected list completion"
 
 
@@ -321,10 +334,10 @@ def test_completion_start(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["up"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["up"]
-    ), "Expected up categories only"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -340,7 +353,7 @@ def test_completion_start_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["up", "env"])
+    completions = sm.completionMng.get_completions(["env", "up"])
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
@@ -363,7 +376,7 @@ def test_completion_start_env_with_option_prefix(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["up", "env", "--sh"])
+    completions = sm.completionMng.get_completions(["env", "up", "--sh"])
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
@@ -383,7 +396,7 @@ def test_completion_start_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["up", "svc"])
+    completions = sm.completionMng.get_completions(["svc", "up"])
     assert completions == ["red", "white"], "Expected up svc completion"
 
 
@@ -400,7 +413,7 @@ def test_completion_start_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["up", "svc", "red"])
+    completions = sm.completionMng.get_completions(["svc", "up", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -420,10 +433,10 @@ def test_completion_stop(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["halt"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["halt"]
-    ), "Expected halt categories only"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -439,7 +452,7 @@ def test_completion_stop_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["halt", "env"])
+    completions = sm.completionMng.get_completions(["env", "halt"])
     assert completions == ["--no-wait"], "Expected env halt flags"
 
 
@@ -456,7 +469,7 @@ def test_completion_stop_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["halt", "svc"])
+    completions = sm.completionMng.get_completions(["svc", "halt"])
     assert completions == ["red", "white"], "Expected halt svc completion"
 
 
@@ -473,7 +486,7 @@ def test_completion_stop_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["halt", "svc", "red"])
+    completions = sm.completionMng.get_completions(["svc", "halt", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -493,10 +506,10 @@ def test_completion_reload(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["reload"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["reload"]
-    ), "Expected reload completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -512,7 +525,7 @@ def test_completion_reload_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["reload", "env"])
+    completions = sm.completionMng.get_completions(["env", "reload"])
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
@@ -534,7 +547,7 @@ def test_completion_reload_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["reload", "svc"])
+    completions = sm.completionMng.get_completions(["svc", "reload"])
     assert completions == ["red", "white"], "Expected reload svc completion"
 
 
@@ -551,7 +564,7 @@ def test_completion_reload_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["reload", "svc", "red"])
+    completions = sm.completionMng.get_completions(["svc", "reload", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -562,9 +575,9 @@ def test_completion_reload_svc_cnt_1(
 @pytest.mark.parametrize(
     "args",
     [
-        ["up", "svc", "red", "container-1"],
-        ["halt", "svc", "red", "container-1"],
-        ["reload", "svc", "red", "container-1"],
+        ["svc", "up", "red", "container-1"],
+        ["svc", "halt", "red", "container-1"],
+        ["svc", "reload", "red", "container-1"],
     ],
 )
 def test_completion_svc_after_final_positional_has_no_more_suggestions(
@@ -597,10 +610,10 @@ def test_completion_get(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get"])
+    completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.VERB_CATEGORIES["get"]
-    ), "Expected get completion"
+        completions == sm.completionMng.SCOPE_VERBS["env"]
+    ), "Expected env verbs"
 
 
 @pytest.mark.compl
@@ -616,7 +629,7 @@ def test_completion_get_env_oyaml(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "env", "-oyaml"])
+    completions = sm.completionMng.get_completions(["env", "get", "-oyaml"])
     assert completions == [
         "test-1",
         "test-2",
@@ -636,7 +649,7 @@ def test_completion_get_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "env"])
+    completions = sm.completionMng.get_completions(["env", "get"])
     assert completions == ["test-1", "test-2"], "Expected get env completion"
 
 
@@ -653,7 +666,7 @@ def test_completion_get_svc_oyaml(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "svc", "-oyaml"])
+    completions = sm.completionMng.get_completions(["svc", "get", "-oyaml"])
     assert completions == ["red", "white"], "Expected get svc -oyaml completion"
 
 
@@ -670,7 +683,7 @@ def test_completion_build_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["build"])
+    completions = sm.completionMng.get_completions(["svc", "build"])
     assert completions == ["red", "white"], "Expected build svc completion"
 
 
@@ -687,7 +700,7 @@ def test_completion_build_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["build", "red"])
+    completions = sm.completionMng.get_completions(["svc", "build", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -707,7 +720,7 @@ def test_completion_logs_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["logs"])
+    completions = sm.completionMng.get_completions(["svc", "logs"])
     assert completions == ["red", "white"], "Expected logs svc completion"
 
 
@@ -724,7 +737,7 @@ def test_completion_logs_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["logs", "red"])
+    completions = sm.completionMng.get_completions(["svc", "logs", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -744,7 +757,7 @@ def test_completion_shell_svc(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["shell"])
+    completions = sm.completionMng.get_completions(["svc", "shell"])
     assert completions == ["red", "white"], "Expected shell svc completion"
 
 
@@ -761,7 +774,7 @@ def test_completion_shell_svc_cnt_1(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["shell", "red"])
+    completions = sm.completionMng.get_completions(["svc", "shell", "red"])
     assert completions == [
         "container-1",
         "container-2",
@@ -781,7 +794,7 @@ def test_completion_status_env(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["status", "env"])
+    completions = sm.completionMng.get_completions(["env", "status"])
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
@@ -803,7 +816,7 @@ def test_completion_get_env_shows_tags_only(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "env"])
+    completions = sm.completionMng.get_completions(["env", "get"])
     assert completions == ["test-1", "test-2"], "Expected get env tags only"
 
 
@@ -821,7 +834,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(
-        ["get", "env", "--output", "yaml"]
+        ["env", "get", "--output", "yaml"]
     )
     assert completions == [
         "test-1",
@@ -834,7 +847,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
     ("args", "expected"),
     [
         (
-            ["get", "env", "test-1"],
+            ["env", "get", "test-1"],
             [
                 "-o",
                 "--output",
@@ -847,7 +860,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
             ],
         ),
         (
-            ["get", "svc", "red"],
+            ["svc", "get", "red"],
             [
                 "-o",
                 "--output",
@@ -859,7 +872,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
             ],
         ),
         (
-            ["get", "probe", "db-live"],
+            ["probe", "get", "db-live"],
             [
                 "-o",
                 "--output",
@@ -898,7 +911,7 @@ def test_completion_get_env_output_value_choices(
     mocker: MockerFixture,
 ):
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "env", "--output"])
+    completions = sm.completionMng.get_completions(["env", "get", "--output"])
     assert completions == ["yaml", "json"], "Expected output value choices"
 
 
@@ -910,7 +923,7 @@ def test_completion_get_svc_output_value_choices_with_empty_current_arg(
 ):
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(
-        ["get", "svc", "cache", "-o", ""]
+        ["svc", "get", "cache", "-o", ""]
     )
     assert completions == ["yaml", "json"], "Expected output choices after -o "
 
@@ -923,7 +936,7 @@ def test_completion_get_svc_output_value_choices_with_prefix(
 ):
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(
-        ["get", "svc", "cache", "-o", "y"]
+        ["svc", "get", "cache", "-o", "y"]
     )
     assert completions == ["yaml"], "Expected filtered output value choices"
 
@@ -933,7 +946,7 @@ def test_completion_get_svc_output_value_choices_with_prefix(
     ("args", "expected"),
     [
         (
-            ["get", "env", "-"],
+            ["env", "get", "-"],
             [
                 "-o",
                 "--output",
@@ -946,7 +959,7 @@ def test_completion_get_svc_output_value_choices_with_prefix(
             ],
         ),
         (
-            ["get", "svc", "-"],
+            ["svc", "get", "-"],
             [
                 "-o",
                 "--output",
@@ -958,7 +971,7 @@ def test_completion_get_svc_output_value_choices_with_prefix(
             ],
         ),
         (
-            ["get", "probe", "-"],
+            ["probe", "get", "-"],
             [
                 "-o",
                 "--output",
@@ -1003,7 +1016,7 @@ def test_completion_get_probe_oyaml(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "probe", "-oyaml"])
+    completions = sm.completionMng.get_completions(["probe", "get", "-oyaml"])
     assert completions == [
         "db-live",
         "db-ready",
@@ -1023,7 +1036,7 @@ def test_completion_get_probe(
     shpd_yaml.write_text(shpd_config)
 
     sm = ShepherdMng()
-    completions = sm.completionMng.get_completions(["get", "probe"])
+    completions = sm.completionMng.get_completions(["probe", "get"])
     assert completions == [
         "db-live",
         "db-ready",
