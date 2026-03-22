@@ -17,16 +17,18 @@
 
 """Public plugin APIs shared by the CLI bootstrap and external plugins."""
 
-from .plugin import PluginMng
-from .runtime import (
-    LoadedPlugin,
+from .api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginFactorySpec,
-    PluginRegistry,
-    PluginRuntimeMng,
     PluginTemplateSpec,
     ShepherdPlugin,
+)
+from .plugin import PluginMng
+from .runtime import (
+    LoadedPlugin,
+    PluginRegistry,
+    PluginRuntimeMng,
 )
 
 __all__ = [

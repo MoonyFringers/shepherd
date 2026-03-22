@@ -20,10 +20,9 @@ from __future__ import annotations
 import importlib
 import os
 import sys
-from abc import ABC
 from dataclasses import dataclass, field
-from typing import Any, Sequence
 from types import ModuleType
+from typing import Sequence
 
 import yaml
 
@@ -33,6 +32,13 @@ from config import (
     PluginCfg,
     PluginDescriptorCfg,
     parse_plugin_descriptor,
+)
+from plugin.api import (
+    PluginCommandSpec,
+    PluginCompletionSpec,
+    PluginFactorySpec,
+    PluginTemplateSpec,
+    ShepherdPlugin,
 )
 from util import Util
 
@@ -62,91 +68,6 @@ def _template_registry() -> dict[str, "PluginTemplateSpec"]:
 def _factory_registry() -> dict[str, "PluginFactorySpec"]:
     """Create a typed default for canonical factory registrations."""
     return {}
-
-
-@dataclass(frozen=True)
-class PluginCommandSpec:
-    """One scope/verb pair contributed by a plugin."""
-
-    scope: str
-    verb: str
-
-
-@dataclass(frozen=True)
-class PluginCompletionSpec:
-    """
-    One completion provider contribution keyed by scope.
-
-    `provider` is intentionally untyped in this step because the runtime
-    loader only stores provider objects in the registry; it does not invoke
-    them yet. A later completion-integration step will narrow this to the
-    concrete callable or provider protocol the completion engine expects.
-    """
-
-    scope: str
-    provider: Any
-
-
-@dataclass(frozen=True)
-class PluginTemplateSpec:
-    """
-    One template contribution declared by a plugin.
-
-    `provider` carries the plugin-owned object or data structure that
-    describes the template payload. The loader treats it as opaque for now and
-    only registers it under the canonical `plugin-id/template-id` name.
-    """
-
-    id: str
-    provider: Any
-
-
-@dataclass(frozen=True)
-class PluginFactorySpec:
-    """
-    One factory contribution declared by a plugin.
-
-    `provider` carries the concrete factory object published by the plugin.
-    The runtime layer currently validates and stores it only; env and service
-    flows will start consuming these provider objects in a later rollout step.
-    """
-
-    id: str
-    provider: Any
-
-
-class ShepherdPlugin(ABC):
-    """
-    Root runtime interface implemented by external plugins.
-
-    A concrete plugin exposes its capabilities by overriding the contribution
-    getters below. Returning an empty sequence means that the plugin does not
-    participate in that extension area.
-    """
-
-    def get_commands(self) -> Sequence[PluginCommandSpec]:
-        """Return scope and verb contributions declared by the plugin."""
-        return ()
-
-    def get_completion_providers(self) -> Sequence[PluginCompletionSpec]:
-        """Return completion providers grouped by the scopes they serve."""
-        return ()
-
-    def get_env_templates(self) -> Sequence[PluginTemplateSpec]:
-        """Return environment templates owned by the plugin."""
-        return ()
-
-    def get_service_templates(self) -> Sequence[PluginTemplateSpec]:
-        """Return service templates owned by the plugin."""
-        return ()
-
-    def get_env_factories(self) -> Sequence[PluginFactorySpec]:
-        """Return environment factories owned by the plugin."""
-        return ()
-
-    def get_service_factories(self) -> Sequence[PluginFactorySpec]:
-        """Return service factories owned by the plugin."""
-        return ()
 
 
 @dataclass(frozen=True)
