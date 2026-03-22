@@ -839,6 +839,234 @@ class Config(Resolvable):
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
 
+def _parse_build(item: Any) -> BuildCfg:
+    return BuildCfg(
+        context_path=item.get("context_path"),
+        dockerfile_path=item.get("dockerfile_path"),
+    )
+
+
+def _parse_init(item: Any) -> InitCfg:
+    return InitCfg(
+        tag=item["tag"],
+        script=item.get("script"),
+        script_path=item.get("script_path"),
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_start(item: Any) -> StartCfg:
+    return StartCfg(
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_ready(item: Any) -> ReadyCfg:
+    return ReadyCfg(
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_container(item: Any) -> ContainerCfg:
+    inits = (
+        [_parse_init(init) for init in item.get("inits", [])]
+        if item.get("inits") is not None
+        else None
+    )
+    return ContainerCfg(
+        tag=item.get("tag"),
+        image=item.get("image"),
+        hostname=item.get("hostname"),
+        container_name=item.get("container_name"),
+        workdir=item.get("workdir"),
+        volumes=item.get("volumes", []),
+        environment=item.get("environment", []),
+        ports=item.get("ports", []),
+        networks=item.get("networks", []),
+        extra_hosts=item.get("extra_hosts", []),
+        build=_parse_build(item["build"]) if item.get("build") else None,
+        inits=inits,
+    )
+
+
+def _parse_probe(item: Any) -> ProbeCfg:
+    return ProbeCfg(
+        tag=item["tag"],
+        container=(
+            _parse_container(item["container"])
+            if item.get("container")
+            else None
+        ),
+        script=item.get("script"),
+        script_path=item.get("script_path"),
+    )
+
+
+def _parse_network(item: Any) -> NetworkCfg:
+    external_value = item.get("external", False)
+    attachable_value = item.get("attachable")
+    enable_ipv6_value = item.get("enable_ipv6")
+    return NetworkCfg(
+        tag=item["tag"],
+        name=item.get("name", None),
+        external=(
+            bool_to_str(external_value)
+            if isinstance(external_value, bool)
+            else external_value
+        ),
+        driver=item.get("driver", None),
+        attachable=(
+            bool_to_str(attachable_value)
+            if isinstance(attachable_value, bool)
+            else attachable_value
+        ),
+        enable_ipv6=(
+            bool_to_str(enable_ipv6_value)
+            if isinstance(enable_ipv6_value, bool)
+            else enable_ipv6_value
+        ),
+        driver_opts=item.get("driver_opts"),
+        ipam=item.get("ipam"),
+    )
+
+
+def _parse_volume(item: Any) -> VolumeCfg:
+    external_value = item.get("external", False)
+    return VolumeCfg(
+        tag=item["tag"],
+        external=(
+            bool_to_str(external_value)
+            if isinstance(external_value, bool)
+            else external_value
+        ),
+        name=item.get("name"),
+        driver=item.get("driver"),
+        driver_opts=item.get("driver_opts"),
+        labels=item.get("labels"),
+    )
+
+
+def _parse_service_template_ref(item: Any) -> ServiceTemplateRefCfg:
+    return ServiceTemplateRefCfg(
+        template=item["template"],
+        tag=item["tag"],
+    )
+
+
+def _parse_service_template(item: Any) -> ServiceTemplateCfg:
+    containers_data = cast(list[dict[str, Any]], item.get("containers") or [])
+    return ServiceTemplateCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        labels=item.get("labels", []),
+        properties=item.get("properties", {}),
+        containers=[
+            _parse_container(container) for container in containers_data
+        ],
+        start=_parse_start(item["start"]) if item.get("start") else None,
+    )
+
+
+def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
+    service_templates_data = cast(
+        list[dict[str, Any]], item.get("service_templates") or []
+    )
+    probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+    networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+    volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    return EnvironmentTemplateCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        service_templates=[
+            _parse_service_template_ref(service_template)
+            for service_template in service_templates_data
+        ],
+        probes=[_parse_probe(probe) for probe in probes_data],
+        ready=_parse_ready(item["ready"]) if item.get("ready") else None,
+        networks=[_parse_network(network) for network in networks_data],
+        volumes=[_parse_volume(volume) for volume in volumes_data],
+    )
+
+
+def _parse_status(item: Any) -> EntityStatus:
+    return EntityStatus(
+        active=item.get("active", False),
+        rendered_config=item.get("rendered_config"),
+    )
+
+
+def _parse_upstream(item: Any) -> UpstreamCfg:
+    enabled_value = item["enabled"]
+    return UpstreamCfg(
+        type=item["type"],
+        tag=item["tag"],
+        properties=item.get("properties", {}),
+        enabled=(
+            bool_to_str(enabled_value)
+            if isinstance(enabled_value, bool)
+            else enabled_value
+        ),
+    )
+
+
+def _parse_service(item: Any) -> ServiceCfg:
+    containers_data = cast(list[dict[str, Any]], item.get("containers") or [])
+    upstreams_data = cast(list[dict[str, Any]], item.get("upstreams") or [])
+    return ServiceCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        template=item["template"],
+        service_class=item.get("service_class"),
+        labels=item.get("labels", []),
+        properties=item.get("properties", {}),
+        upstreams=[_parse_upstream(upstream) for upstream in upstreams_data],
+        containers=[
+            _parse_container(container) for container in containers_data
+        ],
+        start=_parse_start(item["start"]) if item.get("start") else None,
+        status=_parse_status(item["status"]),
+    )
+
+
+def _parse_staging_area(item: Any) -> StagingAreaCfg:
+    return StagingAreaCfg(
+        volumes_path=item["volumes_path"],
+        images_path=item["images_path"],
+    )
+
+
+def _parse_plugin(item: Any) -> PluginCfg:
+    enabled_value = item.get("enabled", True)
+    return PluginCfg(
+        id=item["id"],
+        enabled=(
+            bool_to_str(enabled_value)
+            if isinstance(enabled_value, bool)
+            else enabled_value
+        ),
+        version=item.get("version"),
+        config=item.get("config"),
+    )
+
+
+def _parse_environment(item: Any) -> EnvironmentCfg:
+    services_data = cast(list[dict[str, Any]], item.get("services") or [])
+    probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+    networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+    volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    return EnvironmentCfg(
+        template=item["template"],
+        factory=item["factory"],
+        tag=item["tag"],
+        services=[_parse_service(service) for service in services_data],
+        probes=[_parse_probe(probe) for probe in probes_data],
+        ready=_parse_ready(item["ready"]) if item.get("ready") else None,
+        networks=[_parse_network(network) for network in networks_data],
+        volumes=[_parse_volume(volume) for volume in volumes_data],
+        status=_parse_status(item["status"]),
+    )
+
+
 def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     """
     Parse a plugin descriptor YAML into the strongly typed descriptor model.
@@ -873,136 +1101,6 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     if default_config is not None and not isinstance(default_config, dict):
         raise ValueError("Plugin default_config must be a mapping.")
 
-    def parse_build(item: Any) -> BuildCfg:
-        return BuildCfg(
-            context_path=item.get("context_path"),
-            dockerfile_path=item.get("dockerfile_path"),
-        )
-
-    def parse_init(item: Any) -> InitCfg:
-        return InitCfg(
-            tag=item["tag"],
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_start(item: Any) -> StartCfg:
-        return StartCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_ready(item: Any) -> ReadyCfg:
-        return ReadyCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_container(item: Any) -> ContainerCfg:
-        inits = (
-            [parse_init(init) for init in item.get("inits", [])]
-            if item.get("inits") is not None
-            else None
-        )
-        return ContainerCfg(
-            tag=item.get("tag"),
-            image=item.get("image"),
-            hostname=item.get("hostname"),
-            container_name=item.get("container_name"),
-            workdir=item.get("workdir"),
-            volumes=item.get("volumes", []),
-            environment=item.get("environment", []),
-            ports=item.get("ports", []),
-            networks=item.get("networks", []),
-            extra_hosts=item.get("extra_hosts", []),
-            build=parse_build(item["build"]) if item.get("build") else None,
-            inits=inits,
-        )
-
-    def parse_probe(item: Any) -> ProbeCfg:
-        return ProbeCfg(
-            tag=item["tag"],
-            container=(
-                parse_container(item["container"])
-                if item.get("container")
-                else None
-            ),
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-        )
-
-    def parse_network(item: Any) -> NetworkCfg:
-        external_value = item.get("external", False)
-        return NetworkCfg(
-            tag=item["tag"],
-            name=item.get("name", None),
-            external=(
-                bool_to_str(external_value)
-                if isinstance(external_value, bool)
-                else external_value
-            ),
-            driver=item.get("driver", None),
-            attachable=item.get("attachable", None),
-            enable_ipv6=item.get("enable_ipv6", None),
-            driver_opts=item.get("driver_opts", None),
-            ipam=item.get("ipam", None),
-        )
-
-    def parse_volume(item: Any) -> VolumeCfg:
-        external_value = item.get("external", False)
-        return VolumeCfg(
-            tag=item["tag"],
-            external=(
-                bool_to_str(external_value)
-                if isinstance(external_value, bool)
-                else external_value
-            ),
-            name=item.get("name", None),
-            driver=item.get("driver", None),
-            driver_opts=item.get("driver_opts", None),
-            labels=item.get("labels", None),
-        )
-
-    def parse_service_template_ref(item: Any) -> ServiceTemplateRefCfg:
-        return ServiceTemplateRefCfg(
-            template=item["template"],
-            tag=item["tag"],
-        )
-
-    def parse_service_template(item: Any) -> ServiceTemplateCfg:
-        containers_data = cast(
-            list[dict[str, Any]], item.get("containers") or []
-        )
-        return ServiceTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            labels=item.get("labels", []),
-            properties=item.get("properties", {}),
-            containers=[
-                parse_container(container) for container in containers_data
-            ],
-            start=parse_start(item["start"]) if item.get("start") else None,
-        )
-
-    def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
-        service_templates_data = cast(
-            list[dict[str, Any]], item.get("service_templates") or []
-        )
-        probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
-        networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
-        volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
-        return EnvironmentTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            service_templates=[
-                parse_service_template_ref(service_template)
-                for service_template in service_templates_data
-            ],
-            probes=[parse_probe(probe) for probe in probes_data],
-            ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[parse_network(network) for network in networks_data],
-            volumes=[parse_volume(volume) for volume in volumes_data],
-        )
-
     env_templates_data = descriptor.get("env_templates")
     if env_templates_data is not None and not isinstance(
         env_templates_data, list
@@ -1017,7 +1115,7 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
 
     env_templates = (
         [
-            parse_environment_template(template)
+            _parse_environment_template(template)
             for template in cast(list[dict[str, Any]], env_templates_data)
         ]
         if env_templates_data is not None
@@ -1025,7 +1123,7 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     )
     service_templates = (
         [
-            parse_service_template(template)
+            _parse_service_template(template)
             for template in cast(list[dict[str, Any]], service_templates_data)
         ]
         if service_templates_data is not None
@@ -1063,227 +1161,25 @@ def parse_config(yaml_str: str) -> Config:
 
     data = yaml.safe_load(yaml_str)
 
-    def parse_status(item: Any) -> EntityStatus:
-        return EntityStatus(
-            active=item.get("active", False),
-            rendered_config=item.get("rendered_config"),
-        )
-
-    def parse_upstream(item: Any) -> UpstreamCfg:
-        return UpstreamCfg(
-            type=item["type"],
-            tag=item["tag"],
-            properties=item.get("properties", {}),
-            enabled=(
-                bool_to_str(val)
-                if isinstance(val := item["enabled"], bool)
-                else val
-            ),
-        )
-
-    def parse_build(item: Any) -> BuildCfg:
-        return BuildCfg(
-            context_path=item.get("context_path"),
-            dockerfile_path=item.get("dockerfile_path"),
-        )
-
-    def parse_container(item: Any) -> ContainerCfg:
-        inits = (
-            [parse_init(init) for init in item.get("inits", [])]
-            if item.get("inits") is not None
-            else None
-        )
-        return ContainerCfg(
-            tag=item.get("tag"),
-            image=item.get("image"),
-            hostname=item.get("hostname"),
-            container_name=item.get("container_name"),
-            workdir=item.get("workdir"),
-            volumes=item.get("volumes", []),
-            environment=item.get("environment", []),
-            ports=item.get("ports", []),
-            networks=item.get("networks", []),
-            extra_hosts=item.get("extra_hosts", []),
-            build=parse_build(item["build"]) if item.get("build") else None,
-            inits=inits,
-        )
-
-    def parse_probe(item: Any) -> ProbeCfg:
-        return ProbeCfg(
-            tag=item["tag"],
-            container=(
-                parse_container(item["container"])
-                if item.get("container")
-                else None
-            ),
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-        )
-
-    def parse_init(item: Any) -> InitCfg:
-        return InitCfg(
-            tag=item["tag"],
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_start(item: Any) -> StartCfg:
-        return StartCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_ready(item: Any) -> ReadyCfg:
-        return ReadyCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_service_template(item: Any) -> ServiceTemplateCfg:
-        return ServiceTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            labels=item.get("labels", []),
-            properties=item.get("properties", {}),
-            containers=[
-                parse_container(container)
-                for container in item.get("containers", [])
-            ],
-            start=parse_start(item["start"]) if item.get("start") else None,
-        )
-
-    def parse_service(item: Any) -> ServiceCfg:
-        return ServiceCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            template=item["template"],
-            service_class=item.get("service_class"),
-            labels=item.get("labels", []),
-            properties=item.get("properties", {}),
-            upstreams=[
-                parse_upstream(upstream)
-                for upstream in item.get("upstreams", [])
-            ],
-            containers=[
-                parse_container(container)
-                for container in item.get("containers", [])
-            ],
-            start=parse_start(item["start"]) if item.get("start") else None,
-            status=parse_status(item["status"]),
-        )
-
-    def parse_network(item: Any) -> NetworkCfg:
-        return NetworkCfg(
-            tag=item["tag"],
-            name=item.get("name", None),
-            external=(
-                bool_to_str(val)
-                if isinstance(val := item["external"], bool)
-                else val
-            ),
-            driver=item.get("driver", None),
-            attachable=(
-                bool_to_str(val)
-                if isinstance(val := item.get("attachable"), bool)
-                else val
-            ),
-            enable_ipv6=(
-                bool_to_str(val)
-                if isinstance(val := item.get("enable_ipv6"), bool)
-                else val
-            ),
-            driver_opts=item.get("driver_opts"),
-            ipam=item.get("ipam"),
-        )
-
-    def parse_volume(item: Any) -> VolumeCfg:
-        return VolumeCfg(
-            tag=item["tag"],
-            external=(
-                bool_to_str(val)
-                if isinstance(val := item["external"], bool)
-                else val
-            ),
-            name=item.get("name"),
-            driver=item.get("driver"),
-            driver_opts=item.get("driver_opts"),
-            labels=item.get("labels"),
-        )
-
-    def parse_service_template_refs(item: Any) -> ServiceTemplateRefCfg:
-        return ServiceTemplateRefCfg(template=item["template"], tag=item["tag"])
-
-    def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
-        return EnvironmentTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            service_templates=[
-                parse_service_template_refs(svc_templ_ref)
-                for svc_templ_ref in item.get("service_templates", [])
-            ],
-            probes=[parse_probe(probe) for probe in item.get("probes", [])],
-            ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[
-                parse_network(network) for network in item.get("networks", [])
-            ],
-            volumes=[
-                parse_volume(volume) for volume in item.get("volumes", [])
-            ],
-        )
-
-    def parse_staging_area(item: Any) -> StagingAreaCfg:
-        return StagingAreaCfg(
-            volumes_path=item["volumes_path"],
-            images_path=item["images_path"],
-        )
-
-    def parse_plugin(item: Any) -> PluginCfg:
-        return PluginCfg(
-            id=item["id"],
-            enabled=(
-                bool_to_str(val)
-                if isinstance(val := item.get("enabled", True), bool)
-                else val
-            ),
-            version=item.get("version"),
-            config=item.get("config"),
-        )
-
-    def parse_environment(item: Any) -> EnvironmentCfg:
-        services_data = cast(list[dict[str, Any]], item.get("services") or [])
-        probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
-        networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
-        volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
-        return EnvironmentCfg(
-            template=item["template"],
-            factory=item["factory"],
-            tag=item["tag"],
-            services=[parse_service(service) for service in services_data],
-            probes=[parse_probe(probe) for probe in probes_data],
-            ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[parse_network(network) for network in networks_data],
-            volumes=[parse_volume(volume) for volume in volumes_data],
-            status=parse_status(item["status"]),
-        )
-
     return Config(
         env_templates=[
-            parse_environment_template(environment_template)
+            _parse_environment_template(environment_template)
             for environment_template in data.get("env_templates", [])
         ],
         service_templates=[
-            parse_service_template(service_template)
+            _parse_service_template(service_template)
             for service_template in data.get("service_templates", [])
         ],
         templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
-        staging_area=parse_staging_area(data["staging_area"]),
+        staging_area=_parse_staging_area(data["staging_area"]),
         plugins=(
-            [parse_plugin(plugin) for plugin in data.get("plugins", [])]
+            [_parse_plugin(plugin) for plugin in data.get("plugins", [])]
             if data.get("plugins") is not None
             else None
         ),
-        envs=[parse_environment(env) for env in data["envs"]],
+        envs=[_parse_environment(env) for env in data["envs"]],
     )
 
 
