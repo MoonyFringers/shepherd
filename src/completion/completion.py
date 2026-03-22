@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Optional, override
 
 from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
+from completion.completion_plugin import CompletionPluginMng
 from completion.completion_probe import CompletionProbeMng
 from completion.completion_svc import CompletionSvcMng
 from config import ConfigMng
@@ -137,6 +138,7 @@ class CompletionMng(AbstractCompletionMng):
         self.configMng = configMng
         self.plugin_registry = plugin_registry
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)
+        self.completionPluginMng = CompletionPluginMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
         self.completionProbeMng = CompletionProbeMng(cli_flags, configMng)
         self._option_by_token: dict[str, CompletionMng.OptionSpec] = {}
@@ -181,6 +183,8 @@ class CompletionMng(AbstractCompletionMng):
     ) -> Optional[AbstractCompletionMng]:
         if scope == "env":
             return self.completionEnvMng
+        if scope == "plugin":
+            return self.completionPluginMng
         if scope == "svc":
             return self.completionSvcMng
         if scope == "probe":
@@ -278,23 +282,6 @@ class CompletionMng(AbstractCompletionMng):
     def _unique(self, values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
 
-    def _get_plugin_scope_completions(
-        self, sanitized_args: list[str], verb: str, last_token: str
-    ) -> list[str]:
-        if verb in {"get", "enable", "disable", "remove"}:
-            if len(sanitized_args) <= 3:
-                plugin_ids = sorted(
-                    [plugin.id for plugin in self.configMng.get_plugins()]
-                )
-                if len(sanitized_args) == 3 and last_token:
-                    return [
-                        plugin_id
-                        for plugin_id in plugin_ids
-                        if plugin_id.startswith(last_token)
-                    ]
-                return plugin_ids
-        return []
-
     def _get_runtime_provider_completions(
         self, scope: str, sanitized_args: list[str]
     ) -> list[str]:
@@ -381,11 +368,6 @@ class CompletionMng(AbstractCompletionMng):
                     )
                 )
             return self._unique(suggestions)
-
-        if scope == "plugin":
-            return self._get_plugin_scope_completions(
-                sanitized_args, verb, last_token
-            )
 
         provider_suggestions = self._get_runtime_provider_completions(
             scope, sanitized_args
