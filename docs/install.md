@@ -33,6 +33,15 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv -y
 ```
 
+To install them on macOS with Homebrew:
+
+```bash
+brew install python bc jq rsync
+```
+
+For Docker-based workflows on macOS, make sure Docker Desktop is installed
+and running before using `shepctl`.
+
 ### Step 1: Clone the Repository
 
 ```bash
@@ -48,6 +57,9 @@ Use the `source` method to install `shepctl` for development:
 cd scripts
 ./install.sh -m source install
 ```
+
+On Apple Silicon Macs, the installer defaults to the Homebrew prefix under
+`/opt/homebrew`. On Intel Macs, it defaults to `/usr/local`.
 
 This will:
 

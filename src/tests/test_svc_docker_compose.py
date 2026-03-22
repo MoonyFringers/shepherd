@@ -21,6 +21,7 @@ from pytest_mock import MockerFixture
 from test_util import read_fixture
 
 from shepctl import cli
+from util import Util
 
 svc_env_running_ps_output = (
     '{"Service":"container-1-test-test-1","State":"running"}\n'
@@ -30,6 +31,13 @@ svc_env_running_ps_output = (
     '{"Service":"container-1-test-3-test-1","State":"running"}\n'
     '{"Service":"container-1-test-4-test-1","State":"running"}\n'
 )
+
+
+def normalize_expected_bind_paths(content: str) -> str:
+    return content.replace(
+        "/home/test/.ssh:/home/test/.ssh",
+        Util.translate_volume_binding("/home/test/.ssh:/home/test/.ssh"),
+    )
 
 
 def mock_subprocess_with_running_ps(mocker: MockerFixture):
@@ -244,7 +252,10 @@ def test_svc_render_target_compose_service(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    y2: str = yaml.dump(
+        yaml.safe_load(normalize_expected_bind_paths(expected)),
+        sort_keys=True,
+    )
     assert y1 == y2
 
 

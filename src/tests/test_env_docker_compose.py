@@ -24,6 +24,7 @@ from test_util import read_fixture
 from docker.docker_compose_env import DockerComposeEnv
 from environment.environment import NonRecoverableStartError, ProbeRunResult
 from shepctl import ShepherdMng, cli
+from util import Util
 
 docker_compose_ps_output = """
 {"Command":"\\\"docker-entrypoint.s…\\\"","CreatedAt":"2025-09-08 12:22:01 +0200 CEST","ExitCode":0,"Health":"","ID":"cc1200024a2a","Image":"postgres:14","Labels":"com.docker.compose.oneoff=False","LocalVolumes":"1","Mounts":"beppe_postgres","Name":"db-instance","Names":"db-instance","Networks":"beppe_beppe","Ports":"0.0.0.0:5432-\u003e5432/tcp, [::]:5432-\u003e5432/tcp","Project":"beppe","Publishers":[{"URL":"0.0.0.0","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"},{"URL":"::","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"}],"RunningFor":"About a minute ago","Service":"test-1-test-1","Size":"0B","State":"running","Status":"Up About a minute"}
@@ -34,6 +35,13 @@ test_env_running_ps_output = (
     '{"Service":"container-1-test-1-test-1","State":"running"}\n'
     '{"Service":"container-1-test-2-test-1","State":"running"}\n'
 )
+
+
+def normalize_expected_bind_paths(content: str) -> str:
+    return content.replace(
+        "/home/test/.ssh:/home/test/.ssh",
+        Util.translate_volume_binding("/home/test/.ssh:/home/test/.ssh"),
+    )
 
 
 def mock_subprocess_with_running_ps(mocker: MockerFixture):
@@ -446,7 +454,10 @@ def test_env_render_target_compose_env_ext_net(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    y2: str = yaml.dump(
+        yaml.safe_load(normalize_expected_bind_paths(expected)),
+        sort_keys=True,
+    )
     assert y1 == y2
 
 
@@ -518,7 +529,10 @@ def test_env_render_target_compose_env_resolved(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    y2: str = yaml.dump(
+        yaml.safe_load(normalize_expected_bind_paths(expected)),
+        sort_keys=True,
+    )
     assert y1 == y2
 
 
@@ -602,7 +616,10 @@ def test_env_render_target_compose_env_int_net(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    y2: str = yaml.dump(
+        yaml.safe_load(normalize_expected_bind_paths(expected)),
+        sort_keys=True,
+    )
     assert y1 == y2
 
 

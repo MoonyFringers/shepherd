@@ -54,7 +54,9 @@ class DockerComposeEnv(Environment):
                 ):
                     device_path = vol.driver_opts.get("device")
                     if device_path:
-                        Util.ensure_dir(device_path, vol.tag)
+                        Util.ensure_dir(
+                            Util.translate_host_path(device_path), vol.tag
+                        )
 
     @override
     def clone_impl(self, dst_env_tag: str) -> DockerComposeEnv:
@@ -345,7 +347,13 @@ class DockerComposeEnv(Environment):
                         if vol.driver:
                             vol_config["driver"] = vol.driver
                         if vol.driver_opts:
-                            vol_config["driver_opts"] = vol.driver_opts
+                            driver_opts = dict(vol.driver_opts)
+                            device_path = driver_opts.get("device")
+                            if device_path:
+                                driver_opts["device"] = (
+                                    Util.translate_host_path(device_path)
+                                )
+                            vol_config["driver_opts"] = driver_opts
                         if vol.labels:
                             vol_config["labels"] = vol.labels
 

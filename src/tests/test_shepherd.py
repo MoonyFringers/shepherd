@@ -474,6 +474,51 @@ def test_cli_complete(
     assert result.exit_code == 0
 
 
+@pytest.mark.shpd
+def test_cli_root_help(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0
+    assert "Usage: cli [OPTIONS] COMMAND [ARGS]..." in result.output
+    assert "env" in result.output
+    assert "svc" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_root_help_bootstraps_default_config_values(
+    tmp_path: Path,
+    runner: CliRunner,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    monkeypatch.delenv("SHPD_CONF", raising=False)
+    monkeypatch.setenv("HOME", str(home_dir))
+
+    result = runner.invoke(cli, ["--help"])
+
+    assert result.exit_code == 0
+    assert "Usage: cli [OPTIONS] COMMAND [ARGS]..." in result.output
+    config_values = home_dir / ".shpd.conf"
+    assert config_values.exists()
+    assert "shpd_path=~/shpd" in config_values.read_text()
+    assert (home_dir / "shpd" / ".shpd.yaml").exists()
+
+
+@pytest.mark.shpd
+def test_cli_env_help(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    result = runner.invoke(cli, ["env", "--help"])
+
+    assert result.exit_code == 0
+    assert "Usage: cli env [OPTIONS] COMMAND [ARGS]..." in result.output
+    assert "list" in result.output
+    assert "get" in result.output
+
+
 # service tests
 
 

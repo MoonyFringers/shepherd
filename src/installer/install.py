@@ -10,7 +10,7 @@ import pwd
 import shutil
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import click
 
@@ -26,12 +26,17 @@ force_source_download = False
 # Configuration
 exec_dir = Path(__file__).parent.resolve()
 py_src_dir = (exec_dir.parent).resolve()
+default_install_paths = Util.get_default_install_paths()
 
 # Environment variables with defaults
 install_shepctl_dir = Path(
-    os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
+    os.environ.get(
+        "INSTALL_SHEPCTL_DIR", str(default_install_paths.install_dir)
+    )
 ).resolve()
-symlink_dir = Path(os.environ.get("SYMLINK_DIR", "/usr/local/bin")).resolve()
+symlink_dir = Path(
+    os.environ.get("SYMLINK_DIR", str(default_install_paths.symlink_dir))
+).resolve()
 
 
 ####################################################
@@ -80,9 +85,8 @@ def cli(
 @click.pass_context
 def install(ctx: click.Context) -> None:
     """Install shepctl."""
-    # Installer needs to run as root
-    # to install system-wide
-    if not Util.is_root():
+    os_info = Util.get_os_info()
+    if os_info.system != "darwin" and not Util.is_root():
         Util.print_error_and_die("This script must be run as root")
 
     global verbose, skip_ensure_deps, install_method
@@ -97,7 +101,8 @@ def install(ctx: click.Context) -> None:
 @click.pass_context
 def uninstall(ctx: click.Context) -> None:
     """Uninstall shepctl."""
-    if not Util.is_root():
+    os_info = Util.get_os_info()
+    if os_info.system != "darwin" and not Util.is_root():
         Util.print_error_and_die("This script must be run as root")
 
     # Get options from context
@@ -111,8 +116,9 @@ def uninstall(ctx: click.Context) -> None:
 
 def install_binary() -> None:
     """Install shepctl from binary release."""
+    defaults = Util.get_default_install_paths()
     install_shepctl_dir: str = os.environ.get(
-        "INSTALL_SHEPCTL_DIR", "/opt/shepctl"
+        "INSTALL_SHEPCTL_DIR", str(defaults.install_dir)
     )
 
     version = os.environ.get("VER", "latest")
@@ -136,7 +142,7 @@ def install_binary() -> None:
     os.chmod(f"{install_shepctl_dir}/shepctl", 0o755)
 
     symlink_dir = Path(
-        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
+        os.environ.get("SYMLINK_DIR", str(defaults.symlink_dir))
     ).resolve()
     symlink_path = symlink_dir / "shepctl"
     if not symlink_path.exists():
@@ -158,6 +164,7 @@ def manage_dependencies() -> None:
 
     # Manage dependencies based on OS
     RepositoryManager.install_packages(
+        os_info.system,
         os_info.distro,
         os_info.codename,
         install_method == "source",
@@ -193,8 +200,9 @@ def manage_python_dependencies() -> None:
 # (set to /usr/local/bin by default)
 def manage_source_symlinks() -> None:
     bin_path: Path = Path(install_shepctl_dir) / "bin" / "shepctl"
+    defaults = Util.get_default_install_paths()
     symlink_dir: Path = Path(
-        os.environ.get("SYMLINK_DIR", "/usr/local/bin")
+        os.environ.get("SYMLINK_DIR", str(defaults.symlink_dir))
     ).resolve()
     symlink_path = symlink_dir / "shepctl"
 
@@ -262,8 +270,9 @@ def install_source() -> None:
     - create `.venv` and install requirements
     - create a launcher script in `SYMLINK_DIR`
     """
+    defaults = Util.get_default_install_paths()
     install_shepctl_dir: Path = Path(
-        os.environ.get("INSTALL_SHEPCTL_DIR", "/opt/shepctl")
+        os.environ.get("INSTALL_SHEPCTL_DIR", str(defaults.install_dir))
     ).resolve()
 
     # Ensure the installation directory exists
@@ -293,6 +302,20 @@ def set_py_permissions(dest_dir: Path) -> None:
         py_file.chmod(0o664)
 
 
+def handle_permission_denied(action: str, path: Path) -> None:
+    if Util.get_os_info().system == "darwin":
+        Util.print_error_and_die(
+            f"Failed to {action} '{path}' due to insufficient permissions.\n"
+            "This usually means a previous macOS install was created "
+            "with sudo. Re-run `./scripts/install.sh uninstall` to clean "
+            "up the legacy install, then run install again without sudo."
+        )
+    else:
+        Util.print_error_and_die(
+            f"Failed to {action} '{path}' due to insufficient permissions."
+        )
+
+
 def install_shepctl() -> None:
     """
     Entry point for installer execution after CLI/root checks.
@@ -307,7 +330,12 @@ def install_shepctl() -> None:
 
     # Clean existing installation if it exists
     if Path(install_shepctl_dir).exists():
-        shutil.rmtree(Path(install_shepctl_dir))
+        try:
+            shutil.rmtree(Path(install_shepctl_dir))
+        except PermissionError:
+            handle_permission_denied(
+                "remove install directory", install_shepctl_dir
+            )
     os.makedirs(Path(install_shepctl_dir), exist_ok=True)
 
     if install_method == "binary":
@@ -332,13 +360,21 @@ def get_script_completion_src() -> tuple[Path, str]:
     return scripts_dir / script_completion_name, script_completion_name
 
 
+def get_completion_dir(system: Optional[str] = None) -> Path:
+    current_system = system or Util.get_os_info().system
+    if current_system == "darwin":
+        defaults = Util.get_default_install_paths(current_system)
+        return defaults.symlink_dir.parent / "etc" / "bash_completion.d"
+    return Path("/etc/bash_completion.d")
+
+
 def install_completion() -> None:
     """
     Install shell completion if system bash-completion directory is available.
 
     Failure to install completion is non-fatal for core CLI functionality.
     """
-    completion_dir = Path("/etc/bash_completion.d")
+    completion_dir = get_completion_dir()
 
     src, script_completion_filename = get_script_completion_src()
     dest = completion_dir / script_completion_filename
@@ -372,20 +408,33 @@ def uninstall_shepctl() -> None:
 
     # Remove installation directory
     if Path(install_shepctl_dir).exists():
-        shutil.rmtree(install_shepctl_dir)
+        try:
+            shutil.rmtree(install_shepctl_dir)
+        except PermissionError:
+            handle_permission_denied(
+                "remove install directory", install_shepctl_dir
+            )
         Util.print(f"Removed {install_shepctl_dir}")
 
     # Remove symlink
     symlink_path: Path = Path(symlink_dir) / "shepctl"
     if symlink_path.exists():
-        symlink_path.unlink()
+        try:
+            symlink_path.unlink()
+        except PermissionError:
+            handle_permission_denied("remove symlink", symlink_path)
         Util.print(f"Removed symlink {symlink_path}")
 
     # Remove autocompletion script
-    completion_dir = Path("/etc/bash_completion.d")
+    completion_dir = get_completion_dir()
     completion_script = completion_dir / "shepctl_completion.sh"
     if completion_script.exists():
-        completion_script.unlink()
+        try:
+            completion_script.unlink()
+        except PermissionError:
+            handle_permission_denied(
+                "remove completion script", completion_script
+            )
         Util.print(f"Removed completion script {completion_script}")
 
     Util.print("Uninstalled")
@@ -405,7 +454,7 @@ def create_wrapper_script(
     shepctl_py = install_dir / "shepctl.py"
     # Write the wrapper script
     wrapper_content = (
-        "#!/bin/bash\n" f'exec "{venv_python}" "{shepctl_py}" "$@"\n'
+        "#!/bin/sh\n" f'exec "{venv_python}" "{shepctl_py}" "$@"\n'
     )
     with open(wrapper_path, "w") as f:
         f.write(wrapper_content)
@@ -430,16 +479,18 @@ def create_virtualenv(install_dir: Path) -> Path:
             [python_path, "-m", "venv", str(venv_path)],
             check=True,
         )
-    # Change ownership of the .venv directory to the current user
-    user = Util.get_current_user()
-    uid = pwd.getpwnam(user).pw_uid
-    gid = pwd.getpwnam(user).pw_gid
-    for root, dirs, files in os.walk(venv_path):
-        os.chown(root, uid, gid)
-        for d in dirs:
-            os.chown(os.path.join(root, d), uid, gid)
-        for f in files:
-            os.chown(os.path.join(root, f), uid, gid)
+    if hasattr(os, "chown"):
+        # On Unix, hand ownership back to the invoking user so future updates
+        # do not require root.
+        user = Util.get_current_user()
+        uid = pwd.getpwnam(user).pw_uid
+        gid = pwd.getpwnam(user).pw_gid
+        for root, dirs, files in os.walk(venv_path):
+            os.chown(root, uid, gid)
+            for d in dirs:
+                os.chown(os.path.join(root, d), uid, gid)
+            for f in files:
+                os.chown(os.path.join(root, f), uid, gid)
     return venv_path
 
 
