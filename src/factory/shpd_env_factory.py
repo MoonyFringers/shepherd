@@ -60,9 +60,22 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
                     cli_flags=self.cli_flags,
                 )
             case _:
-                raise ValueError(
-                    f"Unknown environment factory: {env_tmpl_cfg.factory}"
+                plugin_runtime_mng = self.configMng.pluginRuntimeMng
+                if plugin_runtime_mng is None:
+                    raise ValueError(
+                        f"Unknown environment factory: {env_tmpl_cfg.factory}"
+                    )
+                plugin_factory = plugin_runtime_mng.build_environment_factory(
+                    env_tmpl_cfg.factory,
+                    self.configMng,
+                    self.svcFactory,
+                    self.cli_flags,
                 )
+                if plugin_factory is None:
+                    raise ValueError(
+                        f"Unknown environment factory: {env_tmpl_cfg.factory}"
+                    )
+                return plugin_factory.new_environment(env_tmpl_cfg, env_tag)
 
     @override
     def new_environment_cfg_impl(self, envCfg: EnvironmentCfg) -> Environment:
@@ -80,6 +93,19 @@ class ShpdEnvironmentFactory(EnvironmentFactory):
                     cli_flags=self.cli_flags,
                 )
             case _:
-                raise ValueError(
-                    f"Unknown environment factory: {envCfg.factory}"
+                plugin_runtime_mng = self.configMng.pluginRuntimeMng
+                if plugin_runtime_mng is None:
+                    raise ValueError(
+                        f"Unknown environment factory: {envCfg.factory}"
+                    )
+                plugin_factory = plugin_runtime_mng.build_environment_factory(
+                    envCfg.factory,
+                    self.configMng,
+                    self.svcFactory,
+                    self.cli_flags,
                 )
+                if plugin_factory is None:
+                    raise ValueError(
+                        f"Unknown environment factory: {envCfg.factory}"
+                    )
+                return plugin_factory.new_environment_cfg(envCfg)

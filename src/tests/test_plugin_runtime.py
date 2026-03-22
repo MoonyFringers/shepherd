@@ -124,6 +124,21 @@ def test_shepherd_loads_enabled_plugin_runtime_registry(
     assert "runtime-plugin/baseline-factory" in registry.env_factories
     assert "runtime-plugin/api-factory" in registry.service_factories
     assert callable(registry.completion_providers["observability"][0].provider)
+    env_template = shepherd.configMng.get_environment_template(
+        "runtime-plugin/baseline"
+    )
+    assert env_template is not None
+    assert env_template.factory == "runtime-plugin/baseline-factory"
+    svc_template = shepherd.configMng.get_service_template("runtime-plugin/api")
+    assert svc_template is not None
+    assert svc_template.factory == "runtime-plugin/api-factory"
+    svc_template_path = shepherd.configMng.get_service_template_path(
+        "runtime-plugin/api"
+    )
+    assert svc_template_path is not None
+    assert svc_template_path.endswith(
+        "/plugins/runtime-plugin/templates/svcs/api"
+    )
 
 
 @pytest.mark.shpd
@@ -236,6 +251,81 @@ def test_cli_executes_plugin_verb_under_core_scope(
 
     assert result.exit_code == 0
     assert "plugin-doctor:network" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_adds_environment_from_plugin_template(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(
+        cli, ["env", "add", "runtime-plugin/baseline", "plugin-env"]
+    )
+
+    assert result.exit_code == 0
+
+    shepherd = ShepherdMng()
+    env_cfg = shepherd.configMng.get_environment("plugin-env")
+    assert env_cfg is not None
+    assert env_cfg.template == "runtime-plugin/baseline"
+    assert env_cfg.factory == "runtime-plugin/baseline-factory"
+    assert env_cfg.services is not None
+    assert env_cfg.services[0].template == "runtime-plugin/api"
+    assert env_cfg.services[0].factory == "runtime-plugin/api-factory"
+    assert (shpd_path / "envs" / "plugin-env").is_dir()
+    assert (shpd_path / "envs" / "plugin-env" / "plugin-api").is_dir()
+
+
+@pytest.mark.shpd
+def test_cli_adds_service_from_plugin_template(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "add", "default", "plugin-svc-env"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["env", "checkout", "plugin-svc-env"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(cli, ["svc", "add", "runtime-plugin/api", "api-1"])
+    assert result.exit_code == 0
+
+    shepherd = ShepherdMng()
+    env_cfg = shepherd.configMng.get_active_environment()
+    assert env_cfg is not None
+    svc_cfg = env_cfg.get_service("api-1")
+    assert svc_cfg is not None
+    assert svc_cfg.template == "runtime-plugin/api"
+    assert svc_cfg.factory == "runtime-plugin/api-factory"
+    assert svc_cfg.properties == {"source": "plugin"}
 
 
 @pytest.mark.shpd

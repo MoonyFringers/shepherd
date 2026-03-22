@@ -52,5 +52,18 @@ class ShpdServiceFactory(ServiceFactory):
                     self.configMng, envCfg, svcCfg, cli_flags=cli_flags
                 )
             case _:
-                raise ValueError(f"""Unknown service type: {svcCfg.template},
-                    plugins not supported yet!""")
+                plugin_runtime_mng = self.configMng.pluginRuntimeMng
+                if plugin_runtime_mng is None:
+                    raise ValueError(
+                        f"Unknown service factory: {svcCfg.factory}"
+                    )
+                plugin_factory = plugin_runtime_mng.build_service_factory(
+                    svcCfg.factory, self.configMng
+                )
+                if plugin_factory is None:
+                    raise ValueError(
+                        f"Unknown service factory: {svcCfg.factory}"
+                    )
+                return plugin_factory.new_service_from_cfg(
+                    envCfg, svcCfg, cli_flags=cli_flags
+                )

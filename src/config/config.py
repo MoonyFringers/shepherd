@@ -819,6 +819,8 @@ class PluginDescriptorCfg(Resolvable):
     description: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
     default_config: Optional[dict[str, Any]] = None
+    env_templates: Optional[list[EnvironmentTemplateCfg]] = None
+    service_templates: Optional[list[ServiceTemplateCfg]] = None
 
 
 @dataclass
@@ -835,6 +837,234 @@ class Config(Resolvable):
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     plugins: Optional[list[PluginCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
+
+
+def _parse_build(item: Any) -> BuildCfg:
+    return BuildCfg(
+        context_path=item.get("context_path"),
+        dockerfile_path=item.get("dockerfile_path"),
+    )
+
+
+def _parse_init(item: Any) -> InitCfg:
+    return InitCfg(
+        tag=item["tag"],
+        script=item.get("script"),
+        script_path=item.get("script_path"),
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_start(item: Any) -> StartCfg:
+    return StartCfg(
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_ready(item: Any) -> ReadyCfg:
+    return ReadyCfg(
+        when_probes=item.get("when_probes", []),
+    )
+
+
+def _parse_container(item: Any) -> ContainerCfg:
+    inits = (
+        [_parse_init(init) for init in item.get("inits", [])]
+        if item.get("inits") is not None
+        else None
+    )
+    return ContainerCfg(
+        tag=item.get("tag"),
+        image=item.get("image"),
+        hostname=item.get("hostname"),
+        container_name=item.get("container_name"),
+        workdir=item.get("workdir"),
+        volumes=item.get("volumes", []),
+        environment=item.get("environment", []),
+        ports=item.get("ports", []),
+        networks=item.get("networks", []),
+        extra_hosts=item.get("extra_hosts", []),
+        build=_parse_build(item["build"]) if item.get("build") else None,
+        inits=inits,
+    )
+
+
+def _parse_probe(item: Any) -> ProbeCfg:
+    return ProbeCfg(
+        tag=item["tag"],
+        container=(
+            _parse_container(item["container"])
+            if item.get("container")
+            else None
+        ),
+        script=item.get("script"),
+        script_path=item.get("script_path"),
+    )
+
+
+def _parse_network(item: Any) -> NetworkCfg:
+    external_value = item.get("external", False)
+    attachable_value = item.get("attachable")
+    enable_ipv6_value = item.get("enable_ipv6")
+    return NetworkCfg(
+        tag=item["tag"],
+        name=item.get("name", None),
+        external=(
+            bool_to_str(external_value)
+            if isinstance(external_value, bool)
+            else external_value
+        ),
+        driver=item.get("driver", None),
+        attachable=(
+            bool_to_str(attachable_value)
+            if isinstance(attachable_value, bool)
+            else attachable_value
+        ),
+        enable_ipv6=(
+            bool_to_str(enable_ipv6_value)
+            if isinstance(enable_ipv6_value, bool)
+            else enable_ipv6_value
+        ),
+        driver_opts=item.get("driver_opts"),
+        ipam=item.get("ipam"),
+    )
+
+
+def _parse_volume(item: Any) -> VolumeCfg:
+    external_value = item.get("external", False)
+    return VolumeCfg(
+        tag=item["tag"],
+        external=(
+            bool_to_str(external_value)
+            if isinstance(external_value, bool)
+            else external_value
+        ),
+        name=item.get("name"),
+        driver=item.get("driver"),
+        driver_opts=item.get("driver_opts"),
+        labels=item.get("labels"),
+    )
+
+
+def _parse_service_template_ref(item: Any) -> ServiceTemplateRefCfg:
+    return ServiceTemplateRefCfg(
+        template=item["template"],
+        tag=item["tag"],
+    )
+
+
+def _parse_service_template(item: Any) -> ServiceTemplateCfg:
+    containers_data = cast(list[dict[str, Any]], item.get("containers") or [])
+    return ServiceTemplateCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        labels=item.get("labels", []),
+        properties=item.get("properties", {}),
+        containers=[
+            _parse_container(container) for container in containers_data
+        ],
+        start=_parse_start(item["start"]) if item.get("start") else None,
+    )
+
+
+def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
+    service_templates_data = cast(
+        list[dict[str, Any]], item.get("service_templates") or []
+    )
+    probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+    networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+    volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    return EnvironmentTemplateCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        service_templates=[
+            _parse_service_template_ref(service_template)
+            for service_template in service_templates_data
+        ],
+        probes=[_parse_probe(probe) for probe in probes_data],
+        ready=_parse_ready(item["ready"]) if item.get("ready") else None,
+        networks=[_parse_network(network) for network in networks_data],
+        volumes=[_parse_volume(volume) for volume in volumes_data],
+    )
+
+
+def _parse_status(item: Any) -> EntityStatus:
+    return EntityStatus(
+        active=item.get("active", False),
+        rendered_config=item.get("rendered_config"),
+    )
+
+
+def _parse_upstream(item: Any) -> UpstreamCfg:
+    enabled_value = item["enabled"]
+    return UpstreamCfg(
+        type=item["type"],
+        tag=item["tag"],
+        properties=item.get("properties", {}),
+        enabled=(
+            bool_to_str(enabled_value)
+            if isinstance(enabled_value, bool)
+            else enabled_value
+        ),
+    )
+
+
+def _parse_service(item: Any) -> ServiceCfg:
+    containers_data = cast(list[dict[str, Any]], item.get("containers") or [])
+    upstreams_data = cast(list[dict[str, Any]], item.get("upstreams") or [])
+    return ServiceCfg(
+        tag=item["tag"],
+        factory=item["factory"],
+        template=item["template"],
+        service_class=item.get("service_class"),
+        labels=item.get("labels", []),
+        properties=item.get("properties", {}),
+        upstreams=[_parse_upstream(upstream) for upstream in upstreams_data],
+        containers=[
+            _parse_container(container) for container in containers_data
+        ],
+        start=_parse_start(item["start"]) if item.get("start") else None,
+        status=_parse_status(item["status"]),
+    )
+
+
+def _parse_staging_area(item: Any) -> StagingAreaCfg:
+    return StagingAreaCfg(
+        volumes_path=item["volumes_path"],
+        images_path=item["images_path"],
+    )
+
+
+def _parse_plugin(item: Any) -> PluginCfg:
+    enabled_value = item.get("enabled", True)
+    return PluginCfg(
+        id=item["id"],
+        enabled=(
+            bool_to_str(enabled_value)
+            if isinstance(enabled_value, bool)
+            else enabled_value
+        ),
+        version=item.get("version"),
+        config=item.get("config"),
+    )
+
+
+def _parse_environment(item: Any) -> EnvironmentCfg:
+    services_data = cast(list[dict[str, Any]], item.get("services") or [])
+    probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+    networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+    volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    return EnvironmentCfg(
+        template=item["template"],
+        factory=item["factory"],
+        tag=item["tag"],
+        services=[_parse_service(service) for service in services_data],
+        probes=[_parse_probe(probe) for probe in probes_data],
+        ready=_parse_ready(item["ready"]) if item.get("ready") else None,
+        networks=[_parse_network(network) for network in networks_data],
+        volumes=[_parse_volume(volume) for volume in volumes_data],
+        status=_parse_status(item["status"]),
+    )
 
 
 def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
@@ -871,6 +1101,35 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     if default_config is not None and not isinstance(default_config, dict):
         raise ValueError("Plugin default_config must be a mapping.")
 
+    env_templates_data = descriptor.get("env_templates")
+    if env_templates_data is not None and not isinstance(
+        env_templates_data, list
+    ):
+        raise ValueError("Plugin env_templates must be a list.")
+
+    service_templates_data = descriptor.get("service_templates")
+    if service_templates_data is not None and not isinstance(
+        service_templates_data, list
+    ):
+        raise ValueError("Plugin service_templates must be a list.")
+
+    env_templates = (
+        [
+            _parse_environment_template(template)
+            for template in cast(list[dict[str, Any]], env_templates_data)
+        ]
+        if env_templates_data is not None
+        else None
+    )
+    service_templates = (
+        [
+            _parse_service_template(template)
+            for template in cast(list[dict[str, Any]], service_templates_data)
+        ]
+        if service_templates_data is not None
+        else None
+    )
+
     return PluginDescriptorCfg(
         id=str(descriptor["id"]),
         name=str(descriptor["name"]),
@@ -887,6 +1146,8 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
         ),
         capabilities=normalized_capabilities,
         default_config=cast(Optional[dict[str, Any]], default_config),
+        env_templates=env_templates,
+        service_templates=service_templates,
     )
 
 
@@ -900,229 +1161,25 @@ def parse_config(yaml_str: str) -> Config:
 
     data = yaml.safe_load(yaml_str)
 
-    def parse_status(item: Any) -> EntityStatus:
-        return EntityStatus(
-            active=item.get("active", False),
-            rendered_config=item.get("rendered_config"),
-        )
-
-    def parse_upstream(item: Any) -> UpstreamCfg:
-        return UpstreamCfg(
-            type=item["type"],
-            tag=item["tag"],
-            properties=item.get("properties", {}),
-            enabled=(
-                bool_to_str(val)
-                if isinstance(val := item["enabled"], bool)
-                else val
-            ),
-        )
-
-    def parse_build(item: Any) -> BuildCfg:
-        return BuildCfg(
-            context_path=item.get("context_path"),
-            dockerfile_path=item.get("dockerfile_path"),
-        )
-
-    def parse_container(item: Any) -> ContainerCfg:
-        inits = (
-            [parse_init(init) for init in item.get("inits", [])]
-            if item.get("inits") is not None
-            else None
-        )
-        return ContainerCfg(
-            tag=item.get("tag"),
-            image=item.get("image"),
-            hostname=item.get("hostname"),
-            container_name=item.get("container_name"),
-            workdir=item.get("workdir"),
-            volumes=item.get("volumes", []),
-            environment=item.get("environment", []),
-            ports=item.get("ports", []),
-            networks=item.get("networks", []),
-            extra_hosts=item.get("extra_hosts", []),
-            build=parse_build(item["build"]) if item.get("build") else None,
-            inits=inits,
-        )
-
-    def parse_probe(item: Any) -> ProbeCfg:
-        return ProbeCfg(
-            tag=item["tag"],
-            container=(
-                parse_container(item["container"])
-                if item.get("container")
-                else None
-            ),
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-        )
-
-    def parse_init(item: Any) -> InitCfg:
-        return InitCfg(
-            tag=item["tag"],
-            script=item.get("script"),
-            script_path=item.get("script_path"),
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_start(item: Any) -> StartCfg:
-        return StartCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_ready(item: Any) -> ReadyCfg:
-        return ReadyCfg(
-            when_probes=item.get("when_probes", []),
-        )
-
-    def parse_service_template(item: Any) -> ServiceTemplateCfg:
-        return ServiceTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            labels=item.get("labels", []),
-            properties=item.get("properties", {}),
-            containers=[
-                parse_container(container)
-                for container in item.get("containers", [])
-            ],
-            start=parse_start(item["start"]) if item.get("start") else None,
-        )
-
-    def parse_service(item: Any) -> ServiceCfg:
-        return ServiceCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            template=item["template"],
-            service_class=item.get("service_class"),
-            labels=item.get("labels", []),
-            properties=item.get("properties", {}),
-            upstreams=[
-                parse_upstream(upstream)
-                for upstream in item.get("upstreams", [])
-            ],
-            containers=[
-                parse_container(container)
-                for container in item.get("containers", [])
-            ],
-            start=parse_start(item["start"]) if item.get("start") else None,
-            status=parse_status(item["status"]),
-        )
-
-    def parse_network(item: Any) -> NetworkCfg:
-        return NetworkCfg(
-            tag=item["tag"],
-            name=item.get("name", None),
-            external=(
-                bool_to_str(val)
-                if isinstance(val := item["external"], bool)
-                else val
-            ),
-            driver=item.get("driver", None),
-            attachable=(
-                bool_to_str(val)
-                if isinstance(val := item.get("attachable"), bool)
-                else val
-            ),
-            enable_ipv6=(
-                bool_to_str(val)
-                if isinstance(val := item.get("enable_ipv6"), bool)
-                else val
-            ),
-            driver_opts=item.get("driver_opts"),
-            ipam=item.get("ipam"),
-        )
-
-    def parse_volume(item: Any) -> VolumeCfg:
-        return VolumeCfg(
-            tag=item["tag"],
-            external=(
-                bool_to_str(val)
-                if isinstance(val := item["external"], bool)
-                else val
-            ),
-            name=item.get("name"),
-            driver=item.get("driver"),
-            driver_opts=item.get("driver_opts"),
-            labels=item.get("labels"),
-        )
-
-    def parse_service_template_refs(item: Any) -> ServiceTemplateRefCfg:
-        return ServiceTemplateRefCfg(template=item["template"], tag=item["tag"])
-
-    def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
-        return EnvironmentTemplateCfg(
-            tag=item["tag"],
-            factory=item["factory"],
-            service_templates=[
-                parse_service_template_refs(svc_templ_ref)
-                for svc_templ_ref in item.get("service_templates", [])
-            ],
-            probes=[parse_probe(probe) for probe in item.get("probes", [])],
-            ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[
-                parse_network(network) for network in item.get("networks", [])
-            ],
-            volumes=[
-                parse_volume(volume) for volume in item.get("volumes", [])
-            ],
-        )
-
-    def parse_staging_area(item: Any) -> StagingAreaCfg:
-        return StagingAreaCfg(
-            volumes_path=item["volumes_path"],
-            images_path=item["images_path"],
-        )
-
-    def parse_plugin(item: Any) -> PluginCfg:
-        return PluginCfg(
-            id=item["id"],
-            enabled=(
-                bool_to_str(val)
-                if isinstance(val := item.get("enabled", True), bool)
-                else val
-            ),
-            version=item.get("version"),
-            config=item.get("config"),
-        )
-
-    def parse_environment(item: Any) -> EnvironmentCfg:
-        return EnvironmentCfg(
-            template=item["template"],
-            factory=item["factory"],
-            tag=item["tag"],
-            services=[
-                parse_service(service) for service in item.get("services", [])
-            ],
-            probes=[parse_probe(probe) for probe in item.get("probes", [])],
-            ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[
-                parse_network(network) for network in item.get("networks", [])
-            ],
-            volumes=[
-                parse_volume(volume) for volume in item.get("volumes", [])
-            ],
-            status=parse_status(item["status"]),
-        )
-
     return Config(
         env_templates=[
-            parse_environment_template(environment_template)
+            _parse_environment_template(environment_template)
             for environment_template in data.get("env_templates", [])
         ],
         service_templates=[
-            parse_service_template(service_template)
+            _parse_service_template(service_template)
             for service_template in data.get("service_templates", [])
         ],
         templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
-        staging_area=parse_staging_area(data["staging_area"]),
+        staging_area=_parse_staging_area(data["staging_area"]),
         plugins=(
-            [parse_plugin(plugin) for plugin in data.get("plugins", [])]
+            [_parse_plugin(plugin) for plugin in data.get("plugins", [])]
             if data.get("plugins") is not None
             else None
         ),
-        envs=[parse_environment(env) for env in data["envs"]],
+        envs=[_parse_environment(env) for env in data["envs"]],
     )
 
 
@@ -1157,6 +1214,11 @@ class ConfigMng:
             RAW_LOG_STDOUT=self.user_values["log_stdout"],
             LOG_FORMAT=self.user_values["log_format"],
         )
+        self.pluginRuntimeMng = None
+
+    def set_plugin_runtime_mng(self, pluginRuntimeMng: Any) -> None:
+        """Attach the optional runtime plugin manager for lookup helpers."""
+        self.pluginRuntimeMng = pluginRuntimeMng
 
     def ensure_dirs(self):
         dirs = {
@@ -1173,14 +1235,14 @@ class ConfigMng:
             "IMAGES_SA": self.config.staging_area.images_path,
         }
 
-        for template in self.get_environment_templates() or []:
+        for template in self.config.env_templates or []:
             dirs[f"TEMPLATE_ENV_{template.tag}"] = os.path.join(
                 self.config.templates_path,
                 Constants.ENV_TEMPLATES_DIR,
                 template.tag,
             )
 
-        for template in self.get_service_templates() or []:
+        for template in self.config.service_templates or []:
             dirs[f"TEMPLATE_SVC_{template.tag}"] = os.path.join(
                 self.config.templates_path,
                 Constants.SVC_TEMPLATES_DIR,
@@ -1311,12 +1373,28 @@ class ConfigMng:
         :param serviceTemplate: The tag of the service template.
         :return: The service template path.
         """
-        if self.get_service_template(serviceTemplate):
+        if self.config.service_templates and any(
+            svc_template.tag == serviceTemplate
+            for svc_template in self.config.service_templates
+        ):
             return os.path.join(
                 self.config.templates_path,
                 Constants.SVC_TEMPLATES_DIR,
                 serviceTemplate,
             )
+        if (
+            self.pluginRuntimeMng is not None
+            and "/" in serviceTemplate
+            and (
+                plugin_template_path := (
+                    self.pluginRuntimeMng.get_service_template_path(
+                        serviceTemplate
+                    )
+                )
+            )
+            is not None
+        ):
+            return plugin_template_path
         return None
 
     def get_environment_template(
@@ -1332,6 +1410,8 @@ class ConfigMng:
             for env_template in self.config.env_templates:
                 if env_template.tag == envTemplate:
                     return env_template
+        if self.pluginRuntimeMng is not None and "/" in envTemplate:
+            return self.pluginRuntimeMng.get_environment_template(envTemplate)
         return None
 
     def get_environment_templates(
@@ -1342,9 +1422,12 @@ class ConfigMng:
 
         :return: A list of all environment templates.
         """
-        if self.config.env_templates:
-            return self.config.env_templates
-        return None
+        templates = list(self.config.env_templates or [])
+        if self.pluginRuntimeMng is not None:
+            templates.extend(
+                self.pluginRuntimeMng.registry.env_templates.values()
+            )
+        return templates or None
 
     def get_environment_template_tags(self) -> list[str]:
         if env_templates := self.get_environment_templates():
@@ -1364,6 +1447,8 @@ class ConfigMng:
             for svc_template in self.config.service_templates:
                 if svc_template.tag == serviceTemplate:
                     return svc_template
+        if self.pluginRuntimeMng is not None and "/" in serviceTemplate:
+            return self.pluginRuntimeMng.get_service_template(serviceTemplate)
         return None
 
     def get_service_templates(self) -> Optional[list[ServiceTemplateCfg]]:
@@ -1372,19 +1457,19 @@ class ConfigMng:
 
         :return: A list of all service templates.
         """
-        if self.config.service_templates:
-            return self.config.service_templates
-        return None
+        templates = list(self.config.service_templates or [])
+        if self.pluginRuntimeMng is not None:
+            templates.extend(
+                self.pluginRuntimeMng.registry.service_templates.values()
+            )
+        return templates or None
 
     def get_resource_templates(self, resource_type: str) -> list[str]:
         match resource_type:
             case self.constants.RESOURCE_TYPE_SVC:
-                if self.config.service_templates:
+                if service_templates := self.get_service_templates():
                     return sorted(
-                        [
-                            svc_template.tag
-                            for svc_template in self.config.service_templates
-                        ]
+                        [svc_template.tag for svc_template in service_templates]
                     )
                 return []
             case _:

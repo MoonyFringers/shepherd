@@ -13,9 +13,8 @@ The current implementation scope is limited to:
 - live plugin completion providers executed by the completion engine
 - in-memory registries for plugin commands, completion providers, templates,
   and factories
-
-Template and factory execution still land in later steps of the plugin
-rollout.
+- env and service flows resolving plugin-owned templates and factories at
+  runtime
 
 For the architectural rationale and staged implementation plan, see
 [ADR 0004](decisions/0004-plugin-architecture-and-rollout-plan.md).
@@ -28,6 +27,13 @@ Shepherd reserves a managed plugin root under the local Shepherd home:
 
 ```text
 ~/.shpd/plugins/<plugin-id>/
+```
+
+Plugin-owned service template assets are resolved from the installed plugin
+directory using this convention:
+
+```text
+~/.shpd/plugins/<plugin-id>/templates/svcs/<template-id>/
 ```
 
 The install directory is derived from the managed root and the plugin id. It is
@@ -101,6 +107,18 @@ capabilities:
   svc_factories: true
 default_config:
   region: eu-west-1
+env_templates:
+  - tag: baseline
+    factory: baseline-factory
+    service_templates:
+      - template: api
+        tag: plugin-api
+service_templates:
+  - tag: api
+    factory: api-factory
+    containers:
+      - image: busybox:stable-glibc
+        tag: app
 ```
 
 Required fields:
@@ -117,9 +135,16 @@ Optional fields:
 - `description`
 - `capabilities`
 - `default_config`
+- `env_templates`
+- `service_templates`
 
 Capability flags must be real YAML booleans. String values such as `"false"` or
 `"0"` are rejected during descriptor validation.
+
+Plugin-owned env and service templates are now declared declaratively in
+`plugin.yaml`, using the same schema shapes as the core Shepherd config. This
+keeps template authoring data-driven. Python plugin code is only needed for
+behavioral extensions like commands, completion, and factories.
 
 ## Current Validation Rules
 
@@ -176,8 +201,14 @@ Template and factory ids are canonicalized under the plugin namespace:
 - templates: `plugin-id/template-id`
 - factories: `plugin-id/factory-id`
 
-These registries are currently validated and populated at startup. They are not
-yet consumed by env and service factory flows.
+Descriptor-declared template tags are loaded as local ids like `baseline` or
+`api`, then canonicalized at runtime to:
+
+- templates: `plugin-id/template-id`
+- factories: `plugin-id/factory-id`
+
+These registries are validated and populated at startup. Env and service
+commands then resolve namespaced template and factory ids through them.
 
 ## Runtime Command Wiring
 
@@ -224,11 +255,20 @@ same scope. This allows plugins to:
 ## Scope Of This Step
 
 This documentation matches the current implementation step. At this stage,
-Shepherd does not yet:
+Shepherd now does:
 
-- execute plugin factories or plugin-owned templates through env and svc flows
+- execute plugin-owned environment factories through `env add` and normal env
+  rehydration
+- execute plugin-owned service factories through `svc add` and normal service
+  rehydration
+- resolve plugin-owned templates from canonical namespaced ids like
+  `runtime-plugin/baseline`
+- surface plugin-owned env and svc templates through the built-in completion
+  managers
+- copy plugin-owned service template assets from the installed plugin tree
+  during environment realization
 
 Plugin archive installation, persisted inventory management, runtime loader
-bootstrap, command wiring, and completion execution are available now. Factory
-and template consumption are added in follow-up PRs from the plugin rollout
-plan.
+bootstrap, command wiring, completion execution, and template/factory
+consumption are available now. A later rollout step can still align more core
+behavior behind the same plugin abstraction.

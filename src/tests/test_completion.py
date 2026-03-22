@@ -276,6 +276,31 @@ def test_completion_add_env(
 
 
 @pytest.mark.compl
+def test_completion_add_env_includes_plugin_templates(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = yaml.safe_load(read_fixture("completion", "shpd.yaml"))
+    shpd_config["plugins"] = [
+        {
+            "id": "runtime-plugin",
+            "enabled": True,
+            "version": "1.0.0",
+            "config": None,
+        }
+    ]
+    shpd_yaml.write_text(yaml.dump(shpd_config, sort_keys=False))
+    _install_runtime_fixture_plugin(shpd_path)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["env", "add"])
+    assert "runtime-plugin/baseline" in completions
+
+
+@pytest.mark.compl
 def test_completion_add_svc_1(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -290,6 +315,31 @@ def test_completion_add_svc_1(
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["svc", "add"])
     assert completions == ["t1", "t2"], "Expected add svc -1- completion"
+
+
+@pytest.mark.compl
+def test_completion_add_svc_includes_plugin_templates(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = yaml.safe_load(read_fixture("completion", "shpd.yaml"))
+    shpd_config["plugins"] = [
+        {
+            "id": "runtime-plugin",
+            "enabled": True,
+            "version": "1.0.0",
+            "config": None,
+        }
+    ]
+    shpd_yaml.write_text(yaml.dump(shpd_config, sort_keys=False))
+    _install_runtime_fixture_plugin(shpd_path)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["svc", "add"])
+    assert "runtime-plugin/api" in completions
 
 
 @pytest.mark.compl

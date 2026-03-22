@@ -14,3 +14,32 @@ capabilities:
   svc_factories: true
 default_config:
   region: eu-west-1
+env_templates:
+  - tag: baseline
+    factory: baseline-factory
+    service_templates:
+      - template: api
+        tag: plugin-api
+    probes: null
+    networks: null
+    volumes: null
+service_templates:
+  - tag: api
+    factory: api-factory
+    labels: []
+    properties:
+      source: plugin
+    containers:
+      - image: busybox:stable-glibc
+        tag: app
+        container_name: null
+        hostname: null
+        workdir: null
+        volumes: []
+        environment: []
+        ports: []
+        networks: []
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null

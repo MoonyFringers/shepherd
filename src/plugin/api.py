@@ -58,20 +58,6 @@ class PluginCompletionSpec:
 
 
 @dataclass(frozen=True)
-class PluginTemplateSpec:
-    """
-    One template contribution declared by a plugin.
-
-    `provider` carries the plugin-owned object or data structure that
-    describes the template payload. The loader treats it as opaque for now and
-    only registers it under the canonical `plugin-id/template-id` name.
-    """
-
-    id: str
-    provider: Any
-
-
-@dataclass(frozen=True)
 class PluginFactorySpec:
     """
     One factory contribution declared by a plugin.
@@ -100,14 +86,6 @@ class ShepherdPlugin(ABC):
 
     def get_completion_providers(self) -> Sequence[PluginCompletionSpec]:
         """Return completion providers grouped by the scopes they serve."""
-        return ()
-
-    def get_env_templates(self) -> Sequence[PluginTemplateSpec]:
-        """Return environment templates owned by the plugin."""
-        return ()
-
-    def get_service_templates(self) -> Sequence[PluginTemplateSpec]:
-        """Return service templates owned by the plugin."""
         return ()
 
     def get_env_factories(self) -> Sequence[PluginFactorySpec]:

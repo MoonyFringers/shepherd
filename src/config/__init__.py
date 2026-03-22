@@ -19,24 +19,28 @@
 from .config import (
     Config,
     ConfigMng,
+    ContainerCfg,
     EnvironmentCfg,
     EnvironmentTemplateCfg,
     PluginCfg,
     PluginDescriptorCfg,
     ServiceCfg,
     ServiceTemplateCfg,
+    ServiceTemplateRefCfg,
     UpstreamCfg,
     parse_config,
     parse_plugin_descriptor,
 )
 
 __all__ = [
+    "ContainerCfg",
     "Config",
     "EnvironmentTemplateCfg",
     "EnvironmentCfg",
     "PluginCfg",
     "PluginDescriptorCfg",
     "ServiceTemplateCfg",
+    "ServiceTemplateRefCfg",
     "ServiceCfg",
     "UpstreamCfg",
     "ConfigMng",
