@@ -71,6 +71,11 @@ class ShepherdMng:
         Util.ensure_config_file(self.configMng.constants)
         self.configMng.load()
         self.configMng.ensure_dirs()
+        self.pluginMng = PluginMng(self.cli_flags, self.configMng)
+        self.pluginRuntimeMng = plugin_runtime_mng
+        if self.pluginRuntimeMng is None and load_runtime_plugins:
+            self.pluginRuntimeMng = PluginRuntimeMng(self.configMng)
+        self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
         self.svcFactory = ShpdServiceFactory(self.configMng)
         self.envFactory = ShpdEnvironmentFactory(
             self.configMng, self.svcFactory, cli_flags=self.cli_flags
@@ -81,10 +86,6 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
-        self.pluginMng = PluginMng(self.cli_flags, self.configMng)
-        self.pluginRuntimeMng = plugin_runtime_mng
-        if self.pluginRuntimeMng is None and load_runtime_plugins:
-            self.pluginRuntimeMng = PluginRuntimeMng(self.configMng)
         self.completionMng = CompletionMng(
             self.cli_flags,
             self.configMng,

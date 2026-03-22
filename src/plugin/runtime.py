@@ -30,10 +30,13 @@ import yaml
 from completion import CompletionMng
 from config import (
     ConfigMng,
+    EnvironmentTemplateCfg,
     PluginCfg,
     PluginDescriptorCfg,
+    ServiceTemplateCfg,
     parse_plugin_descriptor,
 )
+from environment import EnvironmentFactory
 from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
@@ -41,7 +44,8 @@ from plugin.api import (
     PluginTemplateSpec,
     ShepherdPlugin,
 )
-from util import Util
+from service import ServiceFactory
+from util import Constants, Util
 
 SUPPORTED_PLUGIN_API_VERSION = 1
 
@@ -135,6 +139,7 @@ class PluginRuntimeMng:
         scope: set(verbs)
         for scope, verbs in CompletionMng.CORE_SCOPE_VERBS.items()
     }
+    PLUGIN_TEMPLATES_DIR = "templates"
 
     def __init__(self, configMng: ConfigMng):
         self.configMng = configMng
@@ -245,6 +250,7 @@ class PluginRuntimeMng:
             sys.path.insert(0, plugin_dir)
             module = importlib.import_module(module_name)
         except Exception as exc:
+            self._purge_module_root(module_root)
             Util.print_error_and_die(
                 f"Failed to import plugin '{plugin_id}' entrypoint "
                 f"'{module_name}.{class_name}': {exc}"
@@ -474,6 +480,20 @@ class PluginRuntimeMng:
                     f"Plugin '{plugin_id}' declares duplicate {kind} "
                     f"'{canonical_id}'."
                 )
+            if kind == "environment template" and not isinstance(
+                template.provider, EnvironmentTemplateCfg
+            ):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
+                    "provide an EnvironmentTemplateCfg."
+                )
+            if kind == "service template" and not isinstance(
+                template.provider, ServiceTemplateCfg
+            ):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
+                    "provide a ServiceTemplateCfg."
+                )
             registry[canonical_id] = template
 
     def _register_factories(
@@ -496,4 +516,141 @@ class PluginRuntimeMng:
                     f"Plugin '{plugin_id}' declares duplicate {kind} "
                     f"'{canonical_id}'."
                 )
+            if not self._is_factory_provider(factory.provider):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
+                    "provide a factory instance, factory class, or "
+                    "factory builder callable."
+                )
             registry[canonical_id] = factory
+
+    def _is_factory_provider(self, provider: Any) -> bool:
+        """Return whether the factory provider can be materialized later."""
+        return isinstance(
+            provider, (EnvironmentFactory, ServiceFactory)
+        ) or callable(provider)
+
+    def get_environment_template(
+        self, template_id: str
+    ) -> EnvironmentTemplateCfg | None:
+        """Return one plugin-owned environment template by canonical id."""
+        template = self.registry.env_templates.get(template_id)
+        if template is None:
+            return None
+        provider = template.provider
+        if not isinstance(provider, EnvironmentTemplateCfg):
+            raise ValueError(
+                f"Plugin environment template '{template_id}' is invalid."
+            )
+        return provider
+
+    def get_service_template(
+        self, template_id: str
+    ) -> ServiceTemplateCfg | None:
+        """Return one plugin-owned service template by canonical id."""
+        template = self.registry.service_templates.get(template_id)
+        if template is None:
+            return None
+        provider = template.provider
+        if not isinstance(provider, ServiceTemplateCfg):
+            raise ValueError(
+                f"Plugin service template '{template_id}' is invalid."
+            )
+        return provider
+
+    def get_service_template_path(self, template_id: str) -> str | None:
+        """
+        Return the installed asset path for a plugin-owned service template.
+        """
+        if template_id not in self.registry.service_templates:
+            return None
+
+        plugin_id, local_template_id = self._split_canonical_id(template_id)
+        plugin = self.registry.plugins.get(plugin_id)
+        if plugin is None:
+            return None
+
+        template_path = os.path.join(
+            plugin.plugin_dir,
+            self.PLUGIN_TEMPLATES_DIR,
+            Constants.SVC_TEMPLATES_DIR,
+            local_template_id,
+        )
+        if os.path.isdir(template_path):
+            return template_path
+        return None
+
+    def build_service_factory(
+        self,
+        factory_id: str,
+        configMng: ConfigMng,
+    ) -> ServiceFactory | None:
+        """Materialize one plugin-owned service factory by canonical id."""
+        spec = self.registry.service_factories.get(factory_id)
+        if spec is None:
+            return None
+        return self._materialize_service_factory(
+            factory_id, spec.provider, configMng
+        )
+
+    def build_environment_factory(
+        self,
+        factory_id: str,
+        configMng: ConfigMng,
+        svc_factory: ServiceFactory,
+        cli_flags: dict[str, Any] | None = None,
+    ) -> EnvironmentFactory | None:
+        """Materialize one plugin-owned environment factory by canonical id."""
+        spec = self.registry.env_factories.get(factory_id)
+        if spec is None:
+            return None
+        return self._materialize_environment_factory(
+            factory_id, spec.provider, configMng, svc_factory, cli_flags
+        )
+
+    def _materialize_service_factory(
+        self,
+        factory_id: str,
+        provider: Any,
+        configMng: ConfigMng,
+    ) -> ServiceFactory:
+        """Build a concrete service factory from the stored provider."""
+        if isinstance(provider, ServiceFactory):
+            return provider
+
+        if callable(provider):
+            instance = provider(configMng)
+            if isinstance(instance, ServiceFactory):
+                return instance
+
+        raise ValueError(f"Plugin service factory '{factory_id}' is invalid.")
+
+    def _materialize_environment_factory(
+        self,
+        factory_id: str,
+        provider: Any,
+        configMng: ConfigMng,
+        svc_factory: ServiceFactory,
+        cli_flags: dict[str, Any] | None = None,
+    ) -> EnvironmentFactory:
+        """Build a concrete environment factory from the stored provider."""
+        if isinstance(provider, EnvironmentFactory):
+            return provider
+
+        if callable(provider):
+            instance = provider(configMng, svc_factory, cli_flags)
+            if isinstance(instance, EnvironmentFactory):
+                return instance
+
+        raise ValueError(
+            f"Plugin environment factory '{factory_id}' is invalid."
+        )
+
+    def _split_canonical_id(self, canonical_id: str) -> tuple[str, str]:
+        """Split one canonical plugin-owned id into plugin and local parts."""
+        if "/" not in canonical_id:
+            raise ValueError(
+                f"Plugin-owned identifier '{canonical_id}' is not namespaced."
+            )
+        plugin_id, local_id = canonical_id.split("/", 1)
+        return plugin_id, local_id

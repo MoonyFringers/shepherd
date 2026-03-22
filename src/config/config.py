@@ -1086,21 +1086,19 @@ def parse_config(yaml_str: str) -> Config:
         )
 
     def parse_environment(item: Any) -> EnvironmentCfg:
+        services_data = cast(list[dict[str, Any]], item.get("services") or [])
+        probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+        networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+        volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
         return EnvironmentCfg(
             template=item["template"],
             factory=item["factory"],
             tag=item["tag"],
-            services=[
-                parse_service(service) for service in item.get("services", [])
-            ],
-            probes=[parse_probe(probe) for probe in item.get("probes", [])],
+            services=[parse_service(service) for service in services_data],
+            probes=[parse_probe(probe) for probe in probes_data],
             ready=parse_ready(item["ready"]) if item.get("ready") else None,
-            networks=[
-                parse_network(network) for network in item.get("networks", [])
-            ],
-            volumes=[
-                parse_volume(volume) for volume in item.get("volumes", [])
-            ],
+            networks=[parse_network(network) for network in networks_data],
+            volumes=[parse_volume(volume) for volume in volumes_data],
             status=parse_status(item["status"]),
         )
 
@@ -1157,6 +1155,11 @@ class ConfigMng:
             RAW_LOG_STDOUT=self.user_values["log_stdout"],
             LOG_FORMAT=self.user_values["log_format"],
         )
+        self.pluginRuntimeMng = None
+
+    def set_plugin_runtime_mng(self, pluginRuntimeMng: Any) -> None:
+        """Attach the optional runtime plugin manager for lookup helpers."""
+        self.pluginRuntimeMng = pluginRuntimeMng
 
     def ensure_dirs(self):
         dirs = {
@@ -1173,14 +1176,14 @@ class ConfigMng:
             "IMAGES_SA": self.config.staging_area.images_path,
         }
 
-        for template in self.get_environment_templates() or []:
+        for template in self.config.env_templates or []:
             dirs[f"TEMPLATE_ENV_{template.tag}"] = os.path.join(
                 self.config.templates_path,
                 Constants.ENV_TEMPLATES_DIR,
                 template.tag,
             )
 
-        for template in self.get_service_templates() or []:
+        for template in self.config.service_templates or []:
             dirs[f"TEMPLATE_SVC_{template.tag}"] = os.path.join(
                 self.config.templates_path,
                 Constants.SVC_TEMPLATES_DIR,
@@ -1311,12 +1314,28 @@ class ConfigMng:
         :param serviceTemplate: The tag of the service template.
         :return: The service template path.
         """
-        if self.get_service_template(serviceTemplate):
+        if self.config.service_templates and any(
+            svc_template.tag == serviceTemplate
+            for svc_template in self.config.service_templates
+        ):
             return os.path.join(
                 self.config.templates_path,
                 Constants.SVC_TEMPLATES_DIR,
                 serviceTemplate,
             )
+        if (
+            self.pluginRuntimeMng is not None
+            and "/" in serviceTemplate
+            and (
+                plugin_template_path := (
+                    self.pluginRuntimeMng.get_service_template_path(
+                        serviceTemplate
+                    )
+                )
+            )
+            is not None
+        ):
+            return plugin_template_path
         return None
 
     def get_environment_template(
@@ -1332,6 +1351,8 @@ class ConfigMng:
             for env_template in self.config.env_templates:
                 if env_template.tag == envTemplate:
                     return env_template
+        if self.pluginRuntimeMng is not None and "/" in envTemplate:
+            return self.pluginRuntimeMng.get_environment_template(envTemplate)
         return None
 
     def get_environment_templates(
@@ -1342,9 +1363,20 @@ class ConfigMng:
 
         :return: A list of all environment templates.
         """
-        if self.config.env_templates:
-            return self.config.env_templates
-        return None
+        templates = list(self.config.env_templates or [])
+        if self.pluginRuntimeMng is not None:
+            templates.extend(
+                [
+                    plugin_template.provider
+                    for plugin_template in (
+                        self.pluginRuntimeMng.registry.env_templates.values()
+                    )
+                    if isinstance(
+                        plugin_template.provider, EnvironmentTemplateCfg
+                    )
+                ]
+            )
+        return templates or None
 
     def get_environment_template_tags(self) -> list[str]:
         if env_templates := self.get_environment_templates():
@@ -1364,6 +1396,8 @@ class ConfigMng:
             for svc_template in self.config.service_templates:
                 if svc_template.tag == serviceTemplate:
                     return svc_template
+        if self.pluginRuntimeMng is not None and "/" in serviceTemplate:
+            return self.pluginRuntimeMng.get_service_template(serviceTemplate)
         return None
 
     def get_service_templates(self) -> Optional[list[ServiceTemplateCfg]]:
@@ -1372,19 +1406,26 @@ class ConfigMng:
 
         :return: A list of all service templates.
         """
-        if self.config.service_templates:
-            return self.config.service_templates
-        return None
+        templates = list(self.config.service_templates or [])
+        if self.pluginRuntimeMng is not None:
+            runtime_templates = (
+                self.pluginRuntimeMng.registry.service_templates.values()
+            )
+            templates.extend(
+                [
+                    plugin_template.provider
+                    for plugin_template in runtime_templates
+                    if isinstance(plugin_template.provider, ServiceTemplateCfg)
+                ]
+            )
+        return templates or None
 
     def get_resource_templates(self, resource_type: str) -> list[str]:
         match resource_type:
             case self.constants.RESOURCE_TYPE_SVC:
-                if self.config.service_templates:
+                if service_templates := self.get_service_templates():
                     return sorted(
-                        [
-                            svc_template.tag
-                            for svc_template in self.config.service_templates
-                        ]
+                        [svc_template.tag for svc_template in service_templates]
                     )
                 return []
             case _:
