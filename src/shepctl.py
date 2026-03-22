@@ -52,6 +52,7 @@ class ShepherdMng:
         cli_flags: dict[str, Any] = {},
         *,
         load_runtime_plugins: bool = True,
+        plugin_runtime_mng: Optional[PluginRuntimeMng] = None,
     ):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
@@ -70,7 +71,6 @@ class ShepherdMng:
         Util.ensure_config_file(self.configMng.constants)
         self.configMng.load()
         self.configMng.ensure_dirs()
-        self.completionMng = CompletionMng(self.cli_flags, self.configMng)
         self.svcFactory = ShpdServiceFactory(self.configMng)
         self.envFactory = ShpdEnvironmentFactory(
             self.configMng, self.svcFactory, cli_flags=self.cli_flags
@@ -82,9 +82,98 @@ class ShepherdMng:
             self.cli_flags, self.configMng, self.svcFactory
         )
         self.pluginMng = PluginMng(self.cli_flags, self.configMng)
-        self.pluginRuntimeMng: Optional[PluginRuntimeMng] = None
-        if load_runtime_plugins:
+        self.pluginRuntimeMng = plugin_runtime_mng
+        if self.pluginRuntimeMng is None and load_runtime_plugins:
             self.pluginRuntimeMng = PluginRuntimeMng(self.configMng)
+        self.completionMng = CompletionMng(
+            self.cli_flags,
+            self.configMng,
+            (
+                None
+                if self.pluginRuntimeMng is None
+                else self.pluginRuntimeMng.registry
+            ),
+        )
+
+
+def _load_plugin_runtime_for_click(ctx: click.Context) -> PluginRuntimeMng:
+    """
+    Load and cache the runtime plugin manager for Click command resolution.
+
+    Click resolves commands before the root callback creates `ShepherdMng`, so
+    plugin-provided scopes and verbs need a small pre-bootstrap path. The
+    cached runtime manager lives on the root Click context to avoid repeated
+    loads during one invocation.
+    """
+    root_ctx = ctx.find_root()
+    runtime_mng = root_ctx.meta.get("plugin_runtime_mng")
+    if runtime_mng is not None:
+        return runtime_mng
+
+    shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
+    configMng = ConfigMng(shpd_conf)
+    Util.ensure_shpd_dirs(configMng.constants)
+    Util.ensure_config_file(configMng.constants)
+    configMng.load()
+    configMng.ensure_dirs()
+    runtime_mng = PluginRuntimeMng(configMng)
+    root_ctx.meta["plugin_runtime_mng"] = runtime_mng
+    return runtime_mng
+
+
+class PluginRootGroup(click.Group):
+    """Root Click group extended with runtime plugin scopes."""
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        commands = list(super().list_commands(ctx))
+        registry = _load_plugin_runtime_for_click(ctx).registry
+        for scope in sorted(registry.commands):
+            if scope not in commands:
+                commands.append(scope)
+        return commands
+
+    def get_command(
+        self, ctx: click.Context, cmd_name: str
+    ) -> Optional[click.Command]:
+        command = super().get_command(ctx, cmd_name)
+        if command is not None:
+            return command
+
+        registry = _load_plugin_runtime_for_click(ctx).registry
+        if cmd_name in registry.commands:
+            return PluginScopeGroup(
+                name=cmd_name,
+                help=f"Manage plugin scope '{cmd_name}'.",
+            )
+        return None
+
+
+class PluginScopeGroup(click.Group):
+    """Click scope group extended with runtime plugin verbs."""
+
+    def list_commands(self, ctx: click.Context) -> list[str]:
+        commands = list(super().list_commands(ctx))
+        if self.name == "plugin":
+            return commands
+
+        registry = _load_plugin_runtime_for_click(ctx).registry
+        for verb in sorted(registry.commands.get(self.name or "", {})):
+            if verb not in commands:
+                commands.append(verb)
+        return commands
+
+    def get_command(
+        self, ctx: click.Context, cmd_name: str
+    ) -> Optional[click.Command]:
+        command = super().get_command(ctx, cmd_name)
+        if command is not None or self.name == "plugin":
+            return command
+
+        registry = _load_plugin_runtime_for_click(ctx).registry
+        registered = registry.commands.get(self.name or "", {}).get(cmd_name)
+        if registered is None:
+            return None
+        return registered.spec.command
 
 
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -107,7 +196,7 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-@click.group()
+@click.group(cls=PluginRootGroup)
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose mode.")
 @click.option("--quiet", is_flag=True, help="Suppress command output.")
 @click.option(
@@ -136,11 +225,19 @@ def cli(
     }
 
     if ctx.obj is None:
-        ctx.obj = ShepherdMng(
-            cli_flags,
-            load_runtime_plugins=ctx.invoked_subcommand
-            not in {"plugin", "__complete"},
-        )
+        load_runtime_plugins = ctx.invoked_subcommand != "plugin"
+        preloaded_runtime = ctx.meta.get("plugin_runtime_mng")
+        if preloaded_runtime is None:
+            ctx.obj = ShepherdMng(
+                cli_flags,
+                load_runtime_plugins=load_runtime_plugins,
+            )
+        else:
+            ctx.obj = ShepherdMng(
+                cli_flags,
+                load_runtime_plugins=load_runtime_plugins,
+                plugin_runtime_mng=preloaded_runtime,
+            )
 
 
 @cli.command(name="test", hidden=True)
@@ -185,7 +282,7 @@ def complete(shepherd: ShepherdMng, args: Any):
 # =====================================================
 # ENV
 # =====================================================
-@cli.group()
+@cli.group(cls=PluginScopeGroup)
 def env():
     """Manage environments."""
     pass
@@ -430,7 +527,7 @@ def status_env(
 # =====================================================
 # SVC
 # =====================================================
-@cli.group()
+@cli.group(cls=PluginScopeGroup)
 def svc():
     """Manage services."""
     pass
@@ -583,7 +680,7 @@ def shell(
 # =====================================================
 # PROBE
 # =====================================================
-@cli.group()
+@cli.group(cls=PluginScopeGroup)
 def probe():
     """Manage probes."""
     pass
@@ -644,7 +741,7 @@ def check_probe(
 # =====================================================
 # PLUGIN
 # =====================================================
-@cli.group()
+@cli.group(cls=PluginScopeGroup)
 def plugin():
     """Manage plugins."""
     pass

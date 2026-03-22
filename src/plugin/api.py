@@ -21,13 +21,22 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Any, Sequence
 
+import click
+
 
 @dataclass(frozen=True)
 class PluginCommandSpec:
-    """One scope/verb pair contributed by a plugin."""
+    """
+    One executable scope and verb contribution declared by a plugin.
+
+    `command` must be a ready-to-register Click command for the declared verb.
+    Shepherd validates that the Click command name matches `verb` before
+    exposing it through the runtime registry.
+    """
 
     scope: str
     verb: str
+    command: click.Command
 
 
 @dataclass(frozen=True)
@@ -35,10 +44,13 @@ class PluginCompletionSpec:
     """
     One completion provider contribution keyed by scope.
 
-    `provider` is intentionally untyped in this step because the runtime
-    loader only stores provider objects in the registry; it does not invoke
-    them yet. A later completion-integration step will narrow this to the
-    concrete callable or provider protocol the completion engine expects.
+    `provider` may be either:
+
+    * a callable accepting the raw completion args and returning suggestions
+    * an object exposing `get_completions(args)`
+
+    The runtime validates that one of those two execution shapes is present
+    before adding the provider to the registry.
     """
 
     scope: str
