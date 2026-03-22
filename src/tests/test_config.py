@@ -327,6 +327,35 @@ capabilities:
   commands: false
 default_config:
   region: eu-west-1
+env_templates:
+  - tag: baseline
+    factory: baseline-factory
+    service_templates:
+      - template: api
+        tag: plugin-api
+    probes: null
+    networks: null
+    volumes: null
+service_templates:
+  - tag: api
+    factory: api-factory
+    labels: []
+    properties:
+      source: plugin
+    containers:
+      - image: busybox
+        tag: app
+        container_name: null
+        hostname: null
+        workdir: null
+        volumes: []
+        environment: []
+        ports: []
+        networks: []
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null
 """
 
     descriptor = parse_plugin_descriptor(descriptor_yaml)
@@ -343,6 +372,14 @@ default_config:
         "commands": False,
     }
     assert descriptor.default_config == {"region": "eu-west-1"}
+    assert descriptor.env_templates is not None
+    assert descriptor.env_templates[0].tag == "baseline"
+    assert descriptor.env_templates[0].factory == "baseline-factory"
+    assert descriptor.env_templates[0].service_templates is not None
+    assert descriptor.env_templates[0].service_templates[0].template == "api"
+    assert descriptor.service_templates is not None
+    assert descriptor.service_templates[0].tag == "api"
+    assert descriptor.service_templates[0].factory == "api-factory"
 
 
 @pytest.mark.cfg
@@ -375,6 +412,36 @@ capabilities:
 
     with pytest.raises(ValueError):
         parse_plugin_descriptor(descriptor_yaml)
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_allows_omitted_network_and_volume_external():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+env_templates:
+  - tag: baseline
+    factory: docker-compose
+    service_templates: []
+    probes: []
+    networks:
+      - tag: default
+    volumes:
+      - tag: data
+"""
+
+    descriptor = parse_plugin_descriptor(descriptor_yaml)
+
+    assert descriptor.env_templates is not None
+    assert descriptor.env_templates[0].networks is not None
+    assert descriptor.env_templates[0].networks[0].external == "false"
+    assert descriptor.env_templates[0].volumes is not None
+    assert descriptor.env_templates[0].volumes[0].external == "false"
 
 
 @pytest.mark.cfg

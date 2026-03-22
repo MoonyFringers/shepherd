@@ -107,6 +107,18 @@ capabilities:
   svc_factories: true
 default_config:
   region: eu-west-1
+env_templates:
+  - tag: baseline
+    factory: baseline-factory
+    service_templates:
+      - template: api
+        tag: plugin-api
+service_templates:
+  - tag: api
+    factory: api-factory
+    containers:
+      - image: busybox:stable-glibc
+        tag: app
 ```
 
 Required fields:
@@ -123,9 +135,16 @@ Optional fields:
 - `description`
 - `capabilities`
 - `default_config`
+- `env_templates`
+- `service_templates`
 
 Capability flags must be real YAML booleans. String values such as `"false"` or
 `"0"` are rejected during descriptor validation.
+
+Plugin-owned env and service templates are now declared declaratively in
+`plugin.yaml`, using the same schema shapes as the core Shepherd config. This
+keeps template authoring data-driven. Python plugin code is only needed for
+behavioral extensions like commands, completion, and factories.
 
 ## Current Validation Rules
 
@@ -182,9 +201,14 @@ Template and factory ids are canonicalized under the plugin namespace:
 - templates: `plugin-id/template-id`
 - factories: `plugin-id/factory-id`
 
-These registries are currently validated and populated at startup. They are not
-just metadata anymore: env and service commands now resolve namespaced
-template and factory ids through them.
+Descriptor-declared template tags are loaded as local ids like `baseline` or
+`api`, then canonicalized at runtime to:
+
+- templates: `plugin-id/template-id`
+- factories: `plugin-id/factory-id`
+
+These registries are validated and populated at startup. Env and service
+commands then resolve namespaced template and factory ids through them.
 
 ## Runtime Command Wiring
 

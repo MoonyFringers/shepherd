@@ -21,7 +21,6 @@ from .api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginFactorySpec,
-    PluginTemplateSpec,
     ShepherdPlugin,
 )
 from .plugin import PluginMng
@@ -39,6 +38,5 @@ __all__ = [
     "PluginMng",
     "PluginRegistry",
     "PluginRuntimeMng",
-    "PluginTemplateSpec",
     "ShepherdPlugin",
 ]

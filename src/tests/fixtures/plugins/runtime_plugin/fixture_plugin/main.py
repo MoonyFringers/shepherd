@@ -3,12 +3,9 @@ from fixture_plugin.helpers import complete_observability
 
 from config import (
     ConfigMng,
-    ContainerCfg,
     EnvironmentCfg,
     EnvironmentTemplateCfg,
     ServiceCfg,
-    ServiceTemplateCfg,
-    ServiceTemplateRefCfg,
 )
 from docker import DockerComposeEnv, DockerComposeSvc
 from environment import Environment, EnvironmentFactory
@@ -16,7 +13,6 @@ from plugin import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginFactorySpec,
-    PluginTemplateSpec,
     ShepherdPlugin,
 )
 from service import Service, ServiceFactory
@@ -96,56 +92,6 @@ class RuntimeFixturePlugin(ShepherdPlugin):
                 provider=complete_observability,
             ),
             PluginCompletionSpec(scope="env", provider=complete_observability),
-        ]
-
-    def get_env_templates(self):
-        return [
-            PluginTemplateSpec(
-                id="baseline",
-                provider=EnvironmentTemplateCfg(
-                    tag="runtime-plugin/baseline",
-                    factory="runtime-plugin/baseline-factory",
-                    service_templates=[
-                        ServiceTemplateRefCfg(
-                            template="runtime-plugin/api",
-                            tag="plugin-api",
-                        )
-                    ],
-                    probes=None,
-                    networks=None,
-                    volumes=None,
-                ),
-            )
-        ]
-
-    def get_service_templates(self):
-        return [
-            PluginTemplateSpec(
-                id="api",
-                provider=ServiceTemplateCfg(
-                    tag="runtime-plugin/api",
-                    factory="runtime-plugin/api-factory",
-                    labels=[],
-                    properties={"source": "plugin"},
-                    containers=[
-                        ContainerCfg(
-                            image="busybox:stable-glibc",
-                            tag="app",
-                            container_name=None,
-                            hostname=None,
-                            workdir=None,
-                            volumes=[],
-                            environment=[],
-                            ports=[],
-                            networks=[],
-                            extra_hosts=[],
-                            inits=None,
-                            build=None,
-                        )
-                    ],
-                    start=None,
-                ),
-            )
         ]
 
     def get_env_factories(self):

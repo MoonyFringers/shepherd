@@ -41,7 +41,6 @@ from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginFactorySpec,
-    PluginTemplateSpec,
     ShepherdPlugin,
 )
 from service import ServiceFactory
@@ -65,8 +64,13 @@ def _completion_registry() -> dict[str, list["PluginCompletionSpec"]]:
     return {}
 
 
-def _template_registry() -> dict[str, "PluginTemplateSpec"]:
-    """Create a typed default for canonical template registrations."""
+def _env_template_registry() -> dict[str, EnvironmentTemplateCfg]:
+    """Create a typed default for canonical environment templates."""
+    return {}
+
+
+def _service_template_registry() -> dict[str, ServiceTemplateCfg]:
+    """Create a typed default for canonical service templates."""
     return {}
 
 
@@ -104,11 +108,11 @@ class PluginRegistry:
     completion_providers: dict[str, list[PluginCompletionSpec]] = field(
         default_factory=_completion_registry
     )
-    env_templates: dict[str, PluginTemplateSpec] = field(
-        default_factory=_template_registry
+    env_templates: dict[str, EnvironmentTemplateCfg] = field(
+        default_factory=_env_template_registry
     )
-    service_templates: dict[str, PluginTemplateSpec] = field(
-        default_factory=_template_registry
+    service_templates: dict[str, ServiceTemplateCfg] = field(
+        default_factory=_service_template_registry
     )
     env_factories: dict[str, PluginFactorySpec] = field(
         default_factory=_factory_registry
@@ -353,18 +357,7 @@ class PluginRuntimeMng:
         self._register_completion_providers(
             plugin_id, loaded.instance.get_completion_providers()
         )
-        self._register_templates(
-            plugin_id,
-            loaded.instance.get_env_templates(),
-            self.registry.env_templates,
-            "environment template",
-        )
-        self._register_templates(
-            plugin_id,
-            loaded.instance.get_service_templates(),
-            self.registry.service_templates,
-            "service template",
-        )
+        self._register_descriptor_templates(loaded)
         self._register_factories(
             plugin_id,
             loaded.instance.get_env_factories(),
@@ -460,41 +453,145 @@ class PluginRuntimeMng:
             return True
         return callable(getattr(provider, "get_completions", None))
 
-    def _register_templates(
+    def _register_descriptor_templates(self, loaded: LoadedPlugin) -> None:
+        """Register declarative templates loaded from one plugin descriptor."""
+        plugin_id = loaded.descriptor.id
+        service_local_ids = {
+            template.tag
+            for template in (loaded.descriptor.service_templates or [])
+        }
+        self._register_env_templates(
+            plugin_id,
+            loaded.descriptor.env_templates or (),
+            service_local_ids,
+        )
+        self._register_service_templates(
+            plugin_id,
+            loaded.descriptor.service_templates or (),
+        )
+
+    def _register_env_templates(
         self,
         plugin_id: str,
-        templates: Sequence[PluginTemplateSpec],
-        registry: dict[str, PluginTemplateSpec],
-        kind: str,
+        templates: Sequence[EnvironmentTemplateCfg],
+        service_local_ids: set[str],
     ) -> None:
-        """Register namespaced templates in the selected runtime registry."""
+        """Register namespaced environment templates from the descriptor."""
         for template in templates:
-            if "/" in template.id:
+            if "/" in template.tag:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' {kind} id '{template.id}' must "
+                    f"Plugin '{plugin_id}' environment template id "
+                    f"'{template.tag}' must "
                     "not contain '/'."
                 )
-            canonical_id = f"{plugin_id}/{template.id}"
-            if canonical_id in registry:
+            canonical_id = f"{plugin_id}/{template.tag}"
+            if canonical_id in self.registry.env_templates:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' declares duplicate {kind} "
-                    f"'{canonical_id}'."
+                    f"Plugin '{plugin_id}' declares duplicate environment "
+                    f"template '{canonical_id}'."
                 )
-            if kind == "environment template" and not isinstance(
-                template.provider, EnvironmentTemplateCfg
-            ):
+            self.registry.env_templates[canonical_id] = (
+                self._namespace_environment_template(
+                    plugin_id, template, service_local_ids
+                )
+            )
+
+    def _register_service_templates(
+        self,
+        plugin_id: str,
+        templates: Sequence[ServiceTemplateCfg],
+    ) -> None:
+        """Register namespaced service templates from the descriptor."""
+        for template in templates:
+            if "/" in template.tag:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
-                    "provide an EnvironmentTemplateCfg."
+                    f"Plugin '{plugin_id}' service template id "
+                    f"'{template.tag}' must not contain '/'."
                 )
-            if kind == "service template" and not isinstance(
-                template.provider, ServiceTemplateCfg
-            ):
+            canonical_id = f"{plugin_id}/{template.tag}"
+            if canonical_id in self.registry.service_templates:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
-                    "provide a ServiceTemplateCfg."
+                    f"Plugin '{plugin_id}' declares duplicate service "
+                    f"template '{canonical_id}'."
                 )
-            registry[canonical_id] = template
+            self.registry.service_templates[canonical_id] = (
+                self._namespace_service_template(plugin_id, template)
+            )
+
+    def _namespace_environment_template(
+        self,
+        plugin_id: str,
+        template: EnvironmentTemplateCfg,
+        service_local_ids: set[str],
+    ) -> EnvironmentTemplateCfg:
+        """Return one plugin env template with canonicalized ids."""
+        service_templates = template.service_templates
+        if service_templates is not None:
+            service_templates = [
+                self._namespace_service_template_ref(
+                    plugin_id, service_template, service_local_ids
+                )
+                for service_template in service_templates
+            ]
+
+        return EnvironmentTemplateCfg(
+            tag=f"{plugin_id}/{template.tag}",
+            factory=self._namespace_factory_id(
+                plugin_id,
+                template.factory,
+                Constants.ENV_FACTORY_DEFAULT,
+            ),
+            service_templates=service_templates,
+            probes=template.probes,
+            networks=template.networks,
+            volumes=template.volumes,
+            ready=template.ready,
+        )
+
+    def _namespace_service_template(
+        self,
+        plugin_id: str,
+        template: ServiceTemplateCfg,
+    ) -> ServiceTemplateCfg:
+        """Return one plugin service template with canonicalized ids."""
+        return ServiceTemplateCfg(
+            tag=f"{plugin_id}/{template.tag}",
+            factory=self._namespace_factory_id(
+                plugin_id,
+                template.factory,
+                Constants.SVC_FACTORY_DEFAULT,
+            ),
+            labels=template.labels,
+            properties=template.properties,
+            containers=template.containers,
+            start=template.start,
+        )
+
+    def _namespace_service_template_ref(
+        self,
+        plugin_id: str,
+        template_ref: Any,
+        service_local_ids: set[str],
+    ) -> Any:
+        """Return one env->service template reference with canonical ids."""
+        template_name = template_ref.template
+        if "/" not in template_name and template_name in service_local_ids:
+            template_name = f"{plugin_id}/{template_name}"
+        return type(template_ref)(
+            template=template_name,
+            tag=template_ref.tag,
+        )
+
+    def _namespace_factory_id(
+        self,
+        plugin_id: str,
+        factory_id: str,
+        core_factory_id: str,
+    ) -> str:
+        """Namespace plugin-owned factory ids while preserving core ids."""
+        if not factory_id or factory_id == core_factory_id or "/" in factory_id:
+            return factory_id
+        return f"{plugin_id}/{factory_id}"
 
     def _register_factories(
         self,
@@ -534,29 +631,13 @@ class PluginRuntimeMng:
         self, template_id: str
     ) -> EnvironmentTemplateCfg | None:
         """Return one plugin-owned environment template by canonical id."""
-        template = self.registry.env_templates.get(template_id)
-        if template is None:
-            return None
-        provider = template.provider
-        if not isinstance(provider, EnvironmentTemplateCfg):
-            raise ValueError(
-                f"Plugin environment template '{template_id}' is invalid."
-            )
-        return provider
+        return self.registry.env_templates.get(template_id)
 
     def get_service_template(
         self, template_id: str
     ) -> ServiceTemplateCfg | None:
         """Return one plugin-owned service template by canonical id."""
-        template = self.registry.service_templates.get(template_id)
-        if template is None:
-            return None
-        provider = template.provider
-        if not isinstance(provider, ServiceTemplateCfg):
-            raise ValueError(
-                f"Plugin service template '{template_id}' is invalid."
-            )
-        return provider
+        return self.registry.service_templates.get(template_id)
 
     def get_service_template_path(self, template_id: str) -> str | None:
         """

@@ -819,6 +819,8 @@ class PluginDescriptorCfg(Resolvable):
     description: Optional[str] = None
     capabilities: Optional[dict[str, bool]] = None
     default_config: Optional[dict[str, Any]] = None
+    env_templates: Optional[list[EnvironmentTemplateCfg]] = None
+    service_templates: Optional[list[ServiceTemplateCfg]] = None
 
 
 @dataclass
@@ -871,6 +873,165 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     if default_config is not None and not isinstance(default_config, dict):
         raise ValueError("Plugin default_config must be a mapping.")
 
+    def parse_build(item: Any) -> BuildCfg:
+        return BuildCfg(
+            context_path=item.get("context_path"),
+            dockerfile_path=item.get("dockerfile_path"),
+        )
+
+    def parse_init(item: Any) -> InitCfg:
+        return InitCfg(
+            tag=item["tag"],
+            script=item.get("script"),
+            script_path=item.get("script_path"),
+            when_probes=item.get("when_probes", []),
+        )
+
+    def parse_start(item: Any) -> StartCfg:
+        return StartCfg(
+            when_probes=item.get("when_probes", []),
+        )
+
+    def parse_ready(item: Any) -> ReadyCfg:
+        return ReadyCfg(
+            when_probes=item.get("when_probes", []),
+        )
+
+    def parse_container(item: Any) -> ContainerCfg:
+        inits = (
+            [parse_init(init) for init in item.get("inits", [])]
+            if item.get("inits") is not None
+            else None
+        )
+        return ContainerCfg(
+            tag=item.get("tag"),
+            image=item.get("image"),
+            hostname=item.get("hostname"),
+            container_name=item.get("container_name"),
+            workdir=item.get("workdir"),
+            volumes=item.get("volumes", []),
+            environment=item.get("environment", []),
+            ports=item.get("ports", []),
+            networks=item.get("networks", []),
+            extra_hosts=item.get("extra_hosts", []),
+            build=parse_build(item["build"]) if item.get("build") else None,
+            inits=inits,
+        )
+
+    def parse_probe(item: Any) -> ProbeCfg:
+        return ProbeCfg(
+            tag=item["tag"],
+            container=(
+                parse_container(item["container"])
+                if item.get("container")
+                else None
+            ),
+            script=item.get("script"),
+            script_path=item.get("script_path"),
+        )
+
+    def parse_network(item: Any) -> NetworkCfg:
+        external_value = item.get("external", False)
+        return NetworkCfg(
+            tag=item["tag"],
+            name=item.get("name", None),
+            external=(
+                bool_to_str(external_value)
+                if isinstance(external_value, bool)
+                else external_value
+            ),
+            driver=item.get("driver", None),
+            attachable=item.get("attachable", None),
+            enable_ipv6=item.get("enable_ipv6", None),
+            driver_opts=item.get("driver_opts", None),
+            ipam=item.get("ipam", None),
+        )
+
+    def parse_volume(item: Any) -> VolumeCfg:
+        external_value = item.get("external", False)
+        return VolumeCfg(
+            tag=item["tag"],
+            external=(
+                bool_to_str(external_value)
+                if isinstance(external_value, bool)
+                else external_value
+            ),
+            name=item.get("name", None),
+            driver=item.get("driver", None),
+            driver_opts=item.get("driver_opts", None),
+            labels=item.get("labels", None),
+        )
+
+    def parse_service_template_ref(item: Any) -> ServiceTemplateRefCfg:
+        return ServiceTemplateRefCfg(
+            template=item["template"],
+            tag=item["tag"],
+        )
+
+    def parse_service_template(item: Any) -> ServiceTemplateCfg:
+        containers_data = cast(
+            list[dict[str, Any]], item.get("containers") or []
+        )
+        return ServiceTemplateCfg(
+            tag=item["tag"],
+            factory=item["factory"],
+            labels=item.get("labels", []),
+            properties=item.get("properties", {}),
+            containers=[
+                parse_container(container) for container in containers_data
+            ],
+            start=parse_start(item["start"]) if item.get("start") else None,
+        )
+
+    def parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
+        service_templates_data = cast(
+            list[dict[str, Any]], item.get("service_templates") or []
+        )
+        probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+        networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+        volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+        return EnvironmentTemplateCfg(
+            tag=item["tag"],
+            factory=item["factory"],
+            service_templates=[
+                parse_service_template_ref(service_template)
+                for service_template in service_templates_data
+            ],
+            probes=[parse_probe(probe) for probe in probes_data],
+            ready=parse_ready(item["ready"]) if item.get("ready") else None,
+            networks=[parse_network(network) for network in networks_data],
+            volumes=[parse_volume(volume) for volume in volumes_data],
+        )
+
+    env_templates_data = descriptor.get("env_templates")
+    if env_templates_data is not None and not isinstance(
+        env_templates_data, list
+    ):
+        raise ValueError("Plugin env_templates must be a list.")
+
+    service_templates_data = descriptor.get("service_templates")
+    if service_templates_data is not None and not isinstance(
+        service_templates_data, list
+    ):
+        raise ValueError("Plugin service_templates must be a list.")
+
+    env_templates = (
+        [
+            parse_environment_template(template)
+            for template in cast(list[dict[str, Any]], env_templates_data)
+        ]
+        if env_templates_data is not None
+        else None
+    )
+    service_templates = (
+        [
+            parse_service_template(template)
+            for template in cast(list[dict[str, Any]], service_templates_data)
+        ]
+        if service_templates_data is not None
+        else None
+    )
+
     return PluginDescriptorCfg(
         id=str(descriptor["id"]),
         name=str(descriptor["name"]),
@@ -887,6 +1048,8 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
         ),
         capabilities=normalized_capabilities,
         default_config=cast(Optional[dict[str, Any]], default_config),
+        env_templates=env_templates,
+        service_templates=service_templates,
     )
 
 
@@ -1366,15 +1529,7 @@ class ConfigMng:
         templates = list(self.config.env_templates or [])
         if self.pluginRuntimeMng is not None:
             templates.extend(
-                [
-                    plugin_template.provider
-                    for plugin_template in (
-                        self.pluginRuntimeMng.registry.env_templates.values()
-                    )
-                    if isinstance(
-                        plugin_template.provider, EnvironmentTemplateCfg
-                    )
-                ]
+                self.pluginRuntimeMng.registry.env_templates.values()
             )
         return templates or None
 
@@ -1408,15 +1563,8 @@ class ConfigMng:
         """
         templates = list(self.config.service_templates or [])
         if self.pluginRuntimeMng is not None:
-            runtime_templates = (
-                self.pluginRuntimeMng.registry.service_templates.values()
-            )
             templates.extend(
-                [
-                    plugin_template.provider
-                    for plugin_template in runtime_templates
-                    if isinstance(plugin_template.provider, ServiceTemplateCfg)
-                ]
+                self.pluginRuntimeMng.registry.service_templates.values()
             )
         return templates or None
 
