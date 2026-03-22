@@ -22,8 +22,9 @@ import os
 import sys
 from dataclasses import dataclass, field
 from types import ModuleType
-from typing import Sequence
+from typing import Any, Sequence
 
+import click
 import yaml
 
 from completion import CompletionMng
@@ -50,8 +51,8 @@ def _loaded_plugin_registry() -> dict[str, "LoadedPlugin"]:
     return {}
 
 
-def _command_registry() -> dict[str, dict[str, str]]:
-    """Create a typed default for contributed scope and verb ownership."""
+def _command_registry() -> dict[str, dict[str, "RegisteredPluginCommand"]]:
+    """Create a typed default for contributed executable commands."""
     return {}
 
 
@@ -93,7 +94,7 @@ class PluginRegistry:
     plugins: dict[str, LoadedPlugin] = field(
         default_factory=_loaded_plugin_registry
     )
-    commands: dict[str, dict[str, str]] = field(
+    commands: dict[str, dict[str, "RegisteredPluginCommand"]] = field(
         default_factory=_command_registry
     )
     completion_providers: dict[str, list[PluginCompletionSpec]] = field(
@@ -113,6 +114,14 @@ class PluginRegistry:
     )
 
 
+@dataclass(frozen=True)
+class RegisteredPluginCommand:
+    """One validated command contribution stored in the runtime registry."""
+
+    plugin_id: str
+    spec: PluginCommandSpec
+
+
 class PluginRuntimeMng:
     """
     Load enabled plugins and register their declared runtime contributions.
@@ -123,7 +132,8 @@ class PluginRuntimeMng:
     """
 
     CORE_SCOPE_VERBS = {
-        scope: set(verbs) for scope, verbs in CompletionMng.SCOPE_VERBS.items()
+        scope: set(verbs)
+        for scope, verbs in CompletionMng.CORE_SCOPE_VERBS.items()
     }
 
     def __init__(self, configMng: ConfigMng):
@@ -372,6 +382,7 @@ class PluginRuntimeMng:
         for command in commands:
             scope = command.scope
             verb = command.verb
+            command_obj: Any = command.command
             if (scope, verb) in seen:
                 Util.print_error_and_die(
                     f"Plugin '{plugin_id}' declares duplicate command "
@@ -379,10 +390,25 @@ class PluginRuntimeMng:
                 )
             seen.add((scope, verb))
 
+            if scope == "plugin":
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' command '{scope} {verb}' "
+                    "uses reserved administrative scope 'plugin'."
+                )
             if verb in self.CORE_SCOPE_VERBS.get(scope, set()):
                 Util.print_error_and_die(
                     f"Plugin '{plugin_id}' command '{scope} {verb}' "
                     "collides with a core command."
+                )
+            if not isinstance(command_obj, click.Command):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' command '{scope} {verb}' must "
+                    "provide a Click command."
+                )
+            if command_obj.name != verb:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' command '{scope} {verb}' must "
+                    "use a Click command with the same verb name."
                 )
 
             scope_commands = self.registry.commands.setdefault(scope, {})
@@ -390,9 +416,11 @@ class PluginRuntimeMng:
             if owner is not None:
                 Util.print_error_and_die(
                     f"Plugin '{plugin_id}' command '{scope} {verb}' "
-                    f"collides with plugin '{owner}'."
+                    f"collides with plugin '{owner.plugin_id}'."
                 )
-            scope_commands[verb] = plugin_id
+            scope_commands[verb] = RegisteredPluginCommand(
+                plugin_id=plugin_id, spec=command
+            )
 
     def _register_completion_providers(
         self,
@@ -407,10 +435,24 @@ class PluginRuntimeMng:
                     f"Plugin '{plugin_id}' declares multiple completion "
                     f"providers for scope '{provider.scope}'."
                 )
+            if not self._is_completion_provider(provider.provider):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' completion provider for scope "
+                    f"'{provider.scope}' must be callable or expose "
+                    "'get_completions(args)'."
+                )
             seen_scopes.add(provider.scope)
             self.registry.completion_providers.setdefault(
                 provider.scope, []
             ).append(provider)
+
+    def _is_completion_provider(self, provider: Any) -> bool:
+        """
+        Return whether the completion provider exposes an executable shape.
+        """
+        if callable(provider):
+            return True
+        return callable(getattr(provider, "get_completions", None))
 
     def _register_templates(
         self,

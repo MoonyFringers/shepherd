@@ -1,4 +1,5 @@
-from fixture_plugin.helpers import COMPLETION_PROVIDER
+import click
+from fixture_plugin.helpers import complete_observability
 
 from plugin import (
     PluginCommandSpec,
@@ -11,17 +12,32 @@ from plugin import (
 
 class RuntimeFixturePlugin(ShepherdPlugin):
     def get_commands(self):
+        @click.command(name="tail")
+        @click.argument("target", required=False)
+        def tail(target: str | None):
+            click.echo(f"plugin-tail:{target or 'default'}")
+
+        @click.command(name="doctor")
+        @click.argument("subject", required=False)
+        def doctor(subject: str | None):
+            click.echo(f"plugin-doctor:{subject or 'default'}")
+
         return [
-            PluginCommandSpec(scope="observability", verb="tail"),
-            PluginCommandSpec(scope="env", verb="doctor"),
+            PluginCommandSpec(
+                scope="observability",
+                verb="tail",
+                command=tail,
+            ),
+            PluginCommandSpec(scope="env", verb="doctor", command=doctor),
         ]
 
     def get_completion_providers(self):
         return [
             PluginCompletionSpec(
                 scope="observability",
-                provider=COMPLETION_PROVIDER,
-            )
+                provider=complete_observability,
+            ),
+            PluginCompletionSpec(scope="env", provider=complete_observability),
         ]
 
     def get_env_templates(self):

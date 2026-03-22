@@ -17,13 +17,17 @@
 
 
 from dataclasses import dataclass
-from typing import Any, Optional, override
+from typing import TYPE_CHECKING, Any, Optional, override
 
 from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
+from completion.completion_plugin import CompletionPluginMng
 from completion.completion_probe import CompletionProbeMng
 from completion.completion_svc import CompletionSvcMng
 from config import ConfigMng
+
+if TYPE_CHECKING:
+    from plugin import PluginRegistry
 
 
 class CompletionMng(AbstractCompletionMng):
@@ -34,7 +38,7 @@ class CompletionMng(AbstractCompletionMng):
     scope, mirroring the Click command tree.
     """
 
-    SCOPE_VERBS = {
+    CORE_SCOPE_VERBS = {
         "plugin": [
             "install",
             "list",
@@ -59,6 +63,7 @@ class CompletionMng(AbstractCompletionMng):
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
     }
+    SCOPE_VERBS = CORE_SCOPE_VERBS
 
     @dataclass(frozen=True)
     class OptionSpec:
@@ -123,10 +128,17 @@ class CompletionMng(AbstractCompletionMng):
         ("probe", "check"): (OptionSpec(tokens=("-a", "--all")),),
     }
 
-    def __init__(self, cli_flags: dict[str, Any], configMng: ConfigMng):
+    def __init__(
+        self,
+        cli_flags: dict[str, Any],
+        configMng: ConfigMng,
+        plugin_registry: "PluginRegistry | None" = None,
+    ):
         self.cli_flags = cli_flags
         self.configMng = configMng
+        self.plugin_registry = plugin_registry
         self.completionEnvMng = CompletionEnvMng(cli_flags, configMng)
+        self.completionPluginMng = CompletionPluginMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
         self.completionProbeMng = CompletionProbeMng(cli_flags, configMng)
         self._option_by_token: dict[str, CompletionMng.OptionSpec] = {}
@@ -140,7 +152,23 @@ class CompletionMng(AbstractCompletionMng):
 
     @property
     def SCOPES(self) -> list[str]:
-        return list(self.SCOPE_VERBS.keys())
+        return list(self.scope_verbs.keys())
+
+    @property
+    def scope_verbs(self) -> dict[str, list[str]]:
+        """Return core verbs merged with plugin-contributed scope verbs."""
+        merged = {
+            scope: list(verbs) for scope, verbs in self.CORE_SCOPE_VERBS.items()
+        }
+        if self.plugin_registry is None:
+            return merged
+
+        for scope, commands in self.plugin_registry.commands.items():
+            verbs = merged.setdefault(scope, [])
+            for verb in commands:
+                if verb not in verbs:
+                    verbs.append(verb)
+        return merged
 
     def is_scope_chosen(self, args: list[str]) -> bool:
         return bool(args) and args[0] in self.SCOPES
@@ -148,13 +176,15 @@ class CompletionMng(AbstractCompletionMng):
     def is_verb_chosen(self, args: list[str]) -> bool:
         if len(args) < 2:
             return False
-        return args[1] in self.SCOPE_VERBS.get(args[0], [])
+        return args[1] in self.scope_verbs.get(args[0], [])
 
     def get_completion_manager(
         self, scope: Optional[str]
     ) -> Optional[AbstractCompletionMng]:
         if scope == "env":
             return self.completionEnvMng
+        if scope == "plugin":
+            return self.completionPluginMng
         if scope == "svc":
             return self.completionSvcMng
         if scope == "probe":
@@ -218,7 +248,7 @@ class CompletionMng(AbstractCompletionMng):
                 scope = token
                 continue
             if verb is None and scope is not None:
-                if token in self.SCOPE_VERBS.get(scope, []):
+                if token in self.scope_verbs.get(scope, []):
                     verb = token
 
         return sanitized, scope, verb, used_options, expect_value_for
@@ -252,22 +282,39 @@ class CompletionMng(AbstractCompletionMng):
     def _unique(self, values: list[str]) -> list[str]:
         return list(dict.fromkeys(values))
 
-    def _get_plugin_completions(
-        self, sanitized_args: list[str], verb: str, last_token: str
+    def _get_runtime_provider_completions(
+        self, scope: str, sanitized_args: list[str]
     ) -> list[str]:
-        if verb in {"get", "enable", "disable", "remove"}:
-            if len(sanitized_args) <= 3:
-                plugin_ids = sorted(
-                    [plugin.id for plugin in self.configMng.get_plugins()]
+        """Execute plugin completion providers registered for one scope."""
+        if self.plugin_registry is None:
+            return []
+
+        suggestions: list[str] = []
+        for provider_spec in self.plugin_registry.completion_providers.get(
+            scope, []
+        ):
+            provider = provider_spec.provider
+            if callable(provider):
+                suggestions.extend(
+                    self._normalize_provider_suggestions(
+                        provider(sanitized_args)
+                    )
                 )
-                if len(sanitized_args) == 3 and last_token:
-                    return [
-                        plugin_id
-                        for plugin_id in plugin_ids
-                        if plugin_id.startswith(last_token)
-                    ]
-                return plugin_ids
-        return []
+                continue
+            get_completions = getattr(provider, "get_completions", None)
+            if callable(get_completions):
+                suggestions.extend(
+                    self._normalize_provider_suggestions(
+                        get_completions(sanitized_args)
+                    )
+                )
+        return suggestions
+
+    def _normalize_provider_suggestions(self, values: Any) -> list[str]:
+        """Normalize plugin completion provider output to string suggestions."""
+        if isinstance(values, str):
+            return [values]
+        return [value for value in values if isinstance(value, str)]
 
     @override
     def get_completions_impl(self, args: list[str]) -> list[str]:
@@ -313,7 +360,7 @@ class CompletionMng(AbstractCompletionMng):
             )
 
         if not verb:
-            suggestions = list(self.SCOPE_VERBS.get(scope, []))
+            suggestions = list(self.scope_verbs.get(scope, []))
             if not suggestions:
                 suggestions.extend(
                     self._get_option_suggestions(
@@ -322,14 +369,13 @@ class CompletionMng(AbstractCompletionMng):
                 )
             return self._unique(suggestions)
 
-        if scope == "plugin":
-            return self._get_plugin_completions(
-                sanitized_args, verb, last_token
-            )
-
+        provider_suggestions = self._get_runtime_provider_completions(
+            scope, sanitized_args
+        )
         completion_manager = self.get_completion_manager(scope)
         if completion_manager:
             suggestions = completion_manager.get_completions(sanitized_args)
+            suggestions.extend(provider_suggestions)
             if option_prefix is not None:
                 suggestions.extend(
                     self._get_option_suggestions(
@@ -345,5 +391,8 @@ class CompletionMng(AbstractCompletionMng):
                     )
                 )
             return self._unique(suggestions)
+
+        if provider_suggestions:
+            return self._unique(provider_suggestions)
 
         return []

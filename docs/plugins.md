@@ -9,11 +9,13 @@ The current implementation scope is limited to:
 - managed plugin installation directory layout
 - plugin lifecycle commands for install, inspect, enable, disable, and remove
 - runtime loading of enabled plugins via `importlib`
+- executable plugin commands injected into the CLI tree
+- live plugin completion providers executed by the completion engine
 - in-memory registries for plugin commands, completion providers, templates,
   and factories
 
-CLI command injection, completion consumption, and template or factory
-execution still land in later steps of the plugin rollout.
+Template and factory execution still land in later steps of the plugin
+rollout.
 
 For the architectural rationale and staged implementation plan, see
 [ADR 0004](decisions/0004-plugin-architecture-and-rollout-plan.md).
@@ -175,18 +177,58 @@ Template and factory ids are canonicalized under the plugin namespace:
 - factories: `plugin-id/factory-id`
 
 These registries are currently validated and populated at startup. They are not
-yet consumed by the CLI, completion engine, or env and service factory flows.
+yet consumed by env and service factory flows.
+
+## Runtime Command Wiring
+
+Plugin command contributions are now executable.
+
+Each `PluginCommandSpec` declares:
+
+- the target `scope`
+- the target `verb`
+- a ready-to-register Click command object
+
+At startup Shepherd validates that:
+
+- the Click command exists
+- the Click command name matches the declared `verb`
+- the command does not collide with a core command
+- the command does not collide with another plugin command
+
+If a plugin contributes a new top-level scope, Shepherd exposes it as a normal
+CLI scope. If a plugin contributes a verb under an existing scope, Shepherd
+extends that scope in place.
+
+Examples:
+
+- `shepctl observability tail`
+- `shepctl env doctor`
+
+## Runtime Completion Wiring
+
+Plugin completion providers are now executed by the shared completion engine.
+
+Each `PluginCompletionSpec` targets one scope and provides either:
+
+- a callable that accepts the raw completion args and returns suggestions
+- an object exposing `get_completions(args)`
+
+Completion results are merged with the built-in completion managers for the
+same scope. This allows plugins to:
+
+- complete verbs under plugin-owned scopes
+- complete values for plugin-added verbs under existing scopes
+- return dynamic values computed in Python at completion time
 
 ## Scope Of This Step
 
 This documentation matches the current implementation step. At this stage,
 Shepherd does not yet:
 
-- load plugin commands into the CLI
-- load plugin completion providers
 - execute plugin factories or plugin-owned templates through env and svc flows
 
-Plugin archive installation, persisted inventory management, and runtime loader
-bootstrap are available now. Command wiring, completion execution, and factory
-or template consumption are added in follow-up PRs from the plugin rollout
+Plugin archive installation, persisted inventory management, runtime loader
+bootstrap, command wiring, and completion execution are available now. Factory
+and template consumption are added in follow-up PRs from the plugin rollout
 plan.

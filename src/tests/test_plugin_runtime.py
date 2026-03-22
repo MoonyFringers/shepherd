@@ -115,16 +115,15 @@ def test_shepherd_loads_enabled_plugin_runtime_registry(
     assert shepherd.pluginRuntimeMng is not None
     registry = shepherd.pluginRuntimeMng.registry
     assert "runtime-plugin" in registry.plugins
-    assert registry.commands["observability"]["tail"] == "runtime-plugin"
-    assert registry.commands["env"]["doctor"] == "runtime-plugin"
+    assert registry.commands["observability"]["tail"].plugin_id == (
+        "runtime-plugin"
+    )
+    assert registry.commands["env"]["doctor"].plugin_id == "runtime-plugin"
     assert "runtime-plugin/baseline" in registry.env_templates
     assert "runtime-plugin/api" in registry.service_templates
     assert "runtime-plugin/baseline-factory" in registry.env_factories
     assert "runtime-plugin/api-factory" in registry.service_factories
-    assert (
-        registry.completion_providers["observability"][0].provider
-        == "observability-completion"
-    )
+    assert callable(registry.completion_providers["observability"][0].provider)
 
 
 @pytest.mark.shpd
@@ -159,7 +158,7 @@ def test_shepherd_reloads_same_plugin_root_in_same_process(
     updated_main = plugin_dir / "fixture_plugin" / "main.py"
     updated_main.write_text(
         (
-            "from fixture_plugin.helpers import COMPLETION_PROVIDER\n"
+            "from fixture_plugin.helpers import complete_observability\n"
             "from plugin import ShepherdPlugin\n\n"
             "class RuntimeFixturePlugin(ShepherdPlugin):\n"
             "    def get_completion_providers(self):\n"
@@ -169,8 +168,11 @@ def test_shepherd_reloads_same_plugin_root_in_same_process(
             "                (),\n"
             "                {\n"
             "                    'scope': 'observability',\n"
-            "                    'provider': (\n"
-            "                        COMPLETION_PROVIDER + '-reloaded'\n"
+            "                    'provider': staticmethod(\n"
+            "                        lambda args: [\n"
+            "                            complete_observability(args)[0]\n"
+            "                            + '-reloaded'\n"
+            "                        ]\n"
             "                    ),\n"
             "                },\n"
             "            )(),\n"
@@ -181,9 +183,103 @@ def test_shepherd_reloads_same_plugin_root_in_same_process(
     reloaded = ShepherdMng()
     assert reloaded.pluginRuntimeMng is not None
     providers = reloaded.pluginRuntimeMng.registry.completion_providers
-    assert providers["observability"][0].provider == (
-        "observability-completion-reloaded"
+    assert providers["observability"][0].provider(
+        ["observability", "tail"]
+    ) == ["logs-reloaded"]
+
+
+@pytest.mark.shpd
+def test_cli_executes_plugin_scope_and_verb(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
     )
+
+    result = runner.invoke(cli, ["observability", "tail", "logs"])
+
+    assert result.exit_code == 0
+    assert "plugin-tail:logs" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_executes_plugin_verb_under_core_scope(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "doctor", "network"])
+
+    assert result.exit_code == 0
+    assert "plugin-doctor:network" in result.output
+
+
+@pytest.mark.shpd
+def test_startup_rejects_plugin_commands_under_reserved_plugin_scope(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(
+        shpd_path,
+        main_content=(
+            "import click\n"
+            "from plugin import PluginCommandSpec, ShepherdPlugin\n\n"
+            "class RuntimeFixturePlugin(ShepherdPlugin):\n"
+            "    def get_commands(self):\n"
+            "        @click.command(name='doctor')\n"
+            "        def doctor():\n"
+            "            click.echo('reserved')\n"
+            "        return [\n"
+            "            PluginCommandSpec(\n"
+            "                scope='plugin',\n"
+            "                verb='doctor',\n"
+            "                command=doctor,\n"
+            "            )\n"
+            "        ]\n"
+        ),
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "uses reserved" in result.output
+    assert "administrative scope 'plugin'" in result.output
 
 
 @pytest.mark.shpd

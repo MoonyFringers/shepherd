@@ -21,7 +21,9 @@ import io
 import os
 import tarfile
 from pathlib import Path
+from types import SimpleNamespace
 
+import click
 import pytest
 import yaml
 from click.testing import CliRunner
@@ -30,6 +32,8 @@ from test_util import read_fixture
 
 from config import EnvironmentCfg
 from environment import EnvironmentMng
+from plugin import PluginCommandSpec
+from plugin.runtime import RegisteredPluginCommand
 from service import ServiceMng
 from shepctl import ShepherdMng, cli
 from util.constants import Constants
@@ -211,6 +215,59 @@ def test_cli_plugin_scope_uses_safe_bootstrap(
             "yes": False,
         },
         load_runtime_plugins=False,
+    )
+
+
+@pytest.mark.shpd
+def test_cli_reuses_preloaded_runtime_for_plugin_commands(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    @click.command(name="tail")
+    def tail() -> None:
+        click.echo("plugin-tail")
+
+    fake_runtime = SimpleNamespace(
+        registry=SimpleNamespace(
+            commands={
+                "observability": {
+                    "tail": RegisteredPluginCommand(
+                        plugin_id="runtime-plugin",
+                        spec=PluginCommandSpec(
+                            scope="observability",
+                            verb="tail",
+                            command=tail,
+                        ),
+                    )
+                }
+            }
+        )
+    )
+
+    def fake_loader(ctx: click.Context) -> SimpleNamespace:
+        ctx.find_root().meta["plugin_runtime_mng"] = fake_runtime
+        return fake_runtime
+
+    mock_loader = mocker.patch(
+        "shepctl._load_plugin_runtime_for_click",
+        side_effect=fake_loader,
+    )
+    mock_init = mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+
+    result = runner.invoke(cli, ["observability", "tail"])
+
+    assert result.exit_code == 0
+    mock_loader.assert_called()
+    mock_init.assert_called_once_with(
+        {
+            "verbose": False,
+            "quiet": False,
+            "details": False,
+            "show_commands": False,
+            "show_commands_limit": 5,
+            "yes": False,
+        },
+        load_runtime_plugins=True,
+        plugin_runtime_mng=fake_runtime,
     )
 
 

@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
@@ -65,6 +66,17 @@ def _write_completion_config_with_plugins(config_path: Path) -> None:
         },
     ]
     config_path.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+
+def _install_runtime_fixture_plugin(shpd_path: Path) -> None:
+    fixture_root = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "plugins"
+        / "runtime_plugin"
+    )
+    plugin_dir = shpd_path / "plugins" / "runtime-plugin"
+    shutil.copytree(fixture_root, plugin_dir)
 
 
 @pytest.mark.compl
@@ -118,7 +130,7 @@ def test_completion_add(
     sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["env"])
     assert (
-        completions == sm.completionMng.SCOPE_VERBS["env"]
+        completions == sm.completionMng.scope_verbs["env"]
     ), "Expected env verbs"
 
 
@@ -131,8 +143,69 @@ def test_completion_plugin_scope(
     sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["plugin"])
     assert (
-        completions == sm.completionMng.SCOPE_VERBS["plugin"]
+        completions == sm.completionMng.scope_verbs["plugin"]
     ), "Expected plugin verbs"
+
+
+@pytest.mark.compl
+def test_completion_includes_plugin_scope_and_scope_extension(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_completion_config_with_plugins(shpd_yaml)
+    _install_runtime_fixture_plugin(shpd_path)
+    shpd_config = yaml.safe_load(shpd_yaml.read_text())
+    shpd_config["plugins"] = [
+        {
+            "id": "runtime-plugin",
+            "enabled": True,
+            "version": "1.0.0",
+            "config": None,
+        }
+    ]
+    shpd_yaml.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+    sm = ShepherdMng()
+
+    assert "observability" in sm.completionMng.get_completions([])
+    assert "doctor" in sm.completionMng.get_completions(["env"])
+
+
+@pytest.mark.compl
+def test_completion_executes_runtime_plugin_provider(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = yaml.safe_load(read_fixture("completion", "shpd.yaml"))
+    shpd_config["plugins"] = [
+        {
+            "id": "runtime-plugin",
+            "enabled": True,
+            "version": "1.0.0",
+            "config": None,
+        }
+    ]
+    shpd_yaml.write_text(yaml.dump(shpd_config, sort_keys=False))
+    _install_runtime_fixture_plugin(shpd_path)
+
+    sm = ShepherdMng()
+
+    assert sm.completionMng.get_completions(["observability", "tail"]) == [
+        "logs",
+        "metrics",
+        "traces",
+    ]
+    assert sm.completionMng.get_completions(["env", "doctor"]) == [
+        "containers",
+        "network",
+        "volumes",
+    ]
 
 
 @pytest.mark.compl
