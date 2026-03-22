@@ -1366,29 +1366,112 @@ class ConfigMng:
         """
         self.store_config(self.config)
 
+    def get_canonical_id(self, identifier: str) -> str:
+        """
+        Return the internal canonical identifier for core or plugin-owned ids.
+
+        Built-in resources keep their short user-facing ids in config and CLI,
+        but internal registry-oriented lookup uses the explicit `core/...`
+        namespace just like plugin-owned resources use `<plugin-id>/...`.
+        """
+        if "/" in identifier:
+            return identifier
+        return f"{self.constants.CORE_PLUGIN_ID}/{identifier}"
+
+    def _is_core_id(self, identifier: str) -> bool:
+        """Return whether the canonical identifier belongs to core."""
+        return identifier.startswith(f"{self.constants.CORE_PLUGIN_ID}/")
+
+    def _local_id(self, identifier: str) -> str:
+        """Return the local identifier portion from a canonical id."""
+        if "/" in identifier:
+            return identifier.split("/", 1)[1]
+        return identifier
+
+    def _core_environment_template_registry(
+        self,
+    ) -> dict[str, EnvironmentTemplateCfg]:
+        """Build the canonical lookup registry for built-in env templates."""
+        return {
+            self.get_canonical_id(env_template.tag): env_template
+            for env_template in self.config.env_templates or []
+        }
+
+    def _core_service_template_registry(
+        self,
+    ) -> dict[str, ServiceTemplateCfg]:
+        """
+        Build the canonical lookup registry for built-in service templates.
+        """
+        return {
+            self.get_canonical_id(service_template.tag): service_template
+            for service_template in self.config.service_templates or []
+        }
+
+    def get_environment_template_registry(
+        self,
+    ) -> dict[str, EnvironmentTemplateCfg]:
+        """Return the merged canonical registry of env templates."""
+        registry = self._core_environment_template_registry()
+        if self.pluginRuntimeMng is not None:
+            registry.update(self.pluginRuntimeMng.registry.env_templates)
+        return registry
+
+    def get_service_template_registry(
+        self,
+    ) -> dict[str, ServiceTemplateCfg]:
+        """Return the merged canonical registry of service templates."""
+        registry = self._core_service_template_registry()
+        if self.pluginRuntimeMng is not None:
+            registry.update(self.pluginRuntimeMng.registry.service_templates)
+        return registry
+
+    def get_canonical_env_factory_id(self, factory_id: str) -> str:
+        """Return the canonical environment factory id."""
+        return self.get_canonical_id(factory_id)
+
+    def get_canonical_svc_factory_id(self, factory_id: str) -> str:
+        """Return the canonical service factory id."""
+        return self.get_canonical_id(factory_id)
+
+    def is_core_env_factory_id(self, factory_id: str) -> bool:
+        """Return whether the environment factory id resolves to core."""
+        return self.get_canonical_env_factory_id(
+            factory_id
+        ) == self.get_canonical_env_factory_id(
+            self.constants.ENV_FACTORY_DEFAULT
+        )
+
+    def is_core_svc_factory_id(self, factory_id: str) -> bool:
+        """Return whether the service factory id resolves to core."""
+        return self.get_canonical_svc_factory_id(
+            factory_id
+        ) == self.get_canonical_svc_factory_id(
+            self.constants.SVC_FACTORY_DEFAULT
+        )
+
     def get_service_template_path(self, serviceTemplate: str) -> Optional[str]:
         """
-        Retrieves the service template path by its tag.
+        Retrieves the service template path by id.
 
-        :param serviceTemplate: The tag of the service template.
+        :param serviceTemplate: The service template id.
         :return: The service template path.
         """
-        if self.config.service_templates and any(
-            svc_template.tag == serviceTemplate
-            for svc_template in self.config.service_templates
-        ):
-            return os.path.join(
-                self.config.templates_path,
-                Constants.SVC_TEMPLATES_DIR,
-                serviceTemplate,
-            )
-        if (
+        canonical_id = self.get_canonical_id(serviceTemplate)
+        if self._is_core_id(canonical_id):
+            local_template_id = self._local_id(canonical_id)
+            if self._core_service_template_registry().get(canonical_id):
+                return os.path.join(
+                    self.config.templates_path,
+                    Constants.SVC_TEMPLATES_DIR,
+                    local_template_id,
+                )
+        elif (
             self.pluginRuntimeMng is not None
-            and "/" in serviceTemplate
             and (
                 plugin_template_path := (
                     self.pluginRuntimeMng.get_service_template_path(
-                        serviceTemplate
+                        canonical_id
                     )
                 )
             )
@@ -1401,18 +1484,14 @@ class ConfigMng:
         self, envTemplate: str
     ) -> Optional[EnvironmentTemplateCfg]:
         """
-        Retrieves an environment template configuration by its tag.
+        Retrieves an environment template configuration by id.
 
-        :param envTemplate: The template of the environment to retrieve.
-        :return: The environment template configuration if found, else None.
+        Accepts both short core ids like `default` and canonical ids like
+        `core/default` or `plugin-id/template`.
         """
-        if self.config.env_templates:
-            for env_template in self.config.env_templates:
-                if env_template.tag == envTemplate:
-                    return env_template
-        if self.pluginRuntimeMng is not None and "/" in envTemplate:
-            return self.pluginRuntimeMng.get_environment_template(envTemplate)
-        return None
+        return self.get_environment_template_registry().get(
+            self.get_canonical_id(envTemplate)
+        )
 
     def get_environment_templates(
         self,
@@ -1422,11 +1501,7 @@ class ConfigMng:
 
         :return: A list of all environment templates.
         """
-        templates = list(self.config.env_templates or [])
-        if self.pluginRuntimeMng is not None:
-            templates.extend(
-                self.pluginRuntimeMng.registry.env_templates.values()
-            )
+        templates = list(self.get_environment_template_registry().values())
         return templates or None
 
     def get_environment_template_tags(self) -> list[str]:
@@ -1438,18 +1513,14 @@ class ConfigMng:
         self, serviceTemplate: str
     ) -> Optional[ServiceTemplateCfg]:
         """
-        Retrieves a service template configuration by its tag.
+        Retrieves a service template configuration by id.
 
-        :param serviceTemplate: The template of the service to retrieve.
-        :return: The service template configuration if found, else None.
+        Accepts both short core ids like `default` and canonical ids like
+        `core/default` or `plugin-id/template`.
         """
-        if self.config.service_templates:
-            for svc_template in self.config.service_templates:
-                if svc_template.tag == serviceTemplate:
-                    return svc_template
-        if self.pluginRuntimeMng is not None and "/" in serviceTemplate:
-            return self.pluginRuntimeMng.get_service_template(serviceTemplate)
-        return None
+        return self.get_service_template_registry().get(
+            self.get_canonical_id(serviceTemplate)
+        )
 
     def get_service_templates(self) -> Optional[list[ServiceTemplateCfg]]:
         """
@@ -1457,11 +1528,7 @@ class ConfigMng:
 
         :return: A list of all service templates.
         """
-        templates = list(self.config.service_templates or [])
-        if self.pluginRuntimeMng is not None:
-            templates.extend(
-                self.pluginRuntimeMng.registry.service_templates.values()
-            )
+        templates = list(self.get_service_template_registry().values())
         return templates or None
 
     def get_resource_templates(self, resource_type: str) -> list[str]:

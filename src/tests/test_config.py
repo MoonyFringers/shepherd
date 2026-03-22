@@ -17,6 +17,7 @@
 
 
 import os
+from copy import deepcopy
 from unittest.mock import mock_open
 
 import pytest
@@ -25,7 +26,27 @@ from pytest_mock import MockerFixture
 from test_util import read_fixture
 
 from config import Config, ConfigMng, parse_config, parse_plugin_descriptor
+from docker import DockerComposeEnv, DockerComposeSvc
+from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from util import Constants
+
+
+def _load_config_manager(mocker: MockerFixture) -> ConfigMng:
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd.yaml")
+
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+
+    cMng = ConfigMng(".shpd.conf")
+    cMng.load()
+    return cMng
 
 
 @pytest.mark.cfg
@@ -206,6 +227,63 @@ def test_load_config(mocker: MockerFixture):
     }
     assert config.envs[0].status.active is True
     assert config.envs[0].status.rendered_config is None
+
+
+@pytest.mark.cfg
+def test_core_canonical_template_lookup(mocker: MockerFixture):
+    cMng = _load_config_manager(mocker)
+
+    env_template = cMng.get_environment_template("default")
+    assert env_template is not None
+    assert cMng.get_environment_template("core/default") == env_template
+
+    svc_template = cMng.get_service_template("oracle")
+    assert svc_template is not None
+    assert cMng.get_service_template("core/oracle") == svc_template
+
+    assert cMng.get_service_template_path("oracle") == os.path.join(
+        cMng.config.templates_path,
+        Constants.SVC_TEMPLATES_DIR,
+        "oracle",
+    )
+    assert cMng.get_service_template_path("core/oracle") == os.path.join(
+        cMng.config.templates_path,
+        Constants.SVC_TEMPLATES_DIR,
+        "oracle",
+    )
+
+
+@pytest.mark.cfg
+def test_core_canonical_factory_dispatch(mocker: MockerFixture):
+    cMng = _load_config_manager(mocker)
+    svc_factory = ShpdServiceFactory(cMng)
+    env_factory = ShpdEnvironmentFactory(cMng, svc_factory)
+
+    env_template = deepcopy(cMng.get_environment_template("default"))
+    assert env_template is not None
+    env_template.factory = cMng.get_canonical_env_factory_id(
+        Constants.ENV_FACTORY_DEFAULT
+    )
+
+    service_template = cMng.get_service_template("oracle")
+    assert service_template is not None
+    service_cfg = cMng.svc_cfg_from_service_template(
+        service_template, "svc-core", None
+    )
+    service_cfg.factory = cMng.get_canonical_svc_factory_id(
+        Constants.SVC_FACTORY_DEFAULT
+    )
+
+    env_cfg = deepcopy(cMng.config.envs[0])
+
+    assert isinstance(
+        env_factory.new_environment(env_template, "sample-core"),
+        DockerComposeEnv,
+    )
+    assert isinstance(
+        svc_factory.new_service_from_cfg(env_cfg, service_cfg),
+        DockerComposeSvc,
+    )
 
 
 @pytest.mark.cfg
