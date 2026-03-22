@@ -15,6 +15,28 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from .plugin import PluginMng
+"""Public plugin APIs shared by the CLI bootstrap and external plugins."""
 
-__all__ = ["PluginMng"]
+from .plugin import PluginMng
+from .runtime import (
+    LoadedPlugin,
+    PluginCommandSpec,
+    PluginCompletionSpec,
+    PluginFactorySpec,
+    PluginRegistry,
+    PluginRuntimeMng,
+    PluginTemplateSpec,
+    ShepherdPlugin,
+)
+
+__all__ = [
+    "LoadedPlugin",
+    "PluginCommandSpec",
+    "PluginCompletionSpec",
+    "PluginFactorySpec",
+    "PluginMng",
+    "PluginRegistry",
+    "PluginRuntimeMng",
+    "PluginTemplateSpec",
+    "ShepherdPlugin",
+]
