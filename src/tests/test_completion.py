@@ -73,7 +73,7 @@ def test_completion_no_args(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions([])
     assert completions == sm.completionMng.SCOPES, "Expected scopes only"
 
@@ -84,7 +84,7 @@ def test_completion_global_flags_prefix(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["--q"])
     assert completions == ["--quiet"], "Expected filtered global flag"
 
@@ -97,7 +97,7 @@ def test_completion_scope_prefix_does_not_suggest_root_flags(
     mocker: MockerFixture,
     args: list[str],
 ):
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(args)
     assert completions == [], "Expected no root flags after choosing a scope"
 
@@ -115,7 +115,7 @@ def test_completion_add(
     shpd_config = read_fixture("completion", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["env"])
     assert (
         completions == sm.completionMng.SCOPE_VERBS["env"]
@@ -128,7 +128,7 @@ def test_completion_plugin_scope(
     runner: CliRunner,
     mocker: MockerFixture,
 ):
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["plugin"])
     assert (
         completions == sm.completionMng.SCOPE_VERBS["plugin"]
@@ -156,7 +156,7 @@ def test_completion_plugin_id_verbs(
     shpd_yaml = shpd_path / ".shpd.yaml"
     _write_completion_config_with_plugins(shpd_yaml)
 
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(args)
     assert completions == [
         "acme",
@@ -175,7 +175,7 @@ def test_completion_plugin_id_prefix(
     shpd_yaml = shpd_path / ".shpd.yaml"
     _write_completion_config_with_plugins(shpd_yaml)
 
-    sm = ShepherdMng()
+    sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["plugin", "get", "ac"])
     assert completions == [
         "acme",

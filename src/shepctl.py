@@ -28,7 +28,7 @@ from completion import CompletionMng
 from config import ConfigMng, EnvironmentCfg
 from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
-from plugin import PluginMng
+from plugin import PluginMng, PluginRuntimeMng
 from service import ServiceMng
 from util import Util, setup_logging
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
@@ -40,9 +40,19 @@ class ShepherdMng:
 
     The click context stores one instance per invocation so command handlers
     share the same loaded config and CLI flags.
+
+    `load_runtime_plugins` keeps the bootstrap split explicit:
+    normal commands eagerly load enabled plugins and fail fast on runtime
+    errors, while the administrative `plugin` scope and raw completion entry
+    point can opt into the safe path that skips external plugin imports.
     """
 
-    def __init__(self, cli_flags: dict[str, Any] = {}):
+    def __init__(
+        self,
+        cli_flags: dict[str, Any] = {},
+        *,
+        load_runtime_plugins: bool = True,
+    ):
         shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
         self.configMng = ConfigMng(shpd_conf)
         setup_logging(
@@ -72,6 +82,9 @@ class ShepherdMng:
             self.cli_flags, self.configMng, self.svcFactory
         )
         self.pluginMng = PluginMng(self.cli_flags, self.configMng)
+        self.pluginRuntimeMng: Optional[PluginRuntimeMng] = None
+        if load_runtime_plugins:
+            self.pluginRuntimeMng = PluginRuntimeMng(self.configMng)
 
 
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -123,7 +136,11 @@ def cli(
     }
 
     if ctx.obj is None:
-        ctx.obj = ShepherdMng(cli_flags)
+        ctx.obj = ShepherdMng(
+            cli_flags,
+            load_runtime_plugins=ctx.invoked_subcommand
+            not in {"plugin", "__complete"},
+        )
 
 
 @cli.command(name="test", hidden=True)

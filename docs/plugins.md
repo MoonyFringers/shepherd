@@ -8,9 +8,12 @@ The current implementation scope is limited to:
 - plugin inventory persisted in the main Shepherd config
 - managed plugin installation directory layout
 - plugin lifecycle commands for install, inspect, enable, disable, and remove
+- runtime loading of enabled plugins via `importlib`
+- in-memory registries for plugin commands, completion providers, templates,
+  and factories
 
-Runtime loading, command extension, completion extension, and factory/template
-registration are introduced in later steps of the plugin rollout.
+CLI command injection, completion consumption, and template or factory
+execution still land in later steps of the plugin rollout.
 
 For the architectural rationale and staged implementation plan, see
 [ADR 0004](decisions/0004-plugin-architecture-and-rollout-plan.md).
@@ -126,18 +129,64 @@ The descriptor parser validates:
 - capability values as actual booleans
 
 Invalid descriptors fail validation early, before runtime plugin loading is
-introduced.
+attempted.
+
+## Runtime Loading
+
+Enabled plugins are now loaded eagerly during normal startup:
+
+1. Shepherd reads enabled plugin entries from the main config.
+2. It derives each managed install directory from `~/.shpd/plugins/<plugin-id>/`.
+3. It validates the installed `plugin.yaml`.
+4. It imports the declared entrypoint with `importlib`.
+5. It instantiates the root plugin object and registers the contributed
+   runtime metadata.
+
+Normal commands fail fast if an enabled plugin is missing, invalid, or cannot
+be imported.
+
+The `plugin` management scope keeps a safe bootstrap path and does not import
+enabled external plugins before running:
+
+- `shepctl plugin list`
+- `shepctl plugin get <plugin-id>`
+- `shepctl plugin install <archive>`
+- `shepctl plugin enable <plugin-id>`
+- `shepctl plugin disable <plugin-id>`
+- `shepctl plugin remove <plugin-id>`
+
+This keeps recovery commands available even if one enabled plugin is broken.
+
+## Runtime Registries
+
+The loader now builds in-memory registries for:
+
+- loaded plugin metadata
+- scope and verb contributions
+- completion providers
+- environment templates
+- service templates
+- environment factories
+- service factories
+
+Template and factory ids are canonicalized under the plugin namespace:
+
+- templates: `plugin-id/template-id`
+- factories: `plugin-id/factory-id`
+
+These registries are currently validated and populated at startup. They are not
+yet consumed by the CLI, completion engine, or env and service factory flows.
 
 ## Scope Of This Step
 
 This documentation matches the current implementation step. At this stage,
 Shepherd does not yet:
 
-- import plugin Python entrypoints with `importlib`
 - load plugin commands into the CLI
 - load plugin completion providers
-- register plugin factories or templates at runtime
+- execute plugin factories or plugin-owned templates through env and svc flows
 
-Plugin archive installation and persisted inventory management are available
-now. Runtime loading and extension points are added in follow-up PRs from the
-plugin rollout plan.
+Plugin archive installation, persisted inventory management, and runtime loader
+bootstrap are available now. Command wiring, completion execution, and factory
+or template consumption are added in follow-up PRs from the plugin rollout
+plan.

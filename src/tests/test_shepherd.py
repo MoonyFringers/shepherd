@@ -121,7 +121,8 @@ def test_cli_flags_no_flags(
             "show_commands": False,
             "show_commands_limit": 5,
             "yes": False,
-        }
+        },
+        load_runtime_plugins=True,
     )
 
 
@@ -143,12 +144,12 @@ def test_cli_flags_verbose(
     }
 
     assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
+    mock_init.assert_called_once_with(flags, load_runtime_plugins=True)
 
     result = runner.invoke(cli, ["-v", "test"])
 
     assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
+    mock_init.assert_called_with(flags, load_runtime_plugins=True)
 
 
 @pytest.mark.shpd
@@ -169,12 +170,48 @@ def test_cli_flags_yes(
     }
 
     assert result.exit_code == 0
-    mock_init.assert_called_once_with(flags)
+    mock_init.assert_called_once_with(flags, load_runtime_plugins=True)
 
     result = runner.invoke(cli, ["-y", "test"])
 
     assert result.exit_code == 0
-    mock_init.assert_called_with(flags)
+    mock_init.assert_called_with(flags, load_runtime_plugins=True)
+
+
+@pytest.mark.shpd
+def test_cli_plugin_scope_uses_safe_bootstrap(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    def fake_init(
+        self: ShepherdMng,
+        cli_flags: dict[str, object],
+        *,
+        load_runtime_plugins: bool,
+    ) -> None:
+        self.pluginMng = mocker.Mock()
+
+    mock_init = mocker.patch.object(
+        ShepherdMng,
+        "__init__",
+        autospec=True,
+        side_effect=fake_init,
+    )
+
+    result = runner.invoke(cli, ["plugin", "list"])
+
+    assert result.exit_code == 0
+    mock_init.assert_called_once_with(
+        mocker.ANY,
+        {
+            "verbose": False,
+            "quiet": False,
+            "details": False,
+            "show_commands": False,
+            "show_commands_limit": 5,
+            "yes": False,
+        },
+        load_runtime_plugins=False,
+    )
 
 
 @pytest.mark.shpd
