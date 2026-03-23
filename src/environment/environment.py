@@ -49,7 +49,11 @@ from .render import (
     format_service_gate_glyphs,
     render_env_summary,
 )
-from .status_wait import WaitForEnvStateHooks, wait_for_env_state
+from .status_wait import (
+    WaitForEnvStateHooks,
+    wait_for_env_state,
+    watch_probe_state,
+)
 
 DEFAULT_STATUS_POLL_SECONDS = 1.0
 
@@ -875,8 +879,31 @@ class EnvironmentMng:
         results: list[ProbeRunResult],
         *,
         title: str,
+        probe_error: Optional[dict[str, str]] = None,
     ):
-        return build_probe_status_tree(results, title=title)
+        return build_probe_status_tree(
+            results, title=title, probe_error=probe_error
+        )
+
+    def watch_probes(
+        self,
+        envCfg: EnvironmentCfg,
+        probe_tag: Optional[str],
+        poll_seconds: int = 5,
+    ) -> None:
+        """Continuously run probes and render results until interrupted."""
+        env = self.get_environment_from_cfg(envCfg)
+        if not env.envCfg.status.rendered_config:
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+        title = f"[white]{envCfg.tag}[/white] probes"
+        watch_probe_state(
+            env,
+            probe_tag=probe_tag,
+            title=title,
+            poll_seconds=poll_seconds,
+        )
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""

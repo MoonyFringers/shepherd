@@ -476,11 +476,36 @@ def _flash_markup(markup: str) -> str:
     return f"[bold black on white]{plain}[/bold black on white]"
 
 
+def build_probe_error_from_results(
+    results: Sequence[ProbeRunResultLike],
+) -> Optional[dict[str, str]]:
+    """Build an error panel dict from the first failed or timed-out probe."""
+    for r in results:
+        if r.exit_code == 0 and not r.timed_out:
+            continue
+        parts: list[str] = []
+        if r.timed_out:
+            parts.append("[yellow]Probe timed out.[/yellow]")
+        if r.stdout and r.stdout.strip():
+            parts.append(f"--- stdout ---\n{r.stdout.strip()}")
+        if r.stderr and r.stderr.strip():
+            parts.append(f"--- stderr ---\n{r.stderr.strip()}")
+        if not parts:
+            return None
+        label = "timed out" if r.timed_out else "failed"
+        return {
+            "title": f"Probe '{r.tag}' {label}",
+            "body": "\n".join(parts),
+        }
+    return None
+
+
 def build_probe_status_tree(
     results: Sequence[ProbeRunResultLike],
     *,
     title: str,
     flashing_summary_keys: Optional[set[str]] = None,
+    probe_error: Optional[dict[str, str]] = None,
 ) -> Any:
     """Render probe check results as a tree of color-coded probe tags."""
     tree = Tree(title, guide_style="dim")
@@ -488,9 +513,13 @@ def build_probe_status_tree(
         key = probe_status_key(r)
         color = probe_status_color_tag(key)
         tree.add(f"[{color}]{r.tag}[/{color}]")
+    extras: list[Any] = []
+    if probe_error:
+        extras.append(build_command_error_panel(probe_error, None))
     return build_tree_summary_group(
         tree,
         build_probe_status_summary(results),
+        extras=extras,
         flashing_summary_keys=flashing_summary_keys,
     )
 

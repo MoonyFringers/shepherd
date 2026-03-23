@@ -735,6 +735,12 @@ def get_probe(
 @probe.command(name="check")
 @click.argument("probe_tag", required=False)
 @click.option("-a", "--all", is_flag=True, help="Check all probes.")
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help="Continuously re-run probes and keep the display updated.",
+)
 @click.pass_obj
 @require_active_env
 def check_probe(
@@ -742,10 +748,14 @@ def check_probe(
     envCfg: EnvironmentCfg,
     probe_tag: Optional[str],
     all: bool,
+    watch: bool,
 ):
     """Run probe checks and return a process exit code based on results."""
     if all:
         probe_tag = None
+    if watch:
+        shepherd.environmentMng.watch_probes(envCfg, probe_tag)
+        return
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
     exit(exit_code)
 

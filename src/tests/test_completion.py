@@ -1269,3 +1269,15 @@ def test_completion_env_up_shows_keep_output_flag(
     sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["env", "up", ""])
     assert "--keep-output" in completions
+
+
+@pytest.mark.compl
+def test_completion_probe_check_shows_watch_flag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["probe", "check", ""])
+    assert "-w" in completions
+    assert "--watch" in completions

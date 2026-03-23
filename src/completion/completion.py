@@ -126,7 +126,10 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-r", "--resolved")),
             OptionSpec(tokens=("--details",)),
         ),
-        ("probe", "check"): (OptionSpec(tokens=("-a", "--all")),),
+        ("probe", "check"): (
+            OptionSpec(tokens=("-a", "--all")),
+            OptionSpec(tokens=("-w", "--watch")),
+        ),
         ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
     }
 

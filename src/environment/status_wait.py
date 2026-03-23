@@ -27,7 +27,11 @@ from rich.live import Live
 from rich.markup import escape
 from rich.text import Text
 
-from environment.render import build_env_status_summary
+from environment.render import (
+    build_env_status_summary,
+    build_probe_error_from_results,
+    build_probe_status_tree,
+)
 from util.util import Util
 
 GroupedStatus: TypeAlias = dict[str, list[list[str]]]
@@ -723,3 +727,44 @@ def wait_for_env_state(
         finally:
             stop_polling.set()
             poll_thread.join(timeout=1.0)
+
+
+def watch_probe_state(
+    env: Any,
+    *,
+    probe_tag: Optional[str],
+    title: str,
+    poll_seconds: int = 5,
+) -> None:
+    """
+    Continuously run probes and render results via a Rich Live display.
+
+    Runs until the user interrupts with Ctrl+C. On each cycle probes are
+    executed synchronously and the display is refreshed with the latest
+    results. If any probe fails or times out, its output is shown in a
+    red error panel below the probe tree.
+    """
+    with Live(
+        refresh_per_second=4,
+        console=Util.console,
+        transient=True,
+        screen=False,
+    ) as live:
+        try:
+            while True:
+                results = env.check_probes(
+                    probe_tag=probe_tag,
+                    fail_fast=False,
+                    timeout_seconds=120,
+                )
+                probe_error = build_probe_error_from_results(results)
+                live.update(
+                    build_probe_status_tree(
+                        results,
+                        title=title,
+                        probe_error=probe_error,
+                    )
+                )
+                time.sleep(poll_seconds)
+        except KeyboardInterrupt:
+            pass

@@ -1291,3 +1291,37 @@ def test_cli_check_probe_flag_all_with_probe_tag(
     result = runner.invoke(cli, ["probe", "check", "db-ready", "--all"])
     assert result.exit_code == 0
     check_probes.assert_called_once()
+
+
+@pytest.mark.shpd
+def test_cli_check_probe_watch(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    watch_probes = mocker.patch.object(EnvironmentMng, "watch_probes")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["probe", "check", "--watch"])
+    assert result.exit_code == 0
+    watch_probes.assert_called_once()
+    _, probe_tag = watch_probes.call_args.args
+    assert probe_tag is None
+
+
+@pytest.mark.shpd
+def test_cli_check_probe_watch_with_probe_tag(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    watch_probes = mocker.patch.object(EnvironmentMng, "watch_probes")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["probe", "check", "db-ready", "--watch"])
+    assert result.exit_code == 0
+    watch_probes.assert_called_once()
+    _, probe_tag = watch_probes.call_args.args
+    assert probe_tag == "db-ready"
