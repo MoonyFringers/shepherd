@@ -21,7 +21,6 @@ from typing import Any, override
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from docker import DockerComposeSvc
 from service import Service, ServiceFactory
-from util import Constants
 
 
 class ShpdServiceFactory(ServiceFactory):
@@ -46,24 +45,20 @@ class ShpdServiceFactory(ServiceFactory):
         Instantiate a concrete service implementation for the configured
         backend.
         """
-        match svcCfg.factory:
-            case Constants.SVC_FACTORY_DEFAULT:
-                return DockerComposeSvc(
-                    self.configMng, envCfg, svcCfg, cli_flags=cli_flags
-                )
-            case _:
-                plugin_runtime_mng = self.configMng.pluginRuntimeMng
-                if plugin_runtime_mng is None:
-                    raise ValueError(
-                        f"Unknown service factory: {svcCfg.factory}"
-                    )
-                plugin_factory = plugin_runtime_mng.build_service_factory(
-                    svcCfg.factory, self.configMng
-                )
-                if plugin_factory is None:
-                    raise ValueError(
-                        f"Unknown service factory: {svcCfg.factory}"
-                    )
-                return plugin_factory.new_service_from_cfg(
-                    envCfg, svcCfg, cli_flags=cli_flags
-                )
+        if self.configMng.is_core_svc_factory_id(svcCfg.factory):
+            return DockerComposeSvc(
+                self.configMng, envCfg, svcCfg, cli_flags=cli_flags
+            )
+
+        plugin_runtime_mng = self.configMng.pluginRuntimeMng
+        if plugin_runtime_mng is None:
+            raise ValueError(f"Unknown service factory: {svcCfg.factory}")
+        plugin_factory = plugin_runtime_mng.build_service_factory(
+            self.configMng.get_canonical_svc_factory_id(svcCfg.factory),
+            self.configMng,
+        )
+        if plugin_factory is None:
+            raise ValueError(f"Unknown service factory: {svcCfg.factory}")
+        return plugin_factory.new_service_from_cfg(
+            envCfg, svcCfg, cli_flags=cli_flags
+        )

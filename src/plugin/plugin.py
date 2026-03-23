@@ -98,6 +98,7 @@ class PluginMng:
             self._extract_plugin_archive(archive_path, extracted_dir)
             descriptor_path = self._find_descriptor_path(extracted_dir)
             descriptor = self._load_descriptor(descriptor_path)
+            self._validate_reserved_plugin_id(descriptor.id)
 
             if self.configMng.get_plugin(descriptor.id) is not None:
                 Util.print_error_and_die(
@@ -146,6 +147,13 @@ class PluginMng:
                 f"Invalid plugin descriptor '{descriptor_path}': {exc}"
             )
             raise AssertionError("unreachable")
+
+    def _validate_reserved_plugin_id(self, plugin_id: str) -> None:
+        """Reject plugin ids reserved for internal canonical namespaces."""
+        if plugin_id == self.configMng.constants.CORE_PLUGIN_ID:
+            Util.print_error_and_die(
+                f"Plugin id '{plugin_id}' is reserved for core resources."
+            )
 
     def _find_descriptor_path(self, extracted_dir: str) -> str:
         descriptor_name = self.configMng.constants.PLUGIN_DESCRIPTOR_FILE

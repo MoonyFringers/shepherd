@@ -423,6 +423,31 @@ def test_normal_startup_fails_for_missing_enabled_plugin(
 
 
 @pytest.mark.shpd
+def test_normal_startup_rejects_reserved_core_plugin_id(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path, plugin_id="core")
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "core",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "Plugin id 'core' is reserved" in result.output
+
+
+@pytest.mark.shpd
 def test_startup_fails_for_plugin_command_collision(
     shpd_conf: tuple[Path, Path], mocker: MockerFixture
 ):

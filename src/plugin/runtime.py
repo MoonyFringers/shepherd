@@ -211,6 +211,11 @@ class PluginRuntimeMng:
         self, plugin_cfg: PluginCfg, descriptor: PluginDescriptorCfg
     ) -> None:
         """Reject stale or incompatible installed plugin metadata."""
+        if descriptor.id == self.configMng.constants.CORE_PLUGIN_ID:
+            Util.print_error_and_die(
+                f"Plugin id '{descriptor.id}' is reserved for core "
+                "resources."
+            )
         if descriptor.id != plugin_cfg.id:
             Util.print_error_and_die(
                 f"Installed plugin '{plugin_cfg.id}' has descriptor id "

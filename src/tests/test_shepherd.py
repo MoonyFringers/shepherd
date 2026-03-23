@@ -701,6 +701,25 @@ capabilities:
 
 
 @pytest.mark.shpd
+def test_cli_plugin_install_rejects_reserved_core_plugin_id(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_plugins(shpd_yaml)
+
+    archive_path = shpd_path / "core-plugin.tar.gz"
+    _write_plugin_archive(archive_path, plugin_id="core")
+
+    result = runner.invoke(cli, ["plugin", "install", str(archive_path)])
+
+    assert result.exit_code == 1
+    assert "Plugin id 'core' is reserved" in result.output
+    assert not (shpd_path / "plugins" / "core").exists()
+
+
+@pytest.mark.shpd
 def test_cli_get_svc_without_output_describes_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):
