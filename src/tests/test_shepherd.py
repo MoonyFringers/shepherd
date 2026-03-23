@@ -929,7 +929,7 @@ def test_cli_start_env(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
-        mocker.ANY, timeout_seconds=60, watch=False
+        mocker.ANY, timeout_seconds=60, watch=False, keep_output=False
     )
 
 
@@ -947,7 +947,7 @@ def test_cli_start_env_watch(
     result = runner.invoke(cli, ["env", "up", "--watch"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
-        mocker.ANY, timeout_seconds=60, watch=True
+        mocker.ANY, timeout_seconds=60, watch=True, keep_output=False
     )
 
 
@@ -968,6 +968,7 @@ def test_cli_start_env_with_timeout(
     assert mock_start.call_args.kwargs == {
         "timeout_seconds": 30,
         "watch": False,
+        "keep_output": False,
     }
 
 

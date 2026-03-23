@@ -190,7 +190,7 @@ class Environment(ABC):
                             break
                     time.sleep(1.0)
                     continue
-        except NonRecoverableStartError as e:
+        except NonRecoverableStartError:
             try:
                 self.stop()
             except BaseException:
@@ -198,11 +198,7 @@ class Environment(ABC):
                     "Failed rollback stop after start failure for env '%s'",
                     self.envCfg.tag,
                 )
-            message = (
-                str(e)
-                or "Environment start failed due to a non-recoverable error."
-            )
-            Util.print_error_and_die(message)
+            raise
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""
@@ -744,6 +740,7 @@ class EnvironmentMng:
         envCfg: EnvironmentCfg,
         timeout_seconds: Optional[int] = 60,
         watch: bool = False,
+        keep_output: bool = False,
     ):
         """Start an environment."""
         if timeout_seconds is not None and timeout_seconds < 0:
@@ -751,12 +748,21 @@ class EnvironmentMng:
                 "Timeout must be greater than or equal to 0."
             )
         env = self.get_environment_from_cfg(envCfg)
-        self.wait_for_env_up(
-            env,
-            timeout_seconds=timeout_seconds,
-            start_action=lambda: env.start(timeout_seconds=timeout_seconds),
-            watch_after=watch,
-        )
+        try:
+            self.wait_for_env_up(
+                env,
+                timeout_seconds=timeout_seconds,
+                start_action=lambda: env.start(timeout_seconds=timeout_seconds),
+                watch_after=watch,
+                keep_output=keep_output,
+            )
+        except NonRecoverableStartError as e:
+            message = (
+                str(e)
+                or "Environment start failed due to a non-recoverable error."
+            )
+            Util.print_error_and_die(message)
+            return
         Util.print(env.envCfg.tag)
 
     def stop_env(self, envCfg: EnvironmentCfg, wait: bool = True):
@@ -908,6 +914,7 @@ class EnvironmentMng:
         start_action: Optional[Callable[[], Any]] = None,
         watch_after: bool = False,
         progress_label: str = "Starting",
+        keep_output: bool = False,
     ):
         self._wait_for_env_state(
             env,
@@ -916,6 +923,7 @@ class EnvironmentMng:
             wait_until_up=True,
             watch_after=watch_after,
             progress_label=progress_label,
+            keep_output=keep_output,
         )
 
     def wait_for_env_down(
@@ -941,6 +949,7 @@ class EnvironmentMng:
         wait_until_up: bool,
         watch_after: bool = False,
         progress_label: str = "Starting",
+        keep_output: bool = False,
     ):
         hooks = WaitForEnvStateHooks(
             status_poll_seconds=self._status_poll_seconds,
@@ -958,6 +967,7 @@ class EnvironmentMng:
             wait_until_up=wait_until_up,
             watch_after=watch_after,
             progress_label=progress_label,
+            keep_output=keep_output,
             hooks=hooks,
         )
 

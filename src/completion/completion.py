@@ -82,6 +82,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
             OptionSpec(tokens=("--timeout",), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
+            OptionSpec(tokens=("--keep-output",)),
         ),
         ("env", "halt"): (OptionSpec(tokens=("--no-wait",)),),
         ("env", "reload"): (

@@ -420,6 +420,15 @@ def list(shepherd: ShepherdMng):
     is_flag=True,
     help="Keep updating the output until interrupted.",
 )
+@click.option(
+    "--keep-output",
+    is_flag=True,
+    help=(
+        "On start failure, preserve the status display and keep "
+        "updating it until interrupted. Useful with --show-commands "
+        "to inspect the command log after an init script error."
+    ),
+)
 @click.pass_obj
 @require_active_env
 def up_env(
@@ -429,11 +438,12 @@ def up_env(
     show_commands_limit: int,
     timeout: Optional[int],
     watch: bool,
+    keep_output: bool,
 ):
     """Start environment."""
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.start_env(
-        envCfg, timeout_seconds=timeout, watch=watch
+        envCfg, timeout_seconds=timeout, watch=watch, keep_output=keep_output
     )
 
 

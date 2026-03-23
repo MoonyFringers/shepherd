@@ -167,6 +167,7 @@ def wait_for_env_state(
     wait_until_up: bool,
     watch_after: bool,
     progress_label: str = "Starting",
+    keep_output: bool = False,
     *,
     hooks: WaitForEnvStateHooks,
 ) -> None:
@@ -582,7 +583,14 @@ def wait_for_env_state(
         seen_snapshot_revision: int = -1
         try:
             while True:
-                raise_action_error()
+                if action_error is not None:
+                    # Preserve the last rendered state so the user can
+                    # read the command log and error context after exit.
+                    live.transient = False
+                    if not keep_output:
+                        raise action_error
+                    # keep_output: keep the display live until Ctrl+C so
+                    # the user can inspect the command log at leisure.
                 if poll_error is not None:
                     raise poll_error
                 with snapshot_lock:
