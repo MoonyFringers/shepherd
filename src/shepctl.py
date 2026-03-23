@@ -408,9 +408,10 @@ def list(shepherd: ShepherdMng):
     help="Number of recent commands to display.",
 )
 @click.option(
+    "-t",
     "--timeout",
     type=int,
-    default=60,
+    default=120,
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )

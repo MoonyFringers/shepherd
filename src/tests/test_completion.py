@@ -561,6 +561,7 @@ def test_completion_start_env(
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
+        "-t",
         "--timeout",
         "-w",
         "--watch",
