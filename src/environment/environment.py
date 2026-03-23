@@ -407,17 +407,17 @@ class Environment(ABC):
         )
 
         for service in self.services:
+            if not self.configMng.get_service_template(service.svcCfg.template):
+                Util.print_error_and_die(
+                    f"Service Template: '{service.svcCfg.template}' "
+                    f"does not exist."
+                )
             if svc_t_path := self.configMng.get_service_template_path(
                 service.svcCfg.template
             ):
                 Util.copy_dir(
                     svc_t_path,
                     os.path.join(self.get_path(), service.svcCfg.tag),
-                )
-            else:
-                Util.print_error_and_die(
-                    f"Service Template: '{service.svcCfg.template}' "
-                    f"does not exist."
                 )
 
         self.sync_config()
