@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import subprocess
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -640,8 +642,81 @@ class EnvironmentMng:
                     return
 
             env = self.envFactory.new_environment_cfg(envCfg)
-            env.delete()
+            self._delete_environment_dir(env.get_path())
+            self.configMng.remove_environment(env.envCfg.tag)
             Util.print(env.envCfg.tag)
+
+    def _delete_environment_dir(self, env_dir: str) -> None:
+        """Delete one environment directory with optional sudo retry."""
+        try:
+            shutil.rmtree(env_dir)
+            return
+        except PermissionError as exc:
+            if not self._can_retry_delete_with_sudo():
+                Util.print_error_and_die(
+                    f"Failed to remove directory: {env_dir}\nError: {exc}"
+                )
+            if not Util.confirm(
+                "Permission denied while deleting environment files. "
+                "Retry with elevated privileges using sudo?"
+            ):
+                Util.print_error_and_die(
+                    f"Failed to remove directory: {env_dir}\nError: {exc}"
+                )
+            self._delete_dir_with_sudo(env_dir)
+            return
+        except OSError as exc:
+            Util.print_error_and_die(
+                f"Failed to remove directory: {env_dir}\nError: {exc}"
+            )
+
+    def _can_retry_delete_with_sudo(self) -> bool:
+        """Return true when a sudo retry can be offered on this host.
+
+        Only POSIX systems with sudo available support the elevated-permission
+        retry path. Windows is excluded both because sudo does not exist there
+        and because Docker Desktop on Windows manages bind-mount paths inside
+        a WSL2/Hyper-V VM, so the root-owned file problem does not arise on
+        the host filesystem.
+        """
+        return os.name == "posix" and shutil.which("sudo") is not None
+
+    def _delete_dir_with_sudo(self, env_dir: str) -> None:
+        """Delete one environment directory using a two-step elevated approach.
+
+        Rather than running `sudo rm -rf` directly, we use sudo only to
+        transfer ownership of the directory tree to the current user
+        (`sudo chown -R <uid>:<gid>`), then let the Python process remove the
+        tree with `shutil.rmtree`. This limits the blast radius of the
+        elevated call: sudo only touches ownership on a Shepherd-managed path
+        and rm never runs as root.
+
+        Note: `chmod u+rwX` is not sufficient here because `u` refers to the
+        owner of each file (typically root when Docker writes bind-mount
+        volumes), not to the current user. Transferring ownership is the
+        correct fix.
+        """
+        uid = os.getuid()
+        gid = os.getgid()
+        chown_result = subprocess.run(
+            ["sudo", "chown", "-R", f"{uid}:{gid}", env_dir],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if chown_result.returncode != 0:
+            stderr = (chown_result.stderr or "").strip()
+            Util.print_error_and_die(
+                "Failed to transfer ownership with sudo: "
+                f"{env_dir}" + (f"\nError: {stderr}" if stderr else "")
+            )
+        try:
+            shutil.rmtree(env_dir)
+        except OSError as exc:
+            Util.print_error_and_die(
+                f"Failed to remove directory after sudo chown: "
+                f"{env_dir}\nError: {exc}"
+            )
 
     def list_envs(self):
         """List all available environments."""

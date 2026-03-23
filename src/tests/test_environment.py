@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -249,6 +250,74 @@ def test_delete_env_no(
     assert os.path.exists(
         env_dir
     ), f"directory {env_dir} does not exist after delete-no."
+
+
+@pytest.mark.env
+def test_delete_env_permission_denied_retry_with_sudo(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    result = runner.invoke(cli, ["env", "add", "default", "test-perm-1"])
+    assert result.exit_code == 0
+
+    mocker.patch("builtins.input", side_effect=["y", "y"])
+    mocker.patch(
+        "environment.environment.shutil.rmtree",
+        side_effect=[
+            PermissionError(13, "Permission denied", "data"),
+            None,
+        ],
+    )
+    mocker.patch(
+        "environment.environment.shutil.which", return_value="/usr/bin/sudo"
+    )
+    mock_run = mocker.patch(
+        "environment.environment.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["sudo", "chown", "-R", "1000:1000", "/tmp/x"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "delete", "test-perm-1"])
+    assert result.exit_code == 0
+    assert "test-perm-1" in result.output
+
+    sm = ShepherdMng()
+    assert sm.configMng.get_environment("test-perm-1") is None
+    mock_run.assert_called_once()
+    assert mock_run.call_args[0][0][:3] == ["sudo", "chown", "-R"]
+
+
+@pytest.mark.env
+def test_delete_env_permission_denied_retry_declined(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    result = runner.invoke(cli, ["env", "add", "default", "test-perm-2"])
+    assert result.exit_code == 0
+
+    mocker.patch("builtins.input", side_effect=["y", "n"])
+    mocker.patch(
+        "environment.environment.shutil.rmtree",
+        side_effect=PermissionError(13, "Permission denied", "data"),
+    )
+    mocker.patch(
+        "environment.environment.shutil.which", return_value="/usr/bin/sudo"
+    )
+    mock_run = mocker.patch("environment.environment.subprocess.run")
+
+    result = runner.invoke(cli, ["env", "delete", "test-perm-2"])
+    assert result.exit_code == 1
+    assert "Failed to remove directory" in result.output
+
+    sm = ShepherdMng()
+    assert sm.configMng.get_environment("test-perm-2") is not None
+    mock_run.assert_not_called()
 
 
 @pytest.mark.env
