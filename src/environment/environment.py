@@ -42,6 +42,7 @@ from .render import (
     build_command_log_panel,
     build_env_details_tree,
     build_env_status_tree,
+    build_probe_error_from_results,
     build_probe_status_tree,
     collect_env_status,
     dump_grouped_yaml,
@@ -865,7 +866,22 @@ class EnvironmentMng:
         )
 
         title = f"[white]{envCfg.tag}[/white] probes"
-        Util.console.print(self._build_probe_status_tree(results, title=title))
+        probe_error = build_probe_error_from_results(results)
+        command_log = (
+            env.get_command_log() if env.is_command_log_enabled() else None
+        )
+        command_log_limit = (
+            env.get_command_log_limit() if command_log is not None else None
+        )
+        Util.console.print(
+            self._build_probe_status_tree(
+                results,
+                title=title,
+                probe_error=probe_error,
+                command_log=command_log,
+                command_log_limit=command_log_limit,
+            )
+        )
 
         # ---- aggregate exit code ----
         for r in results:
@@ -880,9 +896,15 @@ class EnvironmentMng:
         *,
         title: str,
         probe_error: Optional[dict[str, str]] = None,
+        command_log: Optional[list[str]] = None,
+        command_log_limit: Optional[int] = None,
     ):
         return build_probe_status_tree(
-            results, title=title, probe_error=probe_error
+            results,
+            title=title,
+            probe_error=probe_error,
+            command_log=command_log,
+            command_log_limit=command_log_limit,
         )
 
     def watch_probes(

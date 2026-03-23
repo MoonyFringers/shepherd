@@ -129,6 +129,8 @@ class CompletionMng(AbstractCompletionMng):
         ("probe", "check"): (
             OptionSpec(tokens=("-a", "--all")),
             OptionSpec(tokens=("-w", "--watch")),
+            OptionSpec(tokens=("--show-commands",)),
+            OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
         ),
         ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
     }

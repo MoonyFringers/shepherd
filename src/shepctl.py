@@ -741,6 +741,18 @@ def get_probe(
     is_flag=True,
     help="Continuously re-run probes and keep the display updated.",
 )
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent probe commands in the output panel.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.pass_obj
 @require_active_env
 def check_probe(
@@ -749,10 +761,13 @@ def check_probe(
     probe_tag: Optional[str],
     all: bool,
     watch: bool,
+    show_commands: bool,
+    show_commands_limit: int,
 ):
     """Run probe checks and return a process exit code based on results."""
     if all:
         probe_tag = None
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     if watch:
         shepherd.environmentMng.watch_probes(envCfg, probe_tag)
         return

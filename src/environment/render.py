@@ -506,6 +506,8 @@ def build_probe_status_tree(
     title: str,
     flashing_summary_keys: Optional[set[str]] = None,
     probe_error: Optional[dict[str, str]] = None,
+    command_log: Optional[list[str]] = None,
+    command_log_limit: Optional[int] = None,
 ) -> Any:
     """Render probe check results as a tree of color-coded probe tags."""
     tree = Tree(title, guide_style="dim")
@@ -514,6 +516,8 @@ def build_probe_status_tree(
         color = probe_status_color_tag(key)
         tree.add(f"[{color}]{r.tag}[/{color}]")
     extras: list[Any] = []
+    if command_log is not None and command_log_limit is not None:
+        extras.append(build_command_log_panel(command_log, command_log_limit))
     if probe_error:
         extras.append(build_command_error_panel(probe_error, None))
     return build_tree_summary_group(

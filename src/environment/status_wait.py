@@ -739,32 +739,88 @@ def watch_probe_state(
     """
     Continuously run probes and render results via a Rich Live display.
 
-    Runs until the user interrupts with Ctrl+C. On each cycle probes are
-    executed synchronously and the display is refreshed with the latest
-    results. If any probe fails or times out, its output is shown in a
-    red error panel below the probe tree.
+    Runs until the user interrupts with Ctrl+C. Checks run in a background
+    thread so the UI can animate while a check is in progress. The poll
+    interval is measured from when the previous check finished, so slow
+    probes never cause back-to-back runs. While a check is running the
+    title is animated and the error panel is hidden (it belongs to the
+    previous cycle). When command logging is enabled the recent-commands
+    panel is rendered below the probe tree.
     """
+    ui_tick_seconds = 1.0 / MIN_LIVE_REFRESH_PER_SECOND
+
+    results_lock = threading.Lock()
+    last_results: list[Any] = []
+    # 0.0 ensures the first check fires immediately on entry.
+    last_check_finished_at: list[float] = [0.0]
+    check_running = threading.Event()
+
+    def run_check() -> None:
+        results = env.check_probes(
+            probe_tag=probe_tag,
+            fail_fast=False,
+            timeout_seconds=120,
+        )
+        with results_lock:
+            last_results[:] = results
+        last_check_finished_at[0] = time.monotonic()
+        check_running.clear()
+
     with Live(
-        refresh_per_second=4,
+        refresh_per_second=MIN_LIVE_REFRESH_PER_SECOND,
         console=Util.console,
         transient=True,
         screen=False,
     ) as live:
         try:
+            tick = 0
             while True:
-                results = env.check_probes(
-                    probe_tag=probe_tag,
-                    fail_fast=False,
-                    timeout_seconds=120,
+                now = time.monotonic()
+
+                # Kick off a new check when idle and the poll interval
+                # has elapsed since the last check finished.
+                if not check_running.is_set() and (
+                    now >= last_check_finished_at[0] + poll_seconds
+                ):
+                    check_running.set()
+                    threading.Thread(target=run_check, daemon=True).start()
+
+                running = check_running.is_set()
+                with results_lock:
+                    current_results = list(last_results)
+
+                animated_title = (
+                    f"{title} " f"{render_moving_shadow_text('Checking', tick)}"
+                    if running
+                    else title
                 )
-                probe_error = build_probe_error_from_results(results)
+                # Suppress the error panel while a new check is in flight
+                # to avoid showing stale output from the previous cycle.
+                probe_error = (
+                    None
+                    if running
+                    else build_probe_error_from_results(current_results)
+                )
+                command_log = (
+                    env.get_command_log()
+                    if env.is_command_log_enabled()
+                    else None
+                )
+                command_log_limit = (
+                    env.get_command_log_limit()
+                    if command_log is not None
+                    else None
+                )
                 live.update(
                     build_probe_status_tree(
-                        results,
-                        title=title,
+                        current_results,
+                        title=animated_title,
                         probe_error=probe_error,
+                        command_log=command_log,
+                        command_log_limit=command_log_limit,
                     )
                 )
-                time.sleep(poll_seconds)
+                time.sleep(ui_tick_seconds)
+                tick += 1
         except KeyboardInterrupt:
             pass
