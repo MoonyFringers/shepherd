@@ -776,10 +776,16 @@ def get_plugin(shepherd: ShepherdMng, plugin_id: str, output: str):
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Replace an already-installed plugin.",
+)
 @click.pass_obj
-def install_plugin(shepherd: ShepherdMng, archive_path: str):
+def install_plugin(shepherd: ShepherdMng, archive_path: str, force: bool):
     """Install a plugin archive into the managed plugin root."""
-    shepherd.pluginMng.install_plugin(archive_path)
+    shepherd.pluginMng.install_plugin(archive_path, force=force)
 
 
 @plugin.command(name="enable")

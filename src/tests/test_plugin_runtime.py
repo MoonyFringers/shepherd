@@ -19,6 +19,8 @@ from __future__ import annotations
 
 import os
 import shutil
+import tarfile
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -54,6 +56,32 @@ def _write_plugin_inventory(
     shpd_config = yaml.safe_load(read_fixture("shpd", "shpd.yaml"))
     shpd_config["plugins"] = plugins
     config_path.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+
+def _make_plugin_archive(
+    plugin_id: str = "runtime-plugin",
+    version: str = "1.0.0",
+) -> str:
+    fixture_root = (
+        Path(__file__).resolve().parent
+        / "fixtures"
+        / "plugins"
+        / "runtime_plugin"
+    )
+    tmp_dir = tempfile.mkdtemp()
+    plugin_copy = os.path.join(tmp_dir, plugin_id)
+    shutil.copytree(fixture_root, plugin_copy)
+
+    descriptor_path = os.path.join(plugin_copy, "plugin.yaml")
+    descriptor = yaml.safe_load(Path(descriptor_path).read_text())
+    descriptor["id"] = plugin_id
+    descriptor["version"] = version
+    Path(descriptor_path).write_text(yaml.dump(descriptor, sort_keys=False))
+
+    archive_path = os.path.join(tmp_dir, f"{plugin_id}.tar.gz")
+    with tarfile.open(archive_path, "w:gz") as tar:
+        tar.add(plugin_copy, arcname=plugin_id)
+    return archive_path
 
 
 def _install_fixture_plugin(
@@ -505,3 +533,61 @@ def test_startup_fails_for_invalid_plugin_entrypoint(
 
     assert result.exit_code == 1
     assert "must implement ShepherdPlugin" in result.output
+
+
+@pytest.mark.shpd
+def test_plugin_install_rejects_duplicate_without_force(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """Installing an already-installed plugin without --force is an error."""
+    archive = _make_plugin_archive()
+    runner.invoke(cli, ["plugin", "install", archive])
+
+    result = runner.invoke(cli, ["plugin", "install", archive])
+
+    assert result.exit_code == 1
+    assert "already installed" in result.output
+    assert "--force" in result.output
+
+
+@pytest.mark.shpd
+def test_plugin_install_force_replaces_existing_plugin(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """--force replaces the plugin directory and updates the version."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    archive_v1 = _make_plugin_archive(version="1.0.0")
+    runner.invoke(cli, ["plugin", "install", archive_v1])
+
+    archive_v2 = _make_plugin_archive(version="2.0.0")
+    result = runner.invoke(cli, ["plugin", "install", "--force", archive_v2])
+
+    assert result.exit_code == 0
+    assert "installed" in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    plugin = next(p for p in stored["plugins"] if p["id"] == "runtime-plugin")
+    assert plugin["version"] == "2.0.0"
+
+
+@pytest.mark.shpd
+def test_plugin_install_force_preserves_enabled_state_and_config(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """--force keeps the existing enabled flag and user config intact."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    archive = _make_plugin_archive()
+    runner.invoke(cli, ["plugin", "install", archive])
+    runner.invoke(cli, ["plugin", "disable", "runtime-plugin"])
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    stored["plugins"][0]["config"] = {"region": "us-east-1"}
+    shpd_yaml.write_text(yaml.dump(stored, sort_keys=False))
+
+    result = runner.invoke(cli, ["plugin", "install", "--force", archive])
+
+    assert result.exit_code == 0
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    plugin = next(p for p in stored["plugins"] if p["id"] == "runtime-plugin")
+    assert plugin["enabled"] is False
+    assert plugin["config"] == {"region": "us-east-1"}

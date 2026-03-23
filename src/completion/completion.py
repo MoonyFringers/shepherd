@@ -126,6 +126,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--details",)),
         ),
         ("probe", "check"): (OptionSpec(tokens=("-a", "--all")),),
+        ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
     }
 
     def __init__(

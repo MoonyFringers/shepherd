@@ -1245,3 +1245,14 @@ def test_completion_get_probe(
         "db-live",
         "db-ready",
     ], "Expected get probe completion"
+
+
+@pytest.mark.compl
+def test_completion_plugin_install_shows_force_flag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["plugin", "install", ""])
+    assert "--force" in completions
