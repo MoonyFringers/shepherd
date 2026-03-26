@@ -92,6 +92,14 @@ class PluginMng:
         Util.print(f"Plugin '{plugin.id}' removed.")
 
     def install_plugin(self, archive_path: str, force: bool = False) -> None:
+        """Install a plugin from a tar archive.
+
+        Note: when `force=True`, the existing plugin directory and config entry
+        are removed before the new archive is installed. If the subsequent
+        `shutil.move` fails (e.g. cross-device rename), the plugin will be in a
+        torn state — removed but not replaced. In that case re-run the install
+        to recover.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             extracted_dir = os.path.join(tmp_dir, "plugin")
             os.makedirs(extracted_dir, exist_ok=True)

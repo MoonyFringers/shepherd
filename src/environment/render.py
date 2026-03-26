@@ -491,7 +491,7 @@ def build_probe_error_from_results(
         if r.stderr and r.stderr.strip():
             parts.append(f"--- stderr ---\n{r.stderr.strip()}")
         if not parts:
-            return None
+            parts.append("[dim]No output captured.[/dim]")
         label = "timed out" if r.timed_out else "failed"
         return {
             "title": f"Probe '{r.tag}' {label}",

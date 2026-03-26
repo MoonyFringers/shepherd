@@ -415,13 +415,21 @@ class Environment(ABC):
                     f"Service Template: '{service.svcCfg.template}' "
                     f"does not exist."
                 )
-            if svc_t_path := self.configMng.get_service_template_path(
+            svc_t_path = self.configMng.get_service_template_path(
                 service.svcCfg.template
-            ):
+            )
+            if svc_t_path is not None:
+                # Template has file resources: copy them into the env dir.
                 Util.copy_dir(
                     svc_t_path,
                     os.path.join(self.get_path(), service.svcCfg.tag),
                 )
+            # svc_t_path is None only for descriptor-only templates that
+            # carry no file resources (e.g. pure factory/config templates).
+            # If the template was registered but its directory was removed
+            # from disk after installation the path resolver already returns
+            # None rather than a non-existent path, so no extra guard is
+            # needed here.
 
         self.sync_config()
 
@@ -436,11 +444,6 @@ class Environment(ABC):
         self.configMng.remove_environment(self.envCfg.tag)
         self.envCfg.tag = dst_env_tag
         self.sync_config()
-
-    def delete(self):
-        """Delete the environment."""
-        Util.remove_dir(self.get_path())
-        self.configMng.remove_environment(self.envCfg.tag)
 
     def sync_config(self):
         """Sync the environment configuration."""
@@ -912,6 +915,7 @@ class EnvironmentMng:
         envCfg: EnvironmentCfg,
         probe_tag: Optional[str],
         poll_seconds: int = 5,
+        probe_timeout_seconds: int = 120,
     ) -> None:
         """Continuously run probes and render results until interrupted."""
         env = self.get_environment_from_cfg(envCfg)
@@ -925,6 +929,7 @@ class EnvironmentMng:
             probe_tag=probe_tag,
             title=title,
             poll_seconds=poll_seconds,
+            probe_timeout_seconds=probe_timeout_seconds,
         )
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):

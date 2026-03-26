@@ -20,6 +20,7 @@ import builtins
 import functools
 import logging
 import os
+import sys
 from typing import Any, Callable, List, Optional
 
 import click
@@ -377,7 +378,10 @@ def checkout(shepherd: ShepherdMng, tag: str):
 @click.argument("tag", required=True)
 @click.pass_obj
 def delete_env(shepherd: ShepherdMng, tag: str):
-    """Delete an environment."""
+    """Delete an environment.
+
+    May prompt for sudo to recover ownership of container-written files.
+    """
     shepherd.environmentMng.delete_env(tag)
 
 
@@ -739,7 +743,10 @@ def get_probe(
     "-w",
     "--watch",
     is_flag=True,
-    help="Continuously re-run probes and keep the display updated.",
+    help=(
+        "Continuously re-run probes and keep the display updated. "
+        "Interactive only — exits 0 on Ctrl+C regardless of probe state."
+    ),
 )
 @click.option(
     "--show-commands",
@@ -772,7 +779,7 @@ def check_probe(
         shepherd.environmentMng.watch_probes(envCfg, probe_tag)
         return
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
-    exit(exit_code)
+    sys.exit(exit_code)
 
 
 # =====================================================

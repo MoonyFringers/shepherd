@@ -1281,3 +1281,4 @@ def test_completion_probe_check_shows_watch_flag(
     completions = sm.completionMng.get_completions(["probe", "check", ""])
     assert "-w" in completions
     assert "--watch" in completions
+    assert "--show-commands-limit" in completions

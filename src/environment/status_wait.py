@@ -23,6 +23,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Callable, Optional, TypeAlias
 
+from rich.console import Group
 from rich.live import Live
 from rich.markup import escape
 from rich.text import Text
@@ -245,6 +246,9 @@ def wait_for_env_state(
     container_transition_started_at: dict[str, float] = {}
     probe_transition_started_at: dict[tuple[str, str], float] = {}
     summary_transition_started_at: dict[str, float] = {}
+    # Flips to True when keep_output is active and an error has been set,
+    # so the UI can render a "Press Ctrl+C to exit" hint.
+    keep_output_hint_active = False
 
     if wait_until_up:
         # Only "up" waits care about readiness probes. "Down" waits complete
@@ -354,7 +358,7 @@ def wait_for_env_state(
         }
         # Centralize all table-side decorations so the render loops can focus
         # on state transitions instead of repeatedly wiring optional panels.
-        return hooks.build_env_status(
+        renderable = hooks.build_env_status(
             env.envCfg.tag,
             grouped,
             hidden_columns=hidden_columns,
@@ -379,6 +383,12 @@ def wait_for_env_state(
             flashing_probes=flashing_probes,
             flashing_summary_keys=flashing_summary_keys,
         )
+        if keep_output_hint_active:
+            return Group(
+                renderable,
+                Text("Press Ctrl+C to exit", style="dim"),
+            )
+        return renderable
 
     def render_progress_text(remaining: Optional[int], tick: int) -> str:
         # Used only when there is not yet a stable table snapshot to render,
@@ -595,6 +605,9 @@ def wait_for_env_state(
                         raise action_error
                     # keep_output: keep the display live until Ctrl+C so
                     # the user can inspect the command log at leisure.
+                    # The renderable is updated on every tick below, so
+                    # the display stays fresh. Exit via KeyboardInterrupt.
+                    keep_output_hint_active = True
                 if poll_error is not None:
                     raise poll_error
                 with snapshot_lock:
@@ -724,6 +737,8 @@ def wait_for_env_state(
                 ui_tick_count += 1
                 sleep_for = max(0.0, next_ui_tick_at - time.monotonic())
                 time.sleep(sleep_for)
+        except KeyboardInterrupt:
+            pass
         finally:
             stop_polling.set()
             poll_thread.join(timeout=1.0)
@@ -735,6 +750,7 @@ def watch_probe_state(
     probe_tag: Optional[str],
     title: str,
     poll_seconds: int = 5,
+    probe_timeout_seconds: int = 120,
 ) -> None:
     """
     Continuously run probes and render results via a Rich Live display.
@@ -759,7 +775,7 @@ def watch_probe_state(
         results = env.check_probes(
             probe_tag=probe_tag,
             fail_fast=False,
-            timeout_seconds=120,
+            timeout_seconds=probe_timeout_seconds,
         )
         with results_lock:
             last_results[:] = results

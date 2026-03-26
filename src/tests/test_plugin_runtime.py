@@ -20,7 +20,6 @@ from __future__ import annotations
 import os
 import shutil
 import tarfile
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -59,6 +58,7 @@ def _write_plugin_inventory(
 
 
 def _make_plugin_archive(
+    tmp_dir: str,
     plugin_id: str = "runtime-plugin",
     version: str = "1.0.0",
 ) -> str:
@@ -68,7 +68,6 @@ def _make_plugin_archive(
         / "plugins"
         / "runtime_plugin"
     )
-    tmp_dir = tempfile.mkdtemp()
     plugin_copy = os.path.join(tmp_dir, plugin_id)
     shutil.copytree(fixture_root, plugin_copy)
 
@@ -537,10 +536,13 @@ def test_startup_fails_for_invalid_plugin_entrypoint(
 
 @pytest.mark.shpd
 def test_plugin_install_rejects_duplicate_without_force(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    tmp_path: Path,
 ):
     """Installing an already-installed plugin without --force is an error."""
-    archive = _make_plugin_archive()
+    archive = _make_plugin_archive(str(tmp_path))
     runner.invoke(cli, ["plugin", "install", archive])
 
     result = runner.invoke(cli, ["plugin", "install", archive])
@@ -552,15 +554,18 @@ def test_plugin_install_rejects_duplicate_without_force(
 
 @pytest.mark.shpd
 def test_plugin_install_force_replaces_existing_plugin(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    tmp_path: Path,
 ):
     """--force replaces the plugin directory and updates the version."""
     shpd_path = shpd_conf[0]
     shpd_yaml = shpd_path / ".shpd.yaml"
-    archive_v1 = _make_plugin_archive(version="1.0.0")
+    archive_v1 = _make_plugin_archive(str(tmp_path / "v1"), version="1.0.0")
     runner.invoke(cli, ["plugin", "install", archive_v1])
 
-    archive_v2 = _make_plugin_archive(version="2.0.0")
+    archive_v2 = _make_plugin_archive(str(tmp_path / "v2"), version="2.0.0")
     result = runner.invoke(cli, ["plugin", "install", "--force", archive_v2])
 
     assert result.exit_code == 0
@@ -572,12 +577,15 @@ def test_plugin_install_force_replaces_existing_plugin(
 
 @pytest.mark.shpd
 def test_plugin_install_force_preserves_enabled_state_and_config(
-    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+    tmp_path: Path,
 ):
     """--force keeps the existing enabled flag and user config intact."""
     shpd_path = shpd_conf[0]
     shpd_yaml = shpd_path / ".shpd.yaml"
-    archive = _make_plugin_archive()
+    archive = _make_plugin_archive(str(tmp_path))
     runner.invoke(cli, ["plugin", "install", archive])
     runner.invoke(cli, ["plugin", "disable", "runtime-plugin"])
     stored = yaml.safe_load(shpd_yaml.read_text())
