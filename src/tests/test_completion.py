@@ -561,9 +561,11 @@ def test_completion_start_env(
     assert completions == [
         "--show-commands",
         "--show-commands-limit",
+        "-t",
         "--timeout",
         "-w",
         "--watch",
+        "--keep-output",
     ], "Expected env up flags"
 
 
@@ -1245,3 +1247,38 @@ def test_completion_get_probe(
         "db-live",
         "db-ready",
     ], "Expected get probe completion"
+
+
+@pytest.mark.compl
+def test_completion_plugin_install_shows_force_flag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["plugin", "install", ""])
+    assert "--force" in completions
+
+
+@pytest.mark.compl
+def test_completion_env_up_shows_keep_output_flag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["env", "up", ""])
+    assert "--keep-output" in completions
+
+
+@pytest.mark.compl
+def test_completion_probe_check_shows_watch_flag(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["probe", "check", ""])
+    assert "-w" in completions
+    assert "--watch" in completions
+    assert "--show-commands-limit" in completions

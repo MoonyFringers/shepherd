@@ -21,6 +21,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import shutil
+import subprocess
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -40,6 +42,7 @@ from .render import (
     build_command_log_panel,
     build_env_details_tree,
     build_env_status_tree,
+    build_probe_error_from_results,
     build_probe_status_tree,
     collect_env_status,
     dump_grouped_yaml,
@@ -47,7 +50,11 @@ from .render import (
     format_service_gate_glyphs,
     render_env_summary,
 )
-from .status_wait import WaitForEnvStateHooks, wait_for_env_state
+from .status_wait import (
+    WaitForEnvStateHooks,
+    wait_for_env_state,
+    watch_probe_state,
+)
 
 DEFAULT_STATUS_POLL_SECONDS = 1.0
 
@@ -188,7 +195,7 @@ class Environment(ABC):
                             break
                     time.sleep(1.0)
                     continue
-        except NonRecoverableStartError as e:
+        except NonRecoverableStartError:
             try:
                 self.stop()
             except BaseException:
@@ -196,11 +203,7 @@ class Environment(ABC):
                     "Failed rollback stop after start failure for env '%s'",
                     self.envCfg.tag,
                 )
-            message = (
-                str(e)
-                or "Environment start failed due to a non-recoverable error."
-            )
-            Util.print_error_and_die(message)
+            raise
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""
@@ -407,18 +410,26 @@ class Environment(ABC):
         )
 
         for service in self.services:
-            if svc_t_path := self.configMng.get_service_template_path(
-                service.svcCfg.template
-            ):
-                Util.copy_dir(
-                    svc_t_path,
-                    os.path.join(self.get_path(), service.svcCfg.tag),
-                )
-            else:
+            if not self.configMng.get_service_template(service.svcCfg.template):
                 Util.print_error_and_die(
                     f"Service Template: '{service.svcCfg.template}' "
                     f"does not exist."
                 )
+            svc_t_path = self.configMng.get_service_template_path(
+                service.svcCfg.template
+            )
+            if svc_t_path is not None:
+                # Template has file resources: copy them into the env dir.
+                Util.copy_dir(
+                    svc_t_path,
+                    os.path.join(self.get_path(), service.svcCfg.tag),
+                )
+            # svc_t_path is None only for descriptor-only templates that
+            # carry no file resources (e.g. pure factory/config templates).
+            # If the template was registered but its directory was removed
+            # from disk after installation the path resolver already returns
+            # None rather than a non-existent path, so no extra guard is
+            # needed here.
 
         self.sync_config()
 
@@ -433,11 +444,6 @@ class Environment(ABC):
         self.configMng.remove_environment(self.envCfg.tag)
         self.envCfg.tag = dst_env_tag
         self.sync_config()
-
-    def delete(self):
-        """Delete the environment."""
-        Util.remove_dir(self.get_path())
-        self.configMng.remove_environment(self.envCfg.tag)
 
     def sync_config(self):
         """Sync the environment configuration."""
@@ -640,8 +646,81 @@ class EnvironmentMng:
                     return
 
             env = self.envFactory.new_environment_cfg(envCfg)
-            env.delete()
+            self._delete_environment_dir(env.get_path())
+            self.configMng.remove_environment(env.envCfg.tag)
             Util.print(env.envCfg.tag)
+
+    def _delete_environment_dir(self, env_dir: str) -> None:
+        """Delete one environment directory with optional sudo retry."""
+        try:
+            shutil.rmtree(env_dir)
+            return
+        except PermissionError as exc:
+            if not self._can_retry_delete_with_sudo():
+                Util.print_error_and_die(
+                    f"Failed to remove directory: {env_dir}\nError: {exc}"
+                )
+            if not Util.confirm(
+                "Permission denied while deleting environment files. "
+                "Retry with elevated privileges using sudo?"
+            ):
+                Util.print_error_and_die(
+                    f"Failed to remove directory: {env_dir}\nError: {exc}"
+                )
+            self._delete_dir_with_sudo(env_dir)
+            return
+        except OSError as exc:
+            Util.print_error_and_die(
+                f"Failed to remove directory: {env_dir}\nError: {exc}"
+            )
+
+    def _can_retry_delete_with_sudo(self) -> bool:
+        """Return true when a sudo retry can be offered on this host.
+
+        Only POSIX systems with sudo available support the elevated-permission
+        retry path. Windows is excluded both because sudo does not exist there
+        and because Docker Desktop on Windows manages bind-mount paths inside
+        a WSL2/Hyper-V VM, so the root-owned file problem does not arise on
+        the host filesystem.
+        """
+        return os.name == "posix" and shutil.which("sudo") is not None
+
+    def _delete_dir_with_sudo(self, env_dir: str) -> None:
+        """Delete one environment directory using a two-step elevated approach.
+
+        Rather than running `sudo rm -rf` directly, we use sudo only to
+        transfer ownership of the directory tree to the current user
+        (`sudo chown -R <uid>:<gid>`), then let the Python process remove the
+        tree with `shutil.rmtree`. This limits the blast radius of the
+        elevated call: sudo only touches ownership on a Shepherd-managed path
+        and rm never runs as root.
+
+        Note: `chmod u+rwX` is not sufficient here because `u` refers to the
+        owner of each file (typically root when Docker writes bind-mount
+        volumes), not to the current user. Transferring ownership is the
+        correct fix.
+        """
+        uid = os.getuid()
+        gid = os.getgid()
+        chown_result = subprocess.run(
+            ["sudo", "chown", "-R", f"{uid}:{gid}", env_dir],
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if chown_result.returncode != 0:
+            stderr = (chown_result.stderr or "").strip()
+            Util.print_error_and_die(
+                "Failed to transfer ownership with sudo: "
+                f"{env_dir}" + (f"\nError: {stderr}" if stderr else "")
+            )
+        try:
+            shutil.rmtree(env_dir)
+        except OSError as exc:
+            Util.print_error_and_die(
+                f"Failed to remove directory after sudo chown: "
+                f"{env_dir}\nError: {exc}"
+            )
 
     def list_envs(self):
         """List all available environments."""
@@ -669,6 +748,7 @@ class EnvironmentMng:
         envCfg: EnvironmentCfg,
         timeout_seconds: Optional[int] = 60,
         watch: bool = False,
+        keep_output: bool = False,
     ):
         """Start an environment."""
         if timeout_seconds is not None and timeout_seconds < 0:
@@ -676,12 +756,21 @@ class EnvironmentMng:
                 "Timeout must be greater than or equal to 0."
             )
         env = self.get_environment_from_cfg(envCfg)
-        self.wait_for_env_up(
-            env,
-            timeout_seconds=timeout_seconds,
-            start_action=lambda: env.start(timeout_seconds=timeout_seconds),
-            watch_after=watch,
-        )
+        try:
+            self.wait_for_env_up(
+                env,
+                timeout_seconds=timeout_seconds,
+                start_action=lambda: env.start(timeout_seconds=timeout_seconds),
+                watch_after=watch,
+                keep_output=keep_output,
+            )
+        except NonRecoverableStartError as e:
+            message = (
+                str(e)
+                or "Environment start failed due to a non-recoverable error."
+            )
+            Util.print_error_and_die(message)
+            return
         Util.print(env.envCfg.tag)
 
     def stop_env(self, envCfg: EnvironmentCfg, wait: bool = True):
@@ -780,7 +869,22 @@ class EnvironmentMng:
         )
 
         title = f"[white]{envCfg.tag}[/white] probes"
-        Util.console.print(self._build_probe_status_tree(results, title=title))
+        probe_error = build_probe_error_from_results(results)
+        command_log = (
+            env.get_command_log() if env.is_command_log_enabled() else None
+        )
+        command_log_limit = (
+            env.get_command_log_limit() if command_log is not None else None
+        )
+        Util.console.print(
+            self._build_probe_status_tree(
+                results,
+                title=title,
+                probe_error=probe_error,
+                command_log=command_log,
+                command_log_limit=command_log_limit,
+            )
+        )
 
         # ---- aggregate exit code ----
         for r in results:
@@ -794,8 +898,39 @@ class EnvironmentMng:
         results: list[ProbeRunResult],
         *,
         title: str,
+        probe_error: Optional[dict[str, str]] = None,
+        command_log: Optional[list[str]] = None,
+        command_log_limit: Optional[int] = None,
     ):
-        return build_probe_status_tree(results, title=title)
+        return build_probe_status_tree(
+            results,
+            title=title,
+            probe_error=probe_error,
+            command_log=command_log,
+            command_log_limit=command_log_limit,
+        )
+
+    def watch_probes(
+        self,
+        envCfg: EnvironmentCfg,
+        probe_tag: Optional[str],
+        poll_seconds: int = 5,
+        probe_timeout_seconds: int = 120,
+    ) -> None:
+        """Continuously run probes and render results until interrupted."""
+        env = self.get_environment_from_cfg(envCfg)
+        if not env.envCfg.status.rendered_config:
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+        title = f"[white]{envCfg.tag}[/white] probes"
+        watch_probe_state(
+            env,
+            probe_tag=probe_tag,
+            title=title,
+            poll_seconds=poll_seconds,
+            probe_timeout_seconds=probe_timeout_seconds,
+        )
 
     def status_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Get environment status."""
@@ -833,6 +968,7 @@ class EnvironmentMng:
         start_action: Optional[Callable[[], Any]] = None,
         watch_after: bool = False,
         progress_label: str = "Starting",
+        keep_output: bool = False,
     ):
         self._wait_for_env_state(
             env,
@@ -841,6 +977,7 @@ class EnvironmentMng:
             wait_until_up=True,
             watch_after=watch_after,
             progress_label=progress_label,
+            keep_output=keep_output,
         )
 
     def wait_for_env_down(
@@ -866,6 +1003,7 @@ class EnvironmentMng:
         wait_until_up: bool,
         watch_after: bool = False,
         progress_label: str = "Starting",
+        keep_output: bool = False,
     ):
         hooks = WaitForEnvStateHooks(
             status_poll_seconds=self._status_poll_seconds,
@@ -883,6 +1021,7 @@ class EnvironmentMng:
             wait_until_up=wait_until_up,
             watch_after=watch_after,
             progress_label=progress_label,
+            keep_output=keep_output,
             hooks=hooks,
         )
 

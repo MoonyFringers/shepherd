@@ -38,6 +38,7 @@ from environment.status_wait import (
     WaitForEnvStateHooks,
     render_moving_shadow_text,
     wait_for_env_state,
+    watch_probe_state,
 )
 from util.util import Util
 
@@ -1516,3 +1517,250 @@ def test_describe_env_with_details_renders_tree(mocker: MockerFixture):
 
     render_table.assert_called_once()
     console_print.assert_called_once_with("tree")
+
+
+# ---------------------------------------------------------------------------
+# watch_probe_state tests
+# ---------------------------------------------------------------------------
+
+
+def _make_fake_live(mocker: MockerFixture) -> Any:
+    """Return a MagicMock that acts as a Live context manager."""
+    fake_live = mocker.MagicMock()
+    fake_live.__enter__ = mocker.Mock(return_value=fake_live)
+    fake_live.__exit__ = mocker.Mock(return_value=False)
+    mocker.patch("environment.status_wait.Live", return_value=fake_live)
+    return fake_live
+
+
+def test_watch_probe_state_fires_check_immediately(mocker: MockerFixture):
+    """check_probes is called on the first iteration."""
+    import threading
+
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = False
+
+    check_done = threading.Event()
+
+    def fake_check(**kwargs: Any) -> list[Any]:
+        check_done.set()
+        return []
+
+    env.check_probes.side_effect = fake_check
+
+    fake_live = _make_fake_live(mocker)
+    mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+
+    sleep_calls: dict[str, int] = {"count": 0}
+
+    def fake_sleep(seconds: float) -> None:
+        sleep_calls["count"] += 1
+        check_done.wait(timeout=2.0)
+        raise KeyboardInterrupt()
+
+    mocker.patch("environment.status_wait.time.sleep", side_effect=fake_sleep)
+
+    watch_probe_state(env, probe_tag=None, title="probes", poll_seconds=0)
+
+    env.check_probes.assert_called_once_with(
+        probe_tag=None, fail_fast=False, timeout_seconds=120
+    )
+    fake_live.update.assert_called()
+
+
+def test_watch_probe_state_passes_probe_tag(mocker: MockerFixture):
+    """probe_tag is forwarded verbatim to check_probes."""
+    import threading
+
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = False
+
+    check_done = threading.Event()
+
+    def fake_check(**kwargs: Any) -> list[Any]:
+        check_done.set()
+        return []
+
+    env.check_probes.side_effect = fake_check
+
+    _make_fake_live(mocker)
+    mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+
+    def fake_sleep(seconds: float) -> None:
+        check_done.wait(timeout=2.0)
+        raise KeyboardInterrupt()
+
+    mocker.patch("environment.status_wait.time.sleep", side_effect=fake_sleep)
+
+    watch_probe_state(env, probe_tag="health", title="probes", poll_seconds=0)
+
+    env.check_probes.assert_called_once_with(
+        probe_tag="health", fail_fast=False, timeout_seconds=120
+    )
+
+
+def test_watch_probe_state_suppresses_error_panel_while_check_running(
+    mocker: MockerFixture,
+):
+    """probe_error is None while a check is in flight."""
+    import threading
+
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = False
+
+    check_started = threading.Event()
+    allow_finish = threading.Event()
+
+    def slow_check(**kwargs: Any) -> list[Any]:
+        check_started.set()
+        allow_finish.wait(timeout=2.0)
+        return []
+
+    env.check_probes.side_effect = slow_check
+
+    _make_fake_live(mocker)
+    build_mock = mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+
+    def fake_sleep(seconds: float) -> None:
+        # Wait until the check has started, then interrupt before it finishes.
+        check_started.wait(timeout=2.0)
+        raise KeyboardInterrupt()
+
+    mocker.patch("environment.status_wait.time.sleep", side_effect=fake_sleep)
+
+    watch_probe_state(env, probe_tag=None, title="probes", poll_seconds=0)
+
+    # All renders while the check is in flight must have probe_error=None.
+    for call in build_mock.call_args_list:
+        assert call.kwargs.get("probe_error") is None
+
+    allow_finish.set()
+
+
+def test_watch_probe_state_shows_error_panel_after_failed_check(
+    mocker: MockerFixture,
+):
+    """probe_error is set in the render cycle after a failed check completes."""
+    import threading
+
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = False
+
+    failed_result = SimpleNamespace(
+        tag="health",
+        exit_code=1,
+        stdout="out",
+        stderr="err",
+        timed_out=False,
+        duration_ms=50,
+    )
+
+    check_done = threading.Event()
+
+    def failing_check(**kwargs: Any) -> list[Any]:
+        result = [failed_result]
+        check_done.set()
+        return result
+
+    env.check_probes.side_effect = failing_check
+
+    _make_fake_live(mocker)
+    build_mock = mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+
+    sleep_calls: dict[str, int] = {"count": 0}
+
+    def fake_sleep(seconds: float) -> None:
+        sleep_calls["count"] += 1
+        if sleep_calls["count"] == 1:
+            # Let the check finish before returning from the first sleep.
+            check_done.wait(timeout=2.0)
+        else:
+            raise KeyboardInterrupt()
+
+    mocker.patch("environment.status_wait.time.sleep", side_effect=fake_sleep)
+
+    watch_probe_state(env, probe_tag=None, title="probes", poll_seconds=0)
+
+    # At least one render after the check finished must carry probe_error.
+    error_renders = [
+        c
+        for c in build_mock.call_args_list
+        if c.kwargs.get("probe_error") is not None
+    ]
+    assert error_renders, "expected at least one render with probe_error set"
+
+
+def test_watch_probe_state_passes_command_log_when_enabled(
+    mocker: MockerFixture,
+):
+    """command_log and limit are forwarded to build_probe_status_tree."""
+    import threading
+
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = True
+    env.get_command_log.return_value = ["cmd1", "cmd2"]
+    env.get_command_log_limit.return_value = 5
+
+    check_done = threading.Event()
+
+    def fake_check(**kwargs: Any) -> list[Any]:
+        check_done.set()
+        return []
+
+    env.check_probes.side_effect = fake_check
+
+    _make_fake_live(mocker)
+    build_mock = mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+
+    sleep_calls: dict[str, int] = {"count": 0}
+
+    def fake_sleep(seconds: float) -> None:
+        sleep_calls["count"] += 1
+        check_done.wait(timeout=2.0)
+        raise KeyboardInterrupt()
+
+    mocker.patch("environment.status_wait.time.sleep", side_effect=fake_sleep)
+
+    watch_probe_state(env, probe_tag=None, title="probes", poll_seconds=0)
+
+    assert build_mock.called
+    last_call = build_mock.call_args
+    assert last_call.kwargs.get("command_log") == ["cmd1", "cmd2"]
+    assert last_call.kwargs.get("command_log_limit") == 5
+
+
+def test_watch_probe_state_keyboard_interrupt_exits_cleanly(
+    mocker: MockerFixture,
+):
+    """KeyboardInterrupt must not propagate out of watch_probe_state."""
+    env = mocker.Mock()
+    env.is_command_log_enabled.return_value = False
+    env.check_probes.return_value = []
+
+    _make_fake_live(mocker)
+    mocker.patch(
+        "environment.status_wait.build_probe_status_tree",
+        return_value="rendered",
+    )
+    mocker.patch(
+        "environment.status_wait.time.sleep",
+        side_effect=KeyboardInterrupt(),
+    )
+
+    # Must return normally — no exception.
+    watch_probe_state(env, probe_tag=None, title="probes", poll_seconds=0)

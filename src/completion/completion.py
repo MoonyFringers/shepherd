@@ -80,8 +80,9 @@ class CompletionMng(AbstractCompletionMng):
         ("env", "up"): (
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
-            OptionSpec(tokens=("--timeout",), takes_value=True),
+            OptionSpec(tokens=("-t", "--timeout"), takes_value=True),
             OptionSpec(tokens=("-w", "--watch")),
+            OptionSpec(tokens=("--keep-output",)),
         ),
         ("env", "halt"): (OptionSpec(tokens=("--no-wait",)),),
         ("env", "reload"): (
@@ -125,7 +126,13 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-r", "--resolved")),
             OptionSpec(tokens=("--details",)),
         ),
-        ("probe", "check"): (OptionSpec(tokens=("-a", "--all")),),
+        ("probe", "check"): (
+            OptionSpec(tokens=("-a", "--all")),
+            OptionSpec(tokens=("-w", "--watch")),
+            OptionSpec(tokens=("--show-commands",)),
+            OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
+        ),
+        ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
     }
 
     def __init__(

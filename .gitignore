@@ -37,3 +37,5 @@ wiki
 shepctl.spec
 build
 AGENTS.md
+CLAUDE.md
+.claude

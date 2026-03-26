@@ -20,6 +20,7 @@ import builtins
 import functools
 import logging
 import os
+import sys
 from typing import Any, Callable, List, Optional
 
 import click
@@ -377,7 +378,10 @@ def checkout(shepherd: ShepherdMng, tag: str):
 @click.argument("tag", required=True)
 @click.pass_obj
 def delete_env(shepherd: ShepherdMng, tag: str):
-    """Delete an environment."""
+    """Delete an environment.
+
+    May prompt for sudo to recover ownership of container-written files.
+    """
     shepherd.environmentMng.delete_env(tag)
 
 
@@ -408,9 +412,10 @@ def list(shepherd: ShepherdMng):
     help="Number of recent commands to display.",
 )
 @click.option(
+    "-t",
     "--timeout",
     type=int,
-    default=60,
+    default=120,
     show_default=True,
     help="Maximum seconds to wait for all containers to be running.",
 )
@@ -419,6 +424,15 @@ def list(shepherd: ShepherdMng):
     "--watch",
     is_flag=True,
     help="Keep updating the output until interrupted.",
+)
+@click.option(
+    "--keep-output",
+    is_flag=True,
+    help=(
+        "On start failure, preserve the status display and keep "
+        "updating it until interrupted. Useful with --show-commands "
+        "to inspect the command log after an init script error."
+    ),
 )
 @click.pass_obj
 @require_active_env
@@ -429,11 +443,12 @@ def up_env(
     show_commands_limit: int,
     timeout: Optional[int],
     watch: bool,
+    keep_output: bool,
 ):
     """Start environment."""
     _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
     shepherd.environmentMng.start_env(
-        envCfg, timeout_seconds=timeout, watch=watch
+        envCfg, timeout_seconds=timeout, watch=watch, keep_output=keep_output
     )
 
 
@@ -724,6 +739,27 @@ def get_probe(
 @probe.command(name="check")
 @click.argument("probe_tag", required=False)
 @click.option("-a", "--all", is_flag=True, help="Check all probes.")
+@click.option(
+    "-w",
+    "--watch",
+    is_flag=True,
+    help=(
+        "Continuously re-run probes and keep the display updated. "
+        "Interactive only — exits 0 on Ctrl+C regardless of probe state."
+    ),
+)
+@click.option(
+    "--show-commands",
+    is_flag=True,
+    help="Show recent probe commands in the output panel.",
+)
+@click.option(
+    "--show-commands-limit",
+    type=int,
+    default=DEFAULT_COMPOSE_COMMAND_LOG_LIMIT,
+    show_default=True,
+    help="Number of recent commands to display.",
+)
 @click.pass_obj
 @require_active_env
 def check_probe(
@@ -731,12 +767,19 @@ def check_probe(
     envCfg: EnvironmentCfg,
     probe_tag: Optional[str],
     all: bool,
+    watch: bool,
+    show_commands: bool,
+    show_commands_limit: int,
 ):
     """Run probe checks and return a process exit code based on results."""
     if all:
         probe_tag = None
+    _apply_show_commands_flags(shepherd, show_commands, show_commands_limit)
+    if watch:
+        shepherd.environmentMng.watch_probes(envCfg, probe_tag)
+        return
     exit_code = shepherd.environmentMng.check_probes(envCfg, probe_tag)
-    exit(exit_code)
+    sys.exit(exit_code)
 
 
 # =====================================================
@@ -776,10 +819,16 @@ def get_plugin(shepherd: ShepherdMng, plugin_id: str, output: str):
     required=True,
     type=click.Path(exists=True, dir_okay=False, path_type=str),
 )
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Replace an already-installed plugin.",
+)
 @click.pass_obj
-def install_plugin(shepherd: ShepherdMng, archive_path: str):
+def install_plugin(shepherd: ShepherdMng, archive_path: str, force: bool):
     """Install a plugin archive into the managed plugin root."""
-    shepherd.pluginMng.install_plugin(archive_path)
+    shepherd.pluginMng.install_plugin(archive_path, force=force)
 
 
 @plugin.command(name="enable")

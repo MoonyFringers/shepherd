@@ -929,7 +929,7 @@ def test_cli_start_env(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
-        mocker.ANY, timeout_seconds=60, watch=False
+        mocker.ANY, timeout_seconds=120, watch=False, keep_output=False
     )
 
 
@@ -947,7 +947,7 @@ def test_cli_start_env_watch(
     result = runner.invoke(cli, ["env", "up", "--watch"])
     assert result.exit_code == 0
     mock_start.assert_called_once_with(
-        mocker.ANY, timeout_seconds=60, watch=True
+        mocker.ANY, timeout_seconds=120, watch=True, keep_output=False
     )
 
 
@@ -968,6 +968,7 @@ def test_cli_start_env_with_timeout(
     assert mock_start.call_args.kwargs == {
         "timeout_seconds": 30,
         "watch": False,
+        "keep_output": False,
     }
 
 
@@ -1290,3 +1291,37 @@ def test_cli_check_probe_flag_all_with_probe_tag(
     result = runner.invoke(cli, ["probe", "check", "db-ready", "--all"])
     assert result.exit_code == 0
     check_probes.assert_called_once()
+
+
+@pytest.mark.shpd
+def test_cli_check_probe_watch(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    watch_probes = mocker.patch.object(EnvironmentMng, "watch_probes")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["probe", "check", "--watch"])
+    assert result.exit_code == 0
+    watch_probes.assert_called_once()
+    _, probe_tag = watch_probes.call_args.args
+    assert probe_tag is None
+
+
+@pytest.mark.shpd
+def test_cli_check_probe_watch_with_probe_tag(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    watch_probes = mocker.patch.object(EnvironmentMng, "watch_probes")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["probe", "check", "db-ready", "--watch"])
+    assert result.exit_code == 0
+    watch_probes.assert_called_once()
+    _, probe_tag = watch_probes.call_args.args
+    assert probe_tag == "db-ready"

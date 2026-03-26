@@ -91,7 +91,15 @@ class PluginMng:
         self.configMng.remove_plugin(plugin.id)
         Util.print(f"Plugin '{plugin.id}' removed.")
 
-    def install_plugin(self, archive_path: str) -> None:
+    def install_plugin(self, archive_path: str, force: bool = False) -> None:
+        """Install a plugin from a tar archive.
+
+        Note: when `force=True`, the existing plugin directory and config entry
+        are removed before the new archive is installed. If the subsequent
+        `shutil.move` fails (e.g. cross-device rename), the plugin will be in a
+        torn state — removed but not replaced. In that case re-run the install
+        to recover.
+        """
         with tempfile.TemporaryDirectory() as tmp_dir:
             extracted_dir = os.path.join(tmp_dir, "plugin")
             os.makedirs(extracted_dir, exist_ok=True)
@@ -100,10 +108,17 @@ class PluginMng:
             descriptor = self._load_descriptor(descriptor_path)
             self._validate_reserved_plugin_id(descriptor.id)
 
-            if self.configMng.get_plugin(descriptor.id) is not None:
-                Util.print_error_and_die(
-                    f"Plugin '{descriptor.id}' is already installed."
-                )
+            existing = self.configMng.get_plugin(descriptor.id)
+            if existing is not None:
+                if not force:
+                    Util.print_error_and_die(
+                        f"Plugin '{descriptor.id}' is already installed. "
+                        "Use --force to replace it."
+                    )
+                target_dir = self.configMng.get_plugin_dir(descriptor.id)
+                if os.path.isdir(target_dir):
+                    shutil.rmtree(target_dir)
+                self.configMng.remove_plugin(descriptor.id)
 
             descriptor_dir = os.path.dirname(descriptor_path)
             target_dir = self.configMng.get_plugin_dir(descriptor.id)
@@ -113,12 +128,18 @@ class PluginMng:
                 )
 
             shutil.move(descriptor_dir, target_dir)
+            new_config = (
+                existing.config
+                if existing is not None
+                else descriptor.default_config
+            )
+            new_enabled = existing.enabled if existing is not None else "true"
             self.configMng.set_plugin(
                 PluginCfg(
                     id=descriptor.id,
-                    enabled="true",
+                    enabled=new_enabled,
                     version=descriptor.version,
-                    config=descriptor.default_config,
+                    config=new_config,
                 )
             )
         Util.print(f"Plugin '{descriptor.id}' installed.")
