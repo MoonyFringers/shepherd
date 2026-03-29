@@ -18,10 +18,15 @@
 """Public plugin APIs shared by the CLI bootstrap and external plugins."""
 
 from .api import (
+    CompletionProvider,
+    CompletionProviderType,
+    EnvFactoryProvider,
     PluginCommandSpec,
     PluginCompletionSpec,
-    PluginFactorySpec,
+    PluginEnvFactorySpec,
+    PluginSvcFactorySpec,
     ShepherdPlugin,
+    SvcFactoryProvider,
 )
 from .plugin import PluginMng
 from .runtime import (
@@ -31,12 +36,17 @@ from .runtime import (
 )
 
 __all__ = [
+    "CompletionProvider",
+    "CompletionProviderType",
+    "EnvFactoryProvider",
     "LoadedPlugin",
     "PluginCommandSpec",
     "PluginCompletionSpec",
-    "PluginFactorySpec",
+    "PluginEnvFactorySpec",
     "PluginMng",
     "PluginRegistry",
     "PluginRuntimeMng",
+    "PluginSvcFactorySpec",
     "ShepherdPlugin",
+    "SvcFactoryProvider",
 ]

@@ -19,9 +19,79 @@ from __future__ import annotations
 
 from abc import ABC
 from dataclasses import dataclass
-from typing import Any, Sequence
+from typing import (
+    Any,
+    Callable,
+    Protocol,
+    Sequence,
+    TypeAlias,
+    runtime_checkable,
+)
 
 import click
+
+from config import ConfigMng
+from environment import EnvironmentFactory
+from service import ServiceFactory
+
+
+@runtime_checkable
+class CompletionProvider(Protocol):
+    """
+    Object-based completion provider shape.
+
+    Implement this protocol when you want to encapsulate completion logic
+    in a class instead of a bare function.  The runtime accepts either a
+    ``CompletionProvider`` instance or a plain callable — see
+    :data:`CompletionProviderType`.
+    """
+
+    def get_completions(self, args: list[str]) -> list[str]:
+        """Return completion suggestions for the given raw argument list."""
+        ...
+
+
+# ---------------------------------------------------------------------------
+# Provider type aliases — use these to annotate your provider arguments.
+# ---------------------------------------------------------------------------
+
+CompletionProviderType: TypeAlias = (
+    Callable[[list[str]], list[str]] | CompletionProvider
+)
+"""
+Accepted value for :attr:`PluginCompletionSpec.provider`.
+
+Either a bare callable ``f(args: list[str]) -> list[str]`` *or* an object
+that implements the :class:`CompletionProvider` protocol.
+"""
+
+SvcFactoryProvider: TypeAlias = (
+    ServiceFactory | Callable[[ConfigMng], ServiceFactory]
+)
+"""
+Accepted value for :attr:`PluginSvcFactorySpec.provider`.
+
+Pass the **class** (not an instance) of your ``ServiceFactory`` subclass —
+the runtime calls it with ``(configMng,)`` to produce the instance.  A
+pre-built instance or a builder callable with the same signature are also
+accepted.
+"""
+
+EnvFactoryProvider: TypeAlias = (
+    EnvironmentFactory
+    | Callable[
+        [ConfigMng, ServiceFactory, dict[str, Any] | None],
+        EnvironmentFactory,
+    ]
+)
+"""
+Accepted value for :attr:`PluginEnvFactorySpec.provider`.
+
+Pass the **class** of your ``EnvironmentFactory`` subclass — the runtime
+calls it with ``(configMng, svc_factory, cli_flags)`` to produce the
+instance.  A pre-built instance or a builder callable with the same
+signature are also accepted.
+"""
 
 
 @dataclass(frozen=True)
@@ -29,9 +99,9 @@ class PluginCommandSpec:
     """
     One executable scope and verb contribution declared by a plugin.
 
-    `command` must be a ready-to-register Click command for the declared verb.
-    Shepherd validates that the Click command name matches `verb` before
-    exposing it through the runtime registry.
+    ``command`` must be a ready-to-register Click command for the declared
+    verb. Shepherd validates that the Click command name matches ``verb``
+    before exposing it through the runtime registry.
     """
 
     scope: str
@@ -44,40 +114,53 @@ class PluginCompletionSpec:
     """
     One completion provider contribution keyed by scope.
 
-    `provider` may be either:
+    ``provider`` must be a callable ``f(args: list[str]) -> list[str]``.
+    If you have a class implementing :class:`CompletionProvider`, pass its
+    bound method: ``provider=my_obj.get_completions``.
 
-    * a callable accepting the raw completion args and returning suggestions
-    * an object exposing `get_completions(args)`
-
-    The runtime validates that one of those two execution shapes is present
-    before adding the provider to the registry.
+    The runtime validates the shape before adding the provider to the
+    registry.
     """
 
     scope: str
-    provider: Any
+    provider: Callable[[list[str]], list[str]]
 
 
 @dataclass(frozen=True)
-class PluginFactorySpec:
+class PluginEnvFactorySpec:
     """
-    One factory contribution declared by a plugin.
+    One environment factory contribution declared by a plugin.
 
-    `provider` carries the concrete factory object published by the plugin.
-    The runtime layer currently validates and stores it only; env and service
-    flows will start consuming these provider objects in a later rollout step.
+    ``provider`` must satisfy :data:`EnvFactoryProvider` — typically the
+    **class** of your ``EnvironmentFactory`` subclass.  The runtime
+    instantiates it with ``(configMng, svc_factory, cli_flags)`` on demand.
     """
 
     id: str
-    provider: Any
+    provider: EnvFactoryProvider
+
+
+@dataclass(frozen=True)
+class PluginSvcFactorySpec:
+    """
+    One service factory contribution declared by a plugin.
+
+    ``provider`` must satisfy :data:`SvcFactoryProvider` — typically the
+    **class** of your ``ServiceFactory`` subclass.  The runtime instantiates
+    it with ``(configMng,)`` on demand.
+    """
+
+    id: str
+    provider: SvcFactoryProvider
 
 
 class ShepherdPlugin(ABC):
     """
     Root runtime interface implemented by external plugins.
 
-    A concrete plugin exposes its capabilities by overriding the contribution
-    getters below. Returning an empty sequence means that the plugin does not
-    participate in that extension area.
+    A concrete plugin exposes its capabilities by overriding the
+    contribution getters below.  Returning an empty sequence means that the
+    plugin does not participate in that extension area.
     """
 
     def get_commands(self) -> Sequence[PluginCommandSpec]:
@@ -88,10 +171,10 @@ class ShepherdPlugin(ABC):
         """Return completion providers grouped by the scopes they serve."""
         return ()
 
-    def get_env_factories(self) -> Sequence[PluginFactorySpec]:
+    def get_env_factories(self) -> Sequence[PluginEnvFactorySpec]:
         """Return environment factories owned by the plugin."""
         return ()
 
-    def get_service_factories(self) -> Sequence[PluginFactorySpec]:
+    def get_service_factories(self) -> Sequence[PluginSvcFactorySpec]:
         """Return service factories owned by the plugin."""
         return ()

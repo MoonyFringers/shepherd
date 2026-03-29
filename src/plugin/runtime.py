@@ -22,7 +22,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from types import ModuleType
-from typing import Any, Sequence
+from typing import Any, Callable, Sequence
 
 import click
 import yaml
@@ -34,13 +34,15 @@ from config import (
     PluginCfg,
     PluginDescriptorCfg,
     ServiceTemplateCfg,
+    ServiceTemplateRefCfg,
     parse_plugin_descriptor,
 )
 from environment import EnvironmentFactory
 from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
-    PluginFactorySpec,
+    PluginEnvFactorySpec,
+    PluginSvcFactorySpec,
     ShepherdPlugin,
 )
 from service import ServiceFactory
@@ -74,8 +76,13 @@ def _service_template_registry() -> dict[str, ServiceTemplateCfg]:
     return {}
 
 
-def _factory_registry() -> dict[str, "PluginFactorySpec"]:
-    """Create a typed default for canonical factory registrations."""
+def _env_factory_registry() -> dict[str, "PluginEnvFactorySpec"]:
+    """Create a typed default for env factory registrations."""
+    return {}
+
+
+def _svc_factory_registry() -> dict[str, "PluginSvcFactorySpec"]:
+    """Create a typed default for canonical service factory registrations."""
     return {}
 
 
@@ -114,11 +121,11 @@ class PluginRegistry:
     service_templates: dict[str, ServiceTemplateCfg] = field(
         default_factory=_service_template_registry
     )
-    env_factories: dict[str, PluginFactorySpec] = field(
-        default_factory=_factory_registry
+    env_factories: dict[str, PluginEnvFactorySpec] = field(
+        default_factory=_env_factory_registry
     )
-    service_factories: dict[str, PluginFactorySpec] = field(
-        default_factory=_factory_registry
+    service_factories: dict[str, PluginSvcFactorySpec] = field(
+        default_factory=_svc_factory_registry
     )
 
 
@@ -363,17 +370,11 @@ class PluginRuntimeMng:
             plugin_id, loaded.instance.get_completion_providers()
         )
         self._register_descriptor_templates(loaded)
-        self._register_factories(
-            plugin_id,
-            loaded.instance.get_env_factories(),
-            self.registry.env_factories,
-            "environment factory",
+        self._register_env_factories(
+            plugin_id, loaded.instance.get_env_factories()
         )
-        self._register_factories(
-            plugin_id,
-            loaded.instance.get_service_factories(),
-            self.registry.service_factories,
-            "service factory",
+        self._register_svc_factories(
+            plugin_id, loaded.instance.get_service_factories()
         )
 
     def _register_commands(
@@ -450,7 +451,9 @@ class PluginRuntimeMng:
                 provider.scope, []
             ).append(provider)
 
-    def _is_completion_provider(self, provider: Any) -> bool:
+    def _is_completion_provider(
+        self, provider: Callable[[list[str]], list[str]]
+    ) -> bool:
         """
         Return whether the completion provider exposes an executable shape.
         """
@@ -575,9 +578,9 @@ class PluginRuntimeMng:
     def _namespace_service_template_ref(
         self,
         plugin_id: str,
-        template_ref: Any,
+        template_ref: ServiceTemplateRefCfg,
         service_local_ids: set[str],
-    ) -> Any:
+    ) -> ServiceTemplateRefCfg:
         """Return one env->service template reference with canonical ids."""
         template_name = template_ref.template
         if "/" not in template_name and template_name in service_local_ids:
@@ -598,39 +601,69 @@ class PluginRuntimeMng:
             return factory_id
         return f"{plugin_id}/{factory_id}"
 
-    def _register_factories(
+    def _register_env_factories(
         self,
         plugin_id: str,
-        factories: Sequence[PluginFactorySpec],
-        registry: dict[str, PluginFactorySpec],
-        kind: str,
+        factories: Sequence[PluginEnvFactorySpec],
     ) -> None:
-        """Register namespaced factories in the selected runtime registry."""
+        """Register namespaced environment factories in the runtime registry."""
         for factory in factories:
             if "/" in factory.id:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' {kind} id '{factory.id}' must "
-                    "not contain '/'."
+                    f"Plugin '{plugin_id}' environment factory id "
+                    f"'{factory.id}' must not contain '/'."
                 )
             canonical_id = f"{plugin_id}/{factory.id}"
-            if canonical_id in registry:
+            if canonical_id in self.registry.env_factories:
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' declares duplicate {kind} "
-                    f"'{canonical_id}'."
+                    f"Plugin '{plugin_id}' declares duplicate environment "
+                    f"factory '{canonical_id}'."
                 )
-            if not self._is_factory_provider(factory.provider):
+            if not self._is_env_factory_provider(factory.provider):
                 Util.print_error_and_die(
-                    f"Plugin '{plugin_id}' {kind} '{canonical_id}' must "
-                    "provide a factory instance, factory class, or "
+                    f"Plugin '{plugin_id}' environment factory "
+                    f"'{canonical_id}' must provide a factory instance, "
+                    "factory class, or factory builder callable."
+                )
+            self.registry.env_factories[canonical_id] = factory
+
+    def _register_svc_factories(
+        self,
+        plugin_id: str,
+        factories: Sequence[PluginSvcFactorySpec],
+    ) -> None:
+        """Register namespaced service factories in the runtime registry."""
+        for factory in factories:
+            if "/" in factory.id:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' service factory id "
+                    f"'{factory.id}' must not contain '/'."
+                )
+            canonical_id = f"{plugin_id}/{factory.id}"
+            if canonical_id in self.registry.service_factories:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' declares duplicate service "
+                    f"factory '{canonical_id}'."
+                )
+            if not self._is_svc_factory_provider(factory.provider):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' service factory '{canonical_id}' "
+                    "must provide a factory instance, factory class, or "
                     "factory builder callable."
                 )
-            registry[canonical_id] = factory
+            self.registry.service_factories[canonical_id] = factory
 
-    def _is_factory_provider(self, provider: Any) -> bool:
-        """Return whether the factory provider can be materialized later."""
-        return isinstance(
-            provider, (EnvironmentFactory, ServiceFactory)
-        ) or callable(provider)
+    def _is_env_factory_provider(self, provider: Any) -> bool:
+        # provider: Any — pyright cannot narrow the EnvFactoryProvider union
+        # (EnvironmentFactory | Callable[...]) via isinstance alone.
+        """Return whether the env factory provider can be materialized."""
+        return isinstance(provider, EnvironmentFactory) or callable(provider)
+
+    def _is_svc_factory_provider(self, provider: Any) -> bool:
+        # provider: Any — pyright cannot narrow the SvcFactoryProvider union
+        # (ServiceFactory | Callable[...]) via isinstance alone.
+        """Return whether the svc factory provider can be materialized."""
+        return isinstance(provider, ServiceFactory) or callable(provider)
 
     def get_environment_template(
         self, template_id: str
