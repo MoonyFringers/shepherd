@@ -26,6 +26,7 @@ extend_skip_glob = ["resources/*"]
 typeCheckingMode = "strict"
 venvPath = ".."
 venv = ".venv"
+exclude = ["../examples"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

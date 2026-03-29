@@ -12,7 +12,8 @@ from environment import Environment, EnvironmentFactory
 from plugin import (
     PluginCommandSpec,
     PluginCompletionSpec,
-    PluginFactorySpec,
+    PluginEnvFactorySpec,
+    PluginSvcFactorySpec,
     ShepherdPlugin,
 )
 from service import Service, ServiceFactory
@@ -96,7 +97,7 @@ class RuntimeFixturePlugin(ShepherdPlugin):
 
     def get_env_factories(self):
         return [
-            PluginFactorySpec(
+            PluginEnvFactorySpec(
                 id="baseline-factory",
                 provider=FixturePluginEnvironmentFactory,
             )
@@ -104,7 +105,7 @@ class RuntimeFixturePlugin(ShepherdPlugin):
 
     def get_service_factories(self):
         return [
-            PluginFactorySpec(
+            PluginSvcFactorySpec(
                 id="api-factory",
                 provider=FixturePluginServiceFactory,
             )
