@@ -1,0 +1,83 @@
+# Hello Plugin — a minimal, fully-featured Shepherd plugin example.
+#
+# This plugin demonstrates every extension point of the Shepherd plugin API:
+#
+#   • CLI commands    — adds `shepctl hello greet`
+#   • Completion      — dynamic completions for the `hello` scope
+#   • Service factory — `echo-factory` builds a simple busybox echo service
+#   • Env factory     — `demo-env-factory` builds a demo environment
+#   • Templates       — declarative service and environment templates
+
+id: hello-plugin
+name: Hello Plugin
+version: 0.1.0
+
+# Must be 1 — the only supported value at this time.
+plugin_api_version: 1
+
+description: Minimal reference plugin showing all Shepherd extension points.
+
+# The Python class Shepherd will import and instantiate at startup.
+entrypoint:
+  module: hello_plugin.main
+  class: HelloPlugin
+
+# Declare which extension points this plugin participates in.
+# Shepherd validates declared capabilities against what the plugin actually
+# returns — set a capability to false to opt out of that extension area.
+capabilities:
+  commands: true
+  completion: true
+  templates: true
+  env_factories: true
+  svc_factories: true
+
+# Plugin-specific defaults.  Available to the plugin via
+# configMng.get_plugin_config("hello-plugin").
+default_config:
+  greeting: Hello
+
+# ---------------------------------------------------------------------------
+# Declarative service templates
+#
+# These are registered under the namespaced id "hello-plugin/echo".
+# The factory id references a factory contributed by get_service_factories().
+# ---------------------------------------------------------------------------
+service_templates:
+  - tag: echo
+    factory: echo-factory
+    labels:
+      - hello
+    properties:
+      source: hello-plugin
+    containers:
+      - image: busybox:stable-glibc
+        tag: app
+        container_name: null
+        hostname: null
+        workdir: null
+        volumes: []
+        environment: []
+        ports: []
+        networks: []
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null
+
+# ---------------------------------------------------------------------------
+# Declarative environment templates
+#
+# Registered under "hello-plugin/demo".
+# service_templates references use the local id "echo"; Shepherd expands it
+# to "hello-plugin/echo" automatically during registration.
+# ---------------------------------------------------------------------------
+env_templates:
+  - tag: demo
+    factory: demo-env-factory
+    service_templates:
+      - template: echo
+        tag: hello-echo
+    probes: null
+    networks: null
+    volumes: null

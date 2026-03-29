@@ -240,10 +240,13 @@ Examples:
 
 Plugin completion providers are now executed by the shared completion engine.
 
-Each `PluginCompletionSpec` targets one scope and provides either:
+Each `PluginCompletionSpec` targets one scope and provides a callable with the
+signature `f(args: list[str]) -> list[str]`.  If you prefer a class-based
+provider, implement the `CompletionProvider` protocol and pass the bound method:
 
-- a callable that accepts the raw completion args and returns suggestions
-- an object exposing `get_completions(args)`
+```python
+PluginCompletionSpec(scope="myscope", provider=my_obj.get_completions)
+```
 
 Completion results are merged with the built-in completion managers for the
 same scope. This allows plugins to:
@@ -251,6 +254,81 @@ same scope. This allows plugins to:
 - complete verbs under plugin-owned scopes
 - complete values for plugin-added verbs under existing scopes
 - return dynamic values computed in Python at completion time
+
+## Plugin API Types
+
+The public plugin API is fully typed.  All types
+below are importable from the `plugin` package.
+
+### Spec types
+
+| Class                  | Purpose                                           |
+|------------------------|---------------------------------------------------|
+| `PluginCommandSpec`    | Declares a scope + verb + Click command           |
+| `PluginCompletionSpec` | Declares a completion provider for a scope        |
+| `PluginEnvFactorySpec` | Declares an environment factory with a local id   |
+| `PluginSvcFactorySpec` | Declares a service factory with a local id        |
+
+### Provider type aliases
+
+`CompletionProviderType`
+: `Callable[[list[str]], list[str]]`
+  or `CompletionProvider`
+
+`SvcFactoryProvider`
+: `ServiceFactory` instance
+  **or**
+  `Callable[[ConfigMng], ServiceFactory]`
+
+`EnvFactoryProvider`
+: `EnvironmentFactory` instance
+  **or**
+  `Callable[[ConfigMng, ServiceFactory, dict | None],
+            EnvironmentFactory]`
+
+The most common pattern is to pass the **class** of your factory as the
+provider.  Shepherd instantiates it at runtime with the correct arguments:
+
+- service factories: `MyServiceFactory(configMng)`
+- environment factories: `MyEnvironmentFactory(configMng, svc_factory, cli_flags)`
+
+### `CompletionProvider` protocol
+
+```python
+class CompletionProvider(Protocol):
+    def get_completions(self, args: list[str]) -> list[str]: ...
+```
+
+`@runtime_checkable`, so you can pass a class instance directly to
+`CompletionProviderType`-typed arguments.
+
+### Quick import reference
+
+```python
+from plugin import (
+    CompletionProvider,
+    CompletionProviderType,
+    EnvFactoryProvider,
+    PluginCommandSpec,
+    PluginCompletionSpec,
+    PluginEnvFactorySpec,
+    PluginSvcFactorySpec,
+    ShepherdPlugin,
+    SvcFactoryProvider,
+)
+```
+
+## Example Plugin
+
+A complete, installable reference plugin lives at
+[`examples/plugins/hello-plugin/`](../examples/plugins/hello-plugin/).
+
+It demonstrates all four extension points (commands, completion, service
+factories, environment factories) and includes inline comments explaining each
+spec type and the factory callable convention.
+
+See [`examples/plugins/hello-plugin/README.md`](../examples/plugins/hello-plugin/README.md)
+for install and usage instructions.
 
 ## Scope Of This Step
 
