@@ -73,10 +73,6 @@ class ShepherdMng:
         self.configMng.load()
         self.configMng.ensure_dirs()
         self.pluginMng = PluginMng(self.cli_flags, self.configMng)
-        self.pluginRuntimeMng = plugin_runtime_mng
-        if self.pluginRuntimeMng is None and load_runtime_plugins:
-            self.pluginRuntimeMng = PluginRuntimeMng(self.configMng)
-        self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
         self.svcFactory = ShpdServiceFactory(self.configMng)
         self.envFactory = ShpdEnvironmentFactory(
             self.configMng, self.svcFactory, cli_flags=self.cli_flags
@@ -87,6 +83,18 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
+        self.pluginRuntimeMng = plugin_runtime_mng
+        if self.pluginRuntimeMng is None and load_runtime_plugins:
+            self.pluginRuntimeMng = PluginRuntimeMng(
+                self.configMng, self.environmentMng, self.serviceMng
+            )
+        elif self.pluginRuntimeMng is not None and load_runtime_plugins:
+            # Pre-bootstrapped during Click resolution: inject managers now
+            # that they are available.
+            self.pluginRuntimeMng.attach_managers(
+                self.environmentMng, self.serviceMng
+            )
+        self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
         self.completionMng = CompletionMng(
             self.cli_flags,
             self.configMng,

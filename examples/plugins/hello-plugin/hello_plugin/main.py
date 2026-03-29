@@ -37,6 +37,7 @@ from hello_plugin.factories import HelloEnvironmentFactory, HelloServiceFactory
 from plugin import (
     PluginCommandSpec,
     PluginCompletionSpec,
+    PluginContext,
     PluginEnvFactorySpec,
     PluginSvcFactorySpec,
     ShepherdPlugin,
@@ -47,8 +48,21 @@ class HelloPlugin(ShepherdPlugin):
     """Entry-point class for the Hello Plugin.
 
     Shepherd discovers this class via the ``entrypoint`` stanza in
-    ``plugin.yaml`` and calls each getter once during startup.
+    ``plugin.yaml`` and calls each getter once during startup, passing a
+    :class:`PluginContext` that exposes the core config, environment, and
+    service managers.
+
+    ``context.config`` is always available.
+    ``context.environment`` and ``context.service`` are ``None`` during
+    tab-completion resolution and set to the live managers once the full
+    CLI bootstrap completes — they are always available inside command
+    handlers.
     """
+
+    def __init__(self, context: PluginContext) -> None:
+        super().__init__(context)
+        # self.context is now available in all contribution getters and
+        # in any Click command handler that closes over it.
 
     # ------------------------------------------------------------------
     # Commands

@@ -255,6 +255,53 @@ same scope. This allows plugins to:
 - complete values for plugin-added verbs under existing scopes
 - return dynamic values computed in Python at completion time
 
+## Plugin Context
+
+Every plugin receives a `PluginContext` injected through its constructor.
+It provides typed, stable access to the Shepherd core managers without
+importing internal concrete classes.
+
+```python
+from plugin import PluginContext, ShepherdPlugin
+
+class MyPlugin(ShepherdPlugin):
+    def __init__(self, context: PluginContext) -> None:
+        super().__init__(context)
+        # self.context is now available in all contribution getters
+        # and in any Click command handler that closes over it.
+```
+
+`PluginContext` has three fields:
+
+- `config: PluginConfigView` — always set; provides read access to
+  environments, templates, and plugin metadata.
+- `environment: PluginEnvironmentView | None` — set after the full CLI
+  bootstrap; exposes environment lifecycle operations.
+- `service: PluginServiceView | None` — set after the full CLI bootstrap;
+  exposes service operations.
+
+`environment` and `service` are `None` only during the Click command
+resolution phase (tab completion).  By the time any command handler
+executes they are always populated.
+
+### Available operations
+
+`PluginConfigView` exposes: `get_environments`, `get_active_environment`,
+`get_environment`, `get_environment_templates`, `get_service_templates`,
+`get_plugin`, `get_plugin_dir`.
+
+`PluginEnvironmentView` exposes: `list_envs`, `describe_env`,
+`get_environment_from_tag`, `add_env`, `add_service`, `delete_env`,
+`start_env`, `stop_env`, `status_env`.
+
+`PluginServiceView` exposes: `get_service`, `describe_svc`, `build_svc`,
+`start_svc`, `stop_svc`, `reload_svc`, `logs_svc`, `shell_svc`,
+`render_svc`.
+
+All three are `@runtime_checkable` Protocols satisfied structurally by the
+concrete managers — plugin authors can mock them in unit tests without
+any Shepherd-specific fixtures.
+
 ## Plugin API Types
 
 The public plugin API is fully typed.  All types
