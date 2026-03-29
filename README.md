@@ -3,14 +3,40 @@
 [![license](https://img.shields.io/badge/license-AGPL%20V3-blue)](https://github.com/MoonyFringers/shepherd/blob/master/LICENSE)
 [![codecov](https://codecov.io/gh/MoonyFringers/shepherd/branch/main/graph/badge.svg)](https://codecov.io/gh/MoonyFringers/shepherd)
 
-Shepherd functions as a specialized orchestration tool designed to streamline
-the provisioning of development platforms.
+Shepherd is a specialized orchestration platform designed to streamline
+the provisioning of reproducible development platforms.
 
-It helps define, start, inspect, and manage reproducible development
-environments with `shepctl`.
+It helps define, start, inspect, and manage structured development
+environments with `shepctl`, while providing a flexible foundation that
+can be extended to support new workflows, platforms, and operational
+patterns.
 
 > 📌 **Note:** Should a bug be found and not expected to be related with
-> [known issues][issues], one should feel encouraged to file a new issue.
+> [known issues][issues], one
+> should feel encouraged to file a new issue.
+
+## Extensibility
+
+Shepherd is built as an **extensible platform**, not a fixed tool.
+
+Core capabilities can be expanded through plugins that integrate
+directly into the runtime and CLI, allowing teams to tailor Shepherd to
+their infrastructure, workflows, and domain-specific needs.
+
+Plugins can:
+
+- Add new CLI scopes and commands
+- Provide dynamic command completions
+- Contribute reusable environment templates
+- Define custom service and environment factories
+- Extend provisioning logic without modifying core code
+
+This design allows Shepherd to evolve alongside the systems it manages,
+supporting organization-specific conventions while keeping the core
+runtime stable and predictable.
+
+See the [plugin documentation](docs/plugins.md) for details on how
+plugins integrate with Shepherd.
 
 ## Getting Started
 
@@ -22,9 +48,11 @@ VER=<release-tag> sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFrin
 
 Then:
 
-1. Pick a sample configuration from [`examples/`](examples/README.md).
-2. Review the available commands with `shepctl --help`.
-3. Read the [installation guide][install] for setup details and advanced options.
+1. Pick a sample configuration from [`examples/configurations`](examples/configurations).
+2. Pick a sample plugin from [`examples/plugins`](examples/plugins).
+3. Review the available commands with `shepctl --help`.
+4. Read the [installation guide](docs/install.md) for setup details and
+    advanced options.
 
 ## Key Concepts
 
@@ -39,14 +67,11 @@ Regular stateless container images that run application or utility code.
 
 ### Environment Images
 
-Environment images capture a reusable snapshot of a reference platform at
-a specific point in time. They can include:
+Environment images capture a reusable snapshot of a reference platform
+at a specific point in time.
 
-- **Database state**: a preloaded database that can be consumed immediately.
-- **Service state**: service deployments that are already prepared for use.
-
-Once an environment image is pulled and imported into Shepherd, that local
-environment evolves independently for each developer.
+Once an environment image is pulled and imported into Shepherd, that
+local environment evolves independently for each developer.
 
 ## Requirements
 
@@ -54,15 +79,6 @@ environment evolves independently for each developer.
 
 - **Linux**
   - Debian derived
-
-## Examples
-
-Sample `shpd.yaml` configurations are available in [`examples/`](examples/README.md):
-
-- [`examples/minimal/`](examples/minimal/README.md)
-- [`examples/env-basic/`](examples/env-basic/README.md)
-- [`examples/env-with-probes/`](examples/env-with-probes/README.md)
-- [`examples/svc-basic/`](examples/svc-basic/README.md)
 
 ## Documentation
 
