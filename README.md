@@ -1,6 +1,7 @@
 # Shepherd
 
-[![license](https://img.shields.io/badge/license-AGPL%20V3-blue)](https://github.com/MoonyFringers/shepherd/blob/master/LICENSE)
+[![license: AGPL v3](https://img.shields.io/badge/license-AGPL%20v3-blue)](LICENSE)
+[![Commercial License Available](https://img.shields.io/badge/license-Commercial-orange)](LICENSE-COMMERCIAL)
 [![codecov](https://codecov.io/gh/MoonyFringers/shepherd/branch/main/graph/badge.svg)](https://codecov.io/gh/MoonyFringers/shepherd)
 
 Shepherd is a specialized orchestration platform designed to streamline
@@ -91,6 +92,21 @@ local environment evolves independently for each developer.
 ## Develop Shepherd
 
 See our [development][development] documentation.
+
+## License
+
+Shepherd Core Stack is dual-licensed:
+
+- **Open Source (AGPL v3):** Free to use, modify, and distribute under the
+  terms of the [GNU Affero General Public License v3](LICENSE). Any
+  modifications used in network-accessible services must be made available
+  under the same license.
+- **Commercial:** A proprietary license is available for organizations that
+  require closed-source use, SaaS deployment without AGPL obligations, or
+  redistribution without source disclosure. See [LICENSE-COMMERCIAL](LICENSE-COMMERCIAL)
+  for details and contact information.
+
+All contributions require signing the [Contributor License Agreement](CLA.md).
 
 [issues]: https://github.com/MoonyFringers/shepherd/issues
 [Consuming Environment Images]: docs/env-consume.md
