@@ -28,6 +28,12 @@ from .api import (
     ShepherdPlugin,
     SvcFactoryProvider,
 )
+from .context import (
+    PluginConfigView,
+    PluginContext,
+    PluginEnvironmentView,
+    PluginServiceView,
+)
 from .plugin import PluginMng
 from .runtime import (
     LoadedPlugin,
@@ -42,10 +48,14 @@ __all__ = [
     "LoadedPlugin",
     "PluginCommandSpec",
     "PluginCompletionSpec",
+    "PluginConfigView",
+    "PluginContext",
     "PluginEnvFactorySpec",
+    "PluginEnvironmentView",
     "PluginMng",
     "PluginRegistry",
     "PluginRuntimeMng",
+    "PluginServiceView",
     "PluginSvcFactorySpec",
     "ShepherdPlugin",
     "SvcFactoryProvider",

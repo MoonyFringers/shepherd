@@ -28,6 +28,7 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
+from plugin import PluginRuntimeMng
 from shepctl import ShepherdMng, cli
 
 
@@ -532,6 +533,54 @@ def test_startup_fails_for_invalid_plugin_entrypoint(
 
     assert result.exit_code == 1
     assert "must implement ShepherdPlugin" in result.output
+
+
+@pytest.mark.shpd
+def test_attach_managers_populates_plugin_contexts(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """attach_managers() injects env/svc managers into pre-loaded contexts.
+
+    Simulates the tab-completion pre-bootstrap path: PluginRuntimeMng is
+    created without managers (environment=None, service=None), then
+    attach_managers() is called with mock managers and every loaded plugin
+    context must be updated.
+    """
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    shepherd = ShepherdMng()
+    runtime_mng: PluginRuntimeMng = (
+        shepherd.pluginRuntimeMng  # type: ignore[assignment]
+    )
+
+    # Pre-bootstrap: build a fresh runtime with no managers passed in.
+    runtime_no_managers = PluginRuntimeMng(shepherd.configMng)
+    loaded = runtime_no_managers.registry.plugins.get("runtime-plugin")
+    assert loaded is not None
+    assert loaded.instance.context.environment is None
+    assert loaded.instance.context.service is None
+
+    # Inject managers — simulates what ShepherdMng does after full bootstrap.
+    runtime_no_managers.attach_managers(
+        shepherd.environmentMng, shepherd.serviceMng
+    )
+    assert loaded.instance.context.environment is shepherd.environmentMng
+    assert loaded.instance.context.service is shepherd.serviceMng
+
+    _ = runtime_mng  # silence unused-variable warning
 
 
 @pytest.mark.shpd

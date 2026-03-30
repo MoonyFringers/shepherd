@@ -40,7 +40,7 @@ plugins integrate with Shepherd.
 
 ## Getting Started
 
-Install `shepctl`:
+Install shepctl:
 
 ```bash
 VER=<release-tag> sh -c "$(curl -sfL https://raw.githubusercontent.com/MoonyFringers/shepherd/main/scripts/install.sh)"

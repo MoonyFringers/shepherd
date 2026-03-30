@@ -32,6 +32,7 @@ import click
 
 from config import ConfigMng
 from environment import EnvironmentFactory
+from plugin.context import PluginContext
 from service import ServiceFactory
 
 
@@ -158,10 +159,24 @@ class ShepherdPlugin(ABC):
     """
     Root runtime interface implemented by external plugins.
 
+    Shepherd instantiates the concrete subclass with a :class:`PluginContext`
+    that provides access to the core config, environment, and service
+    managers.  Store it and use it in command handlers:
+
+    .. code-block:: python
+
+        class MyPlugin(ShepherdPlugin):
+            def __init__(self, context: PluginContext) -> None:
+                super().__init__(context)
+                # self.context is now available
+
     A concrete plugin exposes its capabilities by overriding the
     contribution getters below.  Returning an empty sequence means that the
     plugin does not participate in that extension area.
     """
+
+    def __init__(self, context: PluginContext) -> None:
+        self.context = context
 
     def get_commands(self) -> Sequence[PluginCommandSpec]:
         """Return scope and verb contributions declared by the plugin."""

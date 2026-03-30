@@ -37,7 +37,7 @@ from config import (
     ServiceTemplateRefCfg,
     parse_plugin_descriptor,
 )
-from environment import EnvironmentFactory
+from environment import EnvironmentFactory, EnvironmentMng
 from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
@@ -45,7 +45,12 @@ from plugin.api import (
     PluginSvcFactorySpec,
     ShepherdPlugin,
 )
-from service import ServiceFactory
+from plugin.context import (
+    PluginContext,
+    PluginEnvironmentView,
+    PluginServiceView,
+)
+from service import ServiceFactory, ServiceMng
 from util import Constants, Util
 
 SUPPORTED_PLUGIN_API_VERSION = 1
@@ -152,10 +157,34 @@ class PluginRuntimeMng:
     }
     PLUGIN_TEMPLATES_DIR = "templates"
 
-    def __init__(self, configMng: ConfigMng):
+    def __init__(
+        self,
+        configMng: ConfigMng,
+        environmentMng: EnvironmentMng | None = None,
+        serviceMng: ServiceMng | None = None,
+    ):
         self.configMng = configMng
+        self._environmentMng: PluginEnvironmentView | None = environmentMng
+        self._serviceMng: PluginServiceView | None = serviceMng
         self.registry = PluginRegistry()
         self.load_enabled_plugins()
+
+    def attach_managers(
+        self,
+        environmentMng: EnvironmentMng,
+        serviceMng: ServiceMng,
+    ) -> None:
+        """Inject managers into already-loaded plugin contexts.
+
+        Called by :class:`ShepherdMng` when plugins were pre-loaded during
+        the Click command resolution phase (tab completion) and the full
+        manager set becomes available only after the root CLI callback runs.
+        """
+        self._environmentMng = environmentMng
+        self._serviceMng = serviceMng
+        for loaded in self.registry.plugins.values():
+            loaded.instance.context.environment = environmentMng
+            loaded.instance.context.service = serviceMng
 
     def load_enabled_plugins(self) -> PluginRegistry:
         """
@@ -287,8 +316,24 @@ class PluginRuntimeMng:
             )
             raise AssertionError("unreachable")
 
+        if not (
+            isinstance(plugin_class, type)
+            and issubclass(plugin_class, ShepherdPlugin)
+        ):
+            Util.print_error_and_die(
+                f"Plugin '{plugin_id}' entrypoint "
+                f"'{module_name}.{class_name}' "
+                "must implement ShepherdPlugin."
+            )
+            raise AssertionError("unreachable")
+
+        ctx = PluginContext(
+            config=self.configMng,
+            environment=self._environmentMng,
+            service=self._serviceMng,
+        )
         try:
-            plugin = plugin_class()
+            plugin = plugin_class(ctx)
         except Exception as exc:
             Util.print_error_and_die(
                 f"Failed to instantiate plugin '{plugin_id}' entrypoint "
@@ -296,11 +341,6 @@ class PluginRuntimeMng:
             )
             raise AssertionError("unreachable")
 
-        if not isinstance(plugin, ShepherdPlugin):
-            Util.print_error_and_die(
-                f"Plugin '{plugin_id}' entrypoint '{module_name}.{class_name}' "
-                "must implement ShepherdPlugin."
-            )
         return plugin
 
     def _prepare_module_root(
