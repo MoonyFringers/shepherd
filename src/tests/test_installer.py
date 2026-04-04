@@ -3,7 +3,7 @@
 #
 # This file is part of Shepherd Core Stack.
 # Open-source: see LICENSE (AGPL-3.0-only).
-# Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.io.
+# Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
 import os
 import shutil

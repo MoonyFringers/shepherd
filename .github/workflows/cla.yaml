@@ -13,6 +13,16 @@ on:
 permissions:
   pull-requests: write
   statuses: write
+  # contents: write is required so the action can commit updated
+  # cla_signatures.json back to the repository when a contributor signs.
+  #
+  # Security note: this workflow uses pull_request_target (not pull_request)
+  # so it runs in the base-repo context with write access even for fork PRs.
+  # This is intentional and safe here because the action only reads PR
+  # metadata and posts comments — it never checks out or executes code from
+  # the contributor's branch. Do NOT add a checkout step to this workflow
+  # without carefully scoping it to the base branch (refs/heads/main), as
+  # that would open a supply-chain injection vector.
   contents: write
 
 jobs:
@@ -27,7 +37,12 @@ jobs:
 
     steps:
       - name: CLA Assistant
-        uses: contributor-assistant/github-action@v2.6.1
+        # Pinned to the exact commit SHA for supply-chain safety.
+        # contributor-assistant/github-action is archived (last release v2.6.1,
+        # 2024-09-26). The archived state means this SHA is immutable — no
+        # force-pushes possible — but also means no future security patches.
+        # If a maintained alternative becomes available, evaluate migrating.
+        uses: contributor-assistant/github-action@ca4a40a7d1004f18d9960b404b97e5f30a505a08  # v2.6.1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # A PAT with repo scope is required to write cla_signatures.json
