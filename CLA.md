@@ -54,12 +54,18 @@ by You that are necessarily infringed by Your Contribution(s) alone or by the
 combination of Your Contribution(s) with the Work to which such
 Contribution(s) was submitted.
 
-If any entity institutes patent litigation against You or any other entity
-(including a cross-claim or counterclaim in a lawsuit) alleging that Your
-Contribution, or the Work to which You have contributed, constitutes direct or
-contributory patent infringement, then any patent licenses granted to that
-entity under this Agreement for that Contribution or Work shall terminate as of
-the date such litigation is filed.
+If any entity institutes patent litigation against any other entity (including
+a cross-claim or counterclaim in a lawsuit) alleging that Your Contribution,
+or the Work to which You have contributed, constitutes direct or contributory
+patent infringement, then:
+
+**(a)** any patent licenses granted to that entity under this Agreement for
+that Contribution or Work shall terminate as of the date such litigation is
+filed; and
+
+**(b)** if Moony Fringers institutes such litigation against You, all licenses
+granted to Moony Fringers under this Agreement with respect to Your
+Contributions shall likewise terminate as of the date such litigation is filed.
 
 ---
 
@@ -126,7 +132,38 @@ particular purpose.
 
 ---
 
-## 9. How to Sign
+## 9. Versioning and Amendments
+
+This Agreement is versioned. The version number appears at the top of this
+document. Moony Fringers may publish revised versions of the CLA from time to
+time.
+
+- **Past contributions** remain governed by the version of the CLA that was in
+  effect at the time of signing. A new version does not retroactively change
+  the terms under which prior contributions were made.
+- **Future contributions** submitted after a new version is published are
+  governed by the new version. If You do not agree to a new version, You must
+  stop submitting Contributions.
+- **Re-signature** is required when the version of the CLA changes. The CLA
+  Assistant bot will prompt unsigned contributors when a new version is in
+  effect.
+
+Moony Fringers will announce material changes via the repository (e.g., a
+dedicated GitHub issue or release note) before the new version takes effect.
+
+---
+
+## 10. Governing Law
+
+This Agreement shall be governed by and construed in accordance with the laws
+of **[JURISDICTION — configure before publishing]**, without regard to its
+conflict-of-law provisions. Any dispute arising out of or in connection with
+this Agreement shall be subject to the exclusive jurisdiction of the courts
+of that jurisdiction.
+
+---
+
+## 11. How to Sign
 
 To sign this CLA, simply open a pull request against the
 [MoonyFringers/shepherd](https://github.com/MoonyFringers/shepherd) repository.
