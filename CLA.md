@@ -156,10 +156,9 @@ dedicated GitHub issue or release note) before the new version takes effect.
 ## 10. Governing Law
 
 This Agreement shall be governed by and construed in accordance with the laws
-of **[JURISDICTION — configure before publishing]**, without regard to its
-conflict-of-law provisions. Any dispute arising out of or in connection with
-this Agreement shall be subject to the exclusive jurisdiction of the courts
-of that jurisdiction.
+of **Italy**, without regard to its conflict-of-law provisions. Any dispute
+arising out of or in connection with this Agreement shall be subject to the
+exclusive jurisdiction of the **Tribunale di Pisa** (Court of Pisa).
 
 ---
 
