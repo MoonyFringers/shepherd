@@ -388,7 +388,7 @@ def delete_env(shepherd: ShepherdMng, tag: str):
 # =====================================================
 @env.command(name="list")
 @click.pass_obj
-def list(shepherd: ShepherdMng):
+def list_envs(shepherd: ShepherdMng):
     """List environments."""
     shepherd.environmentMng.list_envs()
 
