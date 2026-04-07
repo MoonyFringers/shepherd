@@ -108,6 +108,8 @@ Shepherd Core Stack is dual-licensed:
 
 All contributions require signing the [Contributor License Agreement](CLA.md).
 
+--
+
 [issues]: https://github.com/MoonyFringers/shepherd/issues
 [Consuming Environment Images]: docs/env-consume.md
 [Authoring Environment Images]: docs/env-auth.md
