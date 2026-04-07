@@ -1,14 +1,6 @@
 {
   "signedContributors": [
     {
-      "name": "Giuseppe Baccini",
-      "id": 99738959,
-      "comment_id": 4158001267,
-      "created_at": "2026-03-30T20:33:11Z",
-      "repoId": "MoonyFringers/shepherd",
-      "pullRequestNo": 0
-    },
-    {
       "name": "Alessio Pascucci",
       "id": 4531376,
       "comment_id": 4172878988,
