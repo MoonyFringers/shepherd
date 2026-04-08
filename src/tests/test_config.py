@@ -331,8 +331,10 @@ def test_store_config_with_real_files():
             content = output_file.read()
             y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
             expected = yaml.safe_load(config_yaml)
+            expected.setdefault("env_template_fragments", None)
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
+                item.setdefault("fragments", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
             y2: str = yaml.dump(expected, sort_keys=True)
@@ -655,11 +657,13 @@ def test_store_config_with_refs_with_real_files():
             content = output_file.read()
             y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
             expected = yaml.safe_load(config_yaml_with_refs)
+            expected.setdefault("env_template_fragments", None)
+            expected.setdefault("plugins", None)
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
+                item.setdefault("fragments", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
-            expected.setdefault("plugins", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 

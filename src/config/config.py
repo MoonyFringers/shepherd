@@ -631,6 +631,34 @@ class ServiceCfg(Resolvable):
 
 
 @dataclass
+class EnvTemplateFragmentCfg(Resolvable):
+    """
+    A named, reusable bundle grouping a service template reference with its
+    associated probes, volumes, and networks.  Fragments are declared in
+    ``plugin.yaml`` or ``shpd.yaml`` and imported into ``env_templates`` via
+    the ``fragments:`` list.
+    """
+
+    tag: str
+    service_template: ServiceTemplateRefCfg
+    probes: Optional[list[ProbeCfg]] = None
+    volumes: Optional[list[VolumeCfg]] = None
+    networks: Optional[list[NetworkCfg]] = None
+
+
+@dataclass
+class FragmentRefCfg(Resolvable):
+    """
+    A reference to an ``EnvTemplateFragmentCfg`` inside an
+    ``EnvironmentTemplateCfg``.  The optional ``with_values`` map provides
+    fragment-local ``${KEY}`` placeholder overrides applied at merge time.
+    """
+
+    id: str
+    with_values: Optional[dict[str, str]] = None
+
+
+@dataclass
 class EnvironmentTemplateCfg(Resolvable):
     """
     Represents an environment template configuration.
@@ -643,6 +671,7 @@ class EnvironmentTemplateCfg(Resolvable):
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
     ready: Optional[ReadyCfg] = None
+    fragments: Optional[list[FragmentRefCfg]] = None
 
 
 @dataclass
@@ -798,6 +827,17 @@ class PluginEntrypointCfg(Resolvable):
 
 
 @dataclass
+class DependsOnCfg(Resolvable):
+    """
+    Declares a dependency on another Shepherd plugin.  ``version`` is an
+    optional PEP 440 version specifier (e.g. ``">=1.0.0"``).
+    """
+
+    id: str
+    version: Optional[str] = None
+
+
+@dataclass
 class PluginDescriptorCfg(Resolvable):
     """Represents the install-time plugin descriptor."""
 
@@ -811,6 +851,8 @@ class PluginDescriptorCfg(Resolvable):
     default_config: Optional[dict[str, Any]] = None
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
+    env_template_fragments: Optional[list[EnvTemplateFragmentCfg]] = None
+    depends_on: Optional[list[DependsOnCfg]] = None
 
 
 @dataclass
@@ -825,6 +867,7 @@ class Config(Resolvable):
     staging_area: StagingAreaCfg
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
+    env_template_fragments: Optional[list[EnvTemplateFragmentCfg]] = None
     plugins: Optional[list[PluginCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
@@ -957,6 +1000,36 @@ def _parse_service_template(item: Any) -> ServiceTemplateCfg:
     )
 
 
+def _parse_depends_on(item: Any) -> DependsOnCfg:
+    return DependsOnCfg(
+        id=str(item["id"]),
+        version=str(item["version"]) if item.get("version") else None,
+    )
+
+
+def _parse_fragment_ref(item: Any) -> FragmentRefCfg:
+    if isinstance(item, str):
+        return FragmentRefCfg(id=item)
+    with_raw = item.get("with")
+    return FragmentRefCfg(
+        id=str(item["id"]),
+        with_values=dict(with_raw) if with_raw else None,
+    )
+
+
+def _parse_env_template_fragment(item: Any) -> EnvTemplateFragmentCfg:
+    probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
+    volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
+    return EnvTemplateFragmentCfg(
+        tag=item["tag"],
+        service_template=_parse_service_template_ref(item["service_template"]),
+        probes=[_parse_probe(p) for p in probes_data],
+        volumes=[_parse_volume(v) for v in volumes_data],
+        networks=[_parse_network(n) for n in networks_data],
+    )
+
+
 def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
     service_templates_data = cast(
         list[dict[str, Any]], item.get("service_templates") or []
@@ -964,6 +1037,7 @@ def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
     probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
     networks_data = cast(list[dict[str, Any]], item.get("networks") or [])
     volumes_data = cast(list[dict[str, Any]], item.get("volumes") or [])
+    fragments_data = item.get("fragments")
     return EnvironmentTemplateCfg(
         tag=item["tag"],
         factory=item["factory"],
@@ -975,6 +1049,11 @@ def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
         ready=_parse_ready(item["ready"]) if item.get("ready") else None,
         networks=[_parse_network(network) for network in networks_data],
         volumes=[_parse_volume(volume) for volume in volumes_data],
+        fragments=(
+            [_parse_fragment_ref(f) for f in fragments_data]
+            if fragments_data
+            else None
+        ),
     )
 
 
@@ -1103,6 +1182,14 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
     ):
         raise ValueError("Plugin service_templates must be a list.")
 
+    fragments_data = descriptor.get("env_template_fragments")
+    if fragments_data is not None and not isinstance(fragments_data, list):
+        raise ValueError("Plugin env_template_fragments must be a list.")
+
+    depends_on_data = descriptor.get("depends_on")
+    if depends_on_data is not None and not isinstance(depends_on_data, list):
+        raise ValueError("Plugin depends_on must be a list.")
+
     env_templates = (
         [
             _parse_environment_template(template)
@@ -1117,6 +1204,22 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
             for template in cast(list[dict[str, Any]], service_templates_data)
         ]
         if service_templates_data is not None
+        else None
+    )
+    env_template_fragments = (
+        [
+            _parse_env_template_fragment(f)
+            for f in cast(list[dict[str, Any]], fragments_data)
+        ]
+        if fragments_data is not None
+        else None
+    )
+    depends_on = (
+        [
+            _parse_depends_on(d)
+            for d in cast(list[dict[str, Any]], depends_on_data)
+        ]
+        if depends_on_data is not None
         else None
     )
 
@@ -1138,6 +1241,8 @@ def parse_plugin_descriptor(yaml_str: str) -> PluginDescriptorCfg:
         default_config=cast(Optional[dict[str, Any]], default_config),
         env_templates=env_templates,
         service_templates=service_templates,
+        env_template_fragments=env_template_fragments,
+        depends_on=depends_on,
     )
 
 
@@ -1160,6 +1265,14 @@ def parse_config(yaml_str: str) -> Config:
             _parse_service_template(service_template)
             for service_template in data.get("service_templates", [])
         ],
+        env_template_fragments=(
+            [
+                _parse_env_template_fragment(f)
+                for f in data["env_template_fragments"]
+            ]
+            if data.get("env_template_fragments") is not None
+            else None
+        ),
         templates_path=data["templates_path"],
         envs_path=data["envs_path"],
         volumes_path=data["volumes_path"],
@@ -1415,6 +1528,33 @@ class ConfigMng:
         if self.pluginRuntimeMng is not None:
             registry.update(self.pluginRuntimeMng.registry.service_templates)
         return registry
+
+    def _core_env_template_fragment_registry(
+        self,
+    ) -> dict[str, EnvTemplateFragmentCfg]:
+        """Build the canonical lookup registry for built-in fragments."""
+        return {
+            self.get_canonical_id(f.tag): f
+            for f in self.config.env_template_fragments or []
+        }
+
+    def get_env_template_fragment_registry(
+        self,
+    ) -> dict[str, EnvTemplateFragmentCfg]:
+        """Return the merged canonical registry of env template fragments."""
+        registry = self._core_env_template_fragment_registry()
+        if self.pluginRuntimeMng is not None:
+            registry.update(
+                self.pluginRuntimeMng.registry.env_template_fragments
+            )
+        return registry
+
+    def get_env_template_fragment(
+        self, fragment_id: str
+    ) -> Optional[EnvTemplateFragmentCfg]:
+        """Return the fragment for *fragment_id*, or ``None`` if not found."""
+        canonical = self.get_canonical_id(fragment_id)
+        return self.get_env_template_fragment_registry().get(canonical)
 
     def get_canonical_env_factory_id(self, factory_id: str) -> str:
         """Return the canonical environment factory id."""
@@ -1748,6 +1888,34 @@ class ConfigMng:
             return sorted({cnt.tag for cnt in svc.containers if cnt.tag})
         return []
 
+    def _apply_fragment_values(
+        self,
+        fragment: EnvTemplateFragmentCfg,
+        with_values: dict[str, str],
+    ) -> EnvTemplateFragmentCfg:
+        """Return a copy of *fragment* with ``${KEY}`` placeholders substituted.
+
+        Only keys present in *with_values* are substituted; unknown keys are
+        left as-is so the global ``${VAR}`` resolution phase can handle them.
+        ``#{ref}`` object-reference patterns are never touched here.
+        """
+
+        def subst(obj: Any) -> Any:
+            if isinstance(obj, str):
+                return VAR_RE.sub(
+                    lambda m: with_values.get(m.group(1), m.group(0)), obj
+                )
+            if isinstance(obj, dict):
+                obj_d = cast(dict[str, Any], obj)
+                return {k: subst(v) for k, v in obj_d.items()}
+            if isinstance(obj, list):
+                obj_l = cast(list[Any], obj)
+                return [subst(i) for i in obj_l]
+            return obj
+
+        raw = cfg_asdict(deepcopy(fragment))
+        return _parse_env_template_fragment(subst(raw))
+
     def env_cfg_from_tag(
         self,
         env_tmpl_cfg: EnvironmentTemplateCfg,
@@ -1757,31 +1925,53 @@ class ConfigMng:
         Creates an EnvironmentCfg object from a tag.
         """
 
-        services: Optional[list[ServiceCfg]] = []
+        # Collect explicit service refs and inline probes/volumes/networks.
+        svc_refs: list[ServiceTemplateRefCfg] = list(
+            env_tmpl_cfg.service_templates or []
+        )
+        probes: list[ProbeCfg] = list(env_tmpl_cfg.probes or [])
+        volumes: list[VolumeCfg] = list(env_tmpl_cfg.volumes or [])
+        networks: list[NetworkCfg] = list(env_tmpl_cfg.networks or [])
 
-        if env_tmpl_cfg.service_templates:
-            services = [
-                self.svc_cfg_from_service_template(
-                    template, svc_template_ref.tag, None
+        # Merge fragment contributions (additive, tag-conflict → hard fail).
+        seen_svc_tags: set[str] = {r.tag for r in svc_refs}
+        for frag_ref in env_tmpl_cfg.fragments or []:
+            frag = self.get_env_template_fragment(frag_ref.id)
+            if frag is None:
+                Util.print_error_and_die(
+                    f"Unknown fragment '{frag_ref.id}' referenced in "
+                    f"env template '{env_tmpl_cfg.tag}'."
                 )
-                for svc_template_ref in env_tmpl_cfg.service_templates
-                if (
-                    template := self.get_service_template(
-                        svc_template_ref.template
-                    )
+                raise AssertionError("unreachable")
+            if frag_ref.with_values:
+                frag = self._apply_fragment_values(frag, frag_ref.with_values)
+            if frag.service_template.tag in seen_svc_tags:
+                Util.print_error_and_die(
+                    f"Fragment '{frag_ref.id}' declares service tag "
+                    f"'{frag.service_template.tag}' which conflicts with an "
+                    f"existing tag in env template '{env_tmpl_cfg.tag}'."
                 )
-                is not None
-            ]
+            seen_svc_tags.add(frag.service_template.tag)
+            svc_refs.append(frag.service_template)
+            probes.extend(frag.probes or [])
+            volumes.extend(frag.volumes or [])
+            networks.extend(frag.networks or [])
+
+        services: list[ServiceCfg] = [
+            self.svc_cfg_from_service_template(template, ref.tag, None)
+            for ref in svc_refs
+            if (template := self.get_service_template(ref.template)) is not None
+        ]
 
         return EnvironmentCfg(
             template=env_tmpl_cfg.tag,
             factory=env_tmpl_cfg.factory,
             tag=env_tag,
-            services=services,
-            probes=env_tmpl_cfg.probes,
+            services=services or None,
+            probes=probes or None,
             ready=deepcopy(env_tmpl_cfg.ready),
-            networks=env_tmpl_cfg.networks,
-            volumes=env_tmpl_cfg.volumes,
+            networks=networks or None,
+            volumes=volumes or None,
         )
 
     def env_cfg_from_other(self, other: EnvironmentCfg):
