@@ -261,12 +261,13 @@ env_templates:
 
 Fragment merge semantics:
 
-- Fragments are merged in declaration order, then inline `service_templates`
-  are appended.
+- Inline `service_templates` are collected first, then fragment services are
+  appended in declaration order.
 - Each fragment contributes its service, probes, volumes, and networks
   additively.
-- Duplicate instance `tag` values across fragments or between a fragment and
-  an inline service_template cause a hard startup failure.
+- Duplicate service instance `tag` values across fragments or between a
+  fragment and an inline service_template cause a hard startup failure. Probe,
+  volume, and network tags are merged additively without conflict detection.
 - `${KEY}` placeholders in fragment content are substituted from `with:`
   values at merge time. Any placeholder not covered by `with:` passes through
   to Shepherd's standard global `${VAR}` resolution.

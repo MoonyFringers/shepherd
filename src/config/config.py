@@ -1001,18 +1001,30 @@ def _parse_service_template(item: Any) -> ServiceTemplateCfg:
 
 
 def _parse_depends_on(item: Any) -> DependsOnCfg:
+    if not isinstance(item, dict) or "id" not in item:
+        raise ValueError(
+            f"Each depends_on entry must be a mapping with an 'id' field, "
+            f"got: {item!r}"
+        )
+    d = cast(dict[str, Any], item)
     return DependsOnCfg(
-        id=str(item["id"]),
-        version=str(item["version"]) if item.get("version") else None,
+        id=str(d["id"]),
+        version=str(d["version"]) if d.get("version") else None,
     )
 
 
 def _parse_fragment_ref(item: Any) -> FragmentRefCfg:
     if isinstance(item, str):
         return FragmentRefCfg(id=item)
-    with_raw = item.get("with")
+    if not isinstance(item, dict) or "id" not in item:
+        raise ValueError(
+            f"Each fragments entry must be a string or a mapping with an "
+            f"'id' field, got: {item!r}"
+        )
+    d = cast(dict[str, Any], item)
+    with_raw = cast(dict[str, Any] | None, d.get("with"))
     return FragmentRefCfg(
-        id=str(item["id"]),
+        id=str(d["id"]),
         with_values=dict(with_raw) if with_raw else None,
     )
 
@@ -1533,10 +1545,16 @@ class ConfigMng:
         self,
     ) -> dict[str, EnvTemplateFragmentCfg]:
         """Build the canonical lookup registry for built-in fragments."""
-        return {
-            self.get_canonical_id(f.tag): f
-            for f in self.config.env_template_fragments or []
-        }
+        registry: dict[str, EnvTemplateFragmentCfg] = {}
+        for f in self.config.env_template_fragments or []:
+            canonical = self.get_canonical_id(f.tag)
+            if canonical in registry:
+                Util.print_error_and_die(
+                    f"Duplicate env_template_fragment tag '{f.tag}' in "
+                    "shpd.yaml."
+                )
+            registry[canonical] = f
+        return registry
 
     def get_env_template_fragment_registry(
         self,
@@ -1913,8 +1931,11 @@ class ConfigMng:
                 return [subst(i) for i in obj_l]
             return obj
 
-        raw = cfg_asdict(deepcopy(fragment))
-        return _parse_env_template_fragment(subst(raw))
+        raw = cast(dict[str, Any], cfg_asdict(deepcopy(fragment)))
+        original_tag: str = raw["tag"]
+        substituted = cast(dict[str, Any], subst(raw))
+        substituted["tag"] = original_tag
+        return _parse_env_template_fragment(substituted)
 
     def env_cfg_from_tag(
         self,
@@ -1934,9 +1955,11 @@ class ConfigMng:
         networks: list[NetworkCfg] = list(env_tmpl_cfg.networks or [])
 
         # Merge fragment contributions (additive, tag-conflict → hard fail).
+        fragment_registry = self.get_env_template_fragment_registry()
         seen_svc_tags: set[str] = {r.tag for r in svc_refs}
         for frag_ref in env_tmpl_cfg.fragments or []:
-            frag = self.get_env_template_fragment(frag_ref.id)
+            canonical = self.get_canonical_id(frag_ref.id)
+            frag = fragment_registry.get(canonical)
             if frag is None:
                 Util.print_error_and_die(
                     f"Unknown fragment '{frag_ref.id}' referenced in "

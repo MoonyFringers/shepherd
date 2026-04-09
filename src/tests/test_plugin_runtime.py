@@ -744,6 +744,71 @@ def test_fragment_duplicate_in_same_plugin_fails(
     assert "duplicate fragment" in result.output
 
 
+@pytest.mark.shpd
+def test_plugin_env_template_fragments_merged_by_env_cfg_from_tag(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """Plugin env_template fragments field survives namespacing and is merged.
+
+    This is the end-to-end regression test for B-1: fragments declared in a
+    plugin env_template must not be dropped by _namespace_environment_template.
+    """
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    # Patch the fixture descriptor so the env_template imports db-bundle.
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor: dict[str, object] = yaml.safe_load(descriptor_path.read_text())
+    descriptor["env_templates"] = [
+        {
+            "tag": "baseline",
+            "factory": "baseline-factory",
+            "service_templates": [],
+            "probes": [],
+            "networks": [],
+            "volumes": [],
+            "fragments": [{"id": "db-bundle", "with": {"db_name": "testdb"}}],
+        }
+    ]
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": {"region": "eu-west-1"},
+            }
+        ],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    tmpl = shepherd.pluginRuntimeMng.get_environment_template(
+        "runtime-plugin/baseline"
+    )
+    assert tmpl is not None
+    assert tmpl.fragments is not None
+    assert len(tmpl.fragments) == 1
+    # Local "db-bundle" ref is auto-namespaced to "runtime-plugin/db-bundle"
+    assert tmpl.fragments[0].id == "runtime-plugin/db-bundle"
+
+    env = shepherd.configMng.env_cfg_from_tag(tmpl, "test-env")
+
+    # Fragment must contribute its service, probe, and volume.
+    assert env.services is not None
+    svc_tags = [s.tag for s in env.services]
+    assert "db" in svc_tags
+    assert env.probes is not None
+    probe_tags = [p.tag for p in env.probes]
+    assert "db-ready" in probe_tags
+    assert env.volumes is not None
+    vol_tags = [v.tag for v in env.volumes]
+    assert "db_data" in vol_tags
+
+
 # ---------------------------------------------------------------------------
 # depends_on — plugin dependency tests
 # ---------------------------------------------------------------------------
