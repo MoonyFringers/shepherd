@@ -1,20 +1,23 @@
 # Plugins
 
-This document describes the plugin model being introduced in Shepherd.
+This document describes the Shepherd plugin model.
 
-The current implementation scope is limited to:
+The current implementation covers:
 
 - plugin descriptor format
 - plugin inventory persisted in the main Shepherd config
 - managed plugin installation directory layout
 - plugin lifecycle commands for install, inspect, enable, disable, and remove
-- runtime loading of enabled plugins via `importlib`
+- runtime loading of enabled plugins via `importlib`, ordered by dependency
+  graph
 - executable plugin commands injected into the CLI tree
 - live plugin completion providers executed by the completion engine
 - in-memory registries for plugin commands, completion providers, templates,
-  and factories
+  factories, and env_template_fragments
 - env and service flows resolving plugin-owned templates and factories at
   runtime
+- env_template_fragments for reusable, composable environment blocks
+- plugin dependency declarations with PEP 440 version constraints
 
 For the architectural rationale and staged implementation plan, see
 [ADR 0004](decisions/0004-plugin-architecture-and-rollout-plan.md).
@@ -107,12 +110,36 @@ capabilities:
   svc_factories: true
 default_config:
   region: eu-west-1
+depends_on:
+  - id: base-plugin
+    version: ">=1.0.0"
+env_template_fragments:
+  - tag: db-bundle
+    service_template:
+      template: api
+      tag: db
+    probes:
+      - tag: db-ready
+        container:
+          tag: db-probe
+          image: busybox:stable-glibc
+          networks: []
+        script: "sh -c 'sleep 1'"
+    volumes:
+      - tag: db_data
+        external: false
+        driver: local
+    networks: []
 env_templates:
   - tag: baseline
     factory: baseline-factory
     service_templates:
       - template: api
         tag: plugin-api
+    fragments:
+      - id: base-plugin/pg-bundle
+        with:
+          db_name: acme
 service_templates:
   - tag: api
     factory: api-factory
@@ -135,16 +162,160 @@ Optional fields:
 - `description`
 - `capabilities`
 - `default_config`
+- `depends_on`
+- `env_template_fragments`
 - `env_templates`
 - `service_templates`
 
 Capability flags must be real YAML booleans. String values such as `"false"` or
 `"0"` are rejected during descriptor validation.
 
-Plugin-owned env and service templates are now declared declaratively in
+Plugin-owned env and service templates are declared declaratively in
 `plugin.yaml`, using the same schema shapes as the core Shepherd config. This
 keeps template authoring data-driven. Python plugin code is only needed for
 behavioral extensions like commands, completion, and factories.
+
+## Plugin Dependencies
+
+A plugin may declare hard dependencies on other plugins using `depends_on`:
+
+```yaml
+depends_on:
+  - id: base-plugin
+    version: ">=1.0.0"
+  - id: auth-plugin
+    version: ">=2.1.0,<3.0.0"
+```
+
+Each entry requires:
+
+- `id` — the stable identifier of the required plugin
+- `version` — a PEP 440 version specifier (optional; omit to accept any version)
+
+Shepherd validates all constraints at startup, before any plugin code runs:
+
+- If a declared dependency is not installed and enabled, startup fails hard.
+- If the installed version does not satisfy the specifier, startup fails hard.
+- If a dependency cycle is detected, startup fails hard.
+
+Plugins are loaded in topological order — dependencies always load before the
+plugins that declare them. This guarantees that a plugin's fragments and
+templates are already registered when dependent plugins are processed.
+
+## Environment Template Fragments
+
+Fragments bundle a service, its readiness probes, volumes, and networks into
+a named, reusable unit that other plugins or the core config can import.
+
+### Declaring a fragment
+
+```yaml
+env_template_fragments:
+  - tag: db-bundle
+    service_template:
+      template: api      # local id — auto-namespaced to plugin-id/api
+      tag: db            # instance tag used in the merged environment
+    probes:
+      - tag: db-ready
+        container:
+          tag: db-probe
+          image: busybox:stable-glibc
+          networks:
+            - demo-net
+        script: "sh -c 'sleep 1'"
+    volumes:
+      - tag: db_data
+        external: false
+        driver: local
+    networks:
+      - tag: demo-net
+        external: false
+        driver: bridge
+```
+
+Registered under the namespaced id `plugin-id/db-bundle`.
+
+Fragments may use `${KEY}` placeholders. Embedders supply values for them
+through the `with:` block at import time (see below).
+
+### Importing a fragment
+
+Any `env_template` — in a plugin descriptor or in the core `shpd.yaml` —
+can import fragments via the `fragments:` list:
+
+```yaml
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    fragments:
+      - id: acme/db-bundle          # namespaced fragment id
+        with:
+          db_name: myapp            # resolves ${db_name} inside the fragment
+    service_templates:
+      - template: web
+        tag: web
+    probes: []
+    networks: []
+    volumes: []
+```
+
+Fragment merge semantics:
+
+- Fragments are merged in declaration order, then inline `service_templates`
+  are appended.
+- Each fragment contributes its service, probes, volumes, and networks
+  additively.
+- Duplicate instance `tag` values across fragments or between a fragment and
+  an inline service_template cause a hard startup failure.
+- `${KEY}` placeholders in fragment content are substituted from `with:`
+  values at merge time. Any placeholder not covered by `with:` passes through
+  to Shepherd's standard global `${VAR}` resolution.
+- `#{ref.path}` object references are never touched during fragment merge;
+  they resolve through the standard config reference pass.
+
+### Declaring a core-config fragment
+
+Fragments may also be declared in the main `shpd.yaml`, not only in plugin
+descriptors:
+
+```yaml
+env_template_fragments:
+  - tag: worker-base
+    service_template:
+      template: worker
+      tag: job
+    probes:
+      - tag: job-ready
+        container:
+          tag: job-probe
+          image: busybox:stable-glibc
+          networks:
+            - default
+        script: "sh -c 'echo ${job_name} && sleep 1'"
+    volumes:
+      - tag: job_data
+        external: false
+        driver: local
+    networks:
+      - tag: default
+        external: false
+        driver: bridge
+
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    fragments:
+      - id: worker-base
+        with:
+          job_name: my-job
+    service_templates: []
+    probes: []
+    networks: []
+    volumes: []
+```
+
+Core-config fragments are referenced by their plain `tag` (no namespace
+prefix). Plugin-provided fragments are referenced as `plugin-id/tag`.
 
 ## Current Validation Rules
 
@@ -154,20 +325,26 @@ The descriptor parser validates:
 - entrypoint presence
 - capabilities as a mapping
 - capability values as actual booleans
+- `depends_on` as a list
+- `env_template_fragments` as a list
+- fragment tags do not contain `/` (reserved for namespacing)
+- no duplicate fragment tags within the same plugin
 
 Invalid descriptors fail validation early, before runtime plugin loading is
 attempted.
 
 ## Runtime Loading
 
-Enabled plugins are now loaded eagerly during normal startup:
+Enabled plugins are loaded eagerly during normal startup:
 
 1. Shepherd reads enabled plugin entries from the main config.
 2. It derives each managed install directory from `~/.shpd/plugins/<plugin-id>/`.
-3. It validates the installed `plugin.yaml`.
-4. It imports the declared entrypoint with `importlib`.
-5. It instantiates the root plugin object and registers the contributed
-   runtime metadata.
+3. It validates the installed `plugin.yaml` for every enabled plugin.
+4. It resolves load order by topological sort of the `depends_on` graph;
+   any cycle or unsatisfied dependency causes a hard failure before import.
+5. It imports each plugin entrypoint with `importlib` in dependency order.
+6. It instantiates the root plugin object and registers the contributed
+   runtime metadata (templates, fragments, factories, commands, completions).
 
 Normal commands fail fast if an enabled plugin is missing, invalid, or cannot
 be imported.
@@ -186,7 +363,7 @@ This keeps recovery commands available even if one enabled plugin is broken.
 
 ## Runtime Registries
 
-The loader now builds in-memory registries for:
+The loader builds in-memory registries for:
 
 - loaded plugin metadata
 - scope and verb contributions
@@ -195,24 +372,26 @@ The loader now builds in-memory registries for:
 - service templates
 - environment factories
 - service factories
+- environment template fragments
 
-Template and factory ids are canonicalized under the plugin namespace:
-
-- templates: `plugin-id/template-id`
-- factories: `plugin-id/factory-id`
-
-Descriptor-declared template tags are loaded as local ids like `baseline` or
-`api`, then canonicalized at runtime to:
+Template, factory, and fragment ids are canonicalized under the plugin
+namespace at registration time:
 
 - templates: `plugin-id/template-id`
 - factories: `plugin-id/factory-id`
+- fragments: `plugin-id/fragment-tag`
+
+Service template references inside a fragment's `service_template.template`
+field are also auto-namespaced from their local id to `plugin-id/local-id`
+during registration. Use the local id inside `plugin.yaml`; Shepherd expands
+it automatically.
 
 These registries are validated and populated at startup. Env and service
 commands then resolve namespaced template and factory ids through them.
 
 ## Runtime Command Wiring
 
-Plugin command contributions are now executable.
+Plugin command contributions are executable.
 
 Each `PluginCommandSpec` declares:
 
@@ -238,7 +417,7 @@ Examples:
 
 ## Runtime Completion Wiring
 
-Plugin completion providers are now executed by the shared completion engine.
+Plugin completion providers are executed by the shared completion engine.
 
 Each `PluginCompletionSpec` targets one scope and provides a callable with the
 signature `f(args: list[str]) -> list[str]`.  If you prefer a class-based
@@ -309,12 +488,12 @@ below are importable from the `plugin` package.
 
 ### Spec types
 
-| Class                  | Purpose                                           |
-|------------------------|---------------------------------------------------|
-| `PluginCommandSpec`    | Declares a scope + verb + Click command           |
-| `PluginCompletionSpec` | Declares a completion provider for a scope        |
-| `PluginEnvFactorySpec` | Declares an environment factory with a local id   |
-| `PluginSvcFactorySpec` | Declares a service factory with a local id        |
+| Class                  | Purpose                                         |
+|------------------------|-------------------------------------------------|
+| `PluginCommandSpec`    | Declares a scope + verb + Click command         |
+| `PluginCompletionSpec` | Declares a completion provider for a scope      |
+| `PluginEnvFactorySpec` | Declares an environment factory with a local id |
+| `PluginSvcFactorySpec` | Declares a service factory with a local id      |
 
 ### Provider type aliases
 
@@ -365,7 +544,9 @@ from plugin import (
 )
 ```
 
-## Example Plugin
+## Example Plugins
+
+### hello-plugin — all extension points
 
 A complete, installable reference plugin lives at
 [`examples/plugins/hello-plugin/`](../examples/plugins/hello-plugin/).
@@ -377,23 +558,20 @@ spec type and the factory callable convention.
 See [`examples/plugins/hello-plugin/README.md`](../examples/plugins/hello-plugin/README.md)
 for install and usage instructions.
 
-## Scope Of This Step
+### fragment-demo — fragments and plugin dependencies
 
-This documentation matches the current implementation step. At this stage,
-Shepherd now does:
+A two-plugin example lives at
+[`examples/plugins/fragment-demo/`](../examples/plugins/fragment-demo/).
 
-- execute plugin-owned environment factories through `env add` and normal env
-  rehydration
-- execute plugin-owned service factories through `svc add` and normal service
-  rehydration
-- resolve plugin-owned templates from canonical namespaced ids like
-  `runtime-plugin/baseline`
-- surface plugin-owned env and svc templates through the built-in completion
-  managers
-- copy plugin-owned service template assets from the installed plugin tree
-  during environment realization
+It demonstrates:
 
-Plugin archive installation, persisted inventory management, runtime loader
-bootstrap, command wiring, completion execution, and template/factory
-consumption are available now. A later rollout step can still align more core
-behavior behind the same plugin abstraction.
+- a *provider* plugin (`data-plugin`) that declares an `env_template_fragment`
+  with `${placeholder}` variables
+- an *embedder* plugin (`app-plugin`) that declares `depends_on` and imports
+  the fragment with a `with:` block to supply placeholder values
+
+A matching configuration example lives at
+[`examples/configurations/fragment-demo/`](../examples/configurations/fragment-demo/).
+
+See [`examples/plugins/fragment-demo/README.md`](../examples/plugins/fragment-demo/README.md)
+for install and usage instructions.
