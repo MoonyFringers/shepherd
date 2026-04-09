@@ -15,7 +15,15 @@ import yaml
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
-from config import Config, ConfigMng, parse_config, parse_plugin_descriptor
+from config import (
+    Config,
+    ConfigMng,
+    EnvTemplateFragmentCfg,
+    FragmentRefCfg,
+    ServiceTemplateRefCfg,
+    parse_config,
+    parse_plugin_descriptor,
+)
 from docker import DockerComposeEnv, DockerComposeSvc
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from util import Constants
@@ -760,3 +768,424 @@ def test_load_config_parses_lifecycle_sections(
 
     assert db_svc.start is not None
     assert db_svc.start.when_probes == ["sample-1-test-probe"]
+
+
+# ---------------------------------------------------------------------------
+# env_template_fragments — parse_plugin_descriptor tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_with_fragments_and_depends_on():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+env_template_fragments:
+  - tag: db-bundle
+    service_template:
+      template: api
+      tag: db
+    probes:
+      - tag: db-ready
+        container:
+          tag: db-probe
+          image: busybox:stable-glibc
+          networks: []
+        script: "sh -c 'sleep 1'"
+    volumes:
+      - tag: db_data
+        external: false
+        driver: local
+    networks: []
+depends_on:
+  - id: other-plugin
+    version: ">=1.0.0"
+"""
+
+    descriptor = parse_plugin_descriptor(descriptor_yaml)
+
+    assert descriptor.env_template_fragments is not None
+    assert len(descriptor.env_template_fragments) == 1
+    frag = descriptor.env_template_fragments[0]
+    assert frag.tag == "db-bundle"
+    assert frag.service_template.template == "api"
+    assert frag.service_template.tag == "db"
+    assert frag.probes is not None
+    assert frag.probes[0].tag == "db-ready"
+    assert frag.volumes is not None
+    assert frag.volumes[0].tag == "db_data"
+
+    assert descriptor.depends_on is not None
+    assert len(descriptor.depends_on) == 1
+    dep = descriptor.depends_on[0]
+    assert dep.id == "other-plugin"
+    assert dep.version == ">=1.0.0"
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_rejects_non_list_fragments():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+env_template_fragments: not-a-list
+"""
+
+    with pytest.raises(
+        ValueError, match="env_template_fragments must be a list"
+    ):
+        parse_plugin_descriptor(descriptor_yaml)
+
+
+@pytest.mark.cfg
+def test_parse_plugin_descriptor_rejects_non_list_depends_on():
+    descriptor_yaml = """
+id: acme
+name: Acme Plugin
+version: 1.2.3
+plugin_api_version: 1
+entrypoint:
+  module: plugin.main
+  class: AcmePlugin
+depends_on: not-a-list
+"""
+
+    with pytest.raises(ValueError, match="depends_on must be a list"):
+        parse_plugin_descriptor(descriptor_yaml)
+
+
+# ---------------------------------------------------------------------------
+# env_template_fragments — FragmentRefCfg parse tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_fragment_ref_string_shorthand():
+    """A plain string in fragments: is parsed as FragmentRefCfg with no with."""
+    config_yaml = """
+templates_path: /tmp
+envs_path: /tmp
+volumes_path: /tmp
+staging_area:
+  volumes_path: /tmp
+  images_path: /tmp
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    service_templates: []
+    probes: []
+    networks: []
+    volumes: []
+    fragments:
+      - my-plugin/base
+envs: []
+"""
+    config = parse_config(config_yaml)
+
+    assert config.env_templates is not None
+    tmpl = config.env_templates[0]
+    assert tmpl.fragments is not None
+    assert len(tmpl.fragments) == 1
+    ref = tmpl.fragments[0]
+    assert ref.id == "my-plugin/base"
+    assert ref.with_values is None
+
+
+@pytest.mark.cfg
+def test_parse_fragment_ref_with_values():
+    """Fragment ref dict form with a with: block is parsed into with_values."""
+    config_yaml = """
+templates_path: /tmp
+envs_path: /tmp
+volumes_path: /tmp
+staging_area:
+  volumes_path: /tmp
+  images_path: /tmp
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    service_templates: []
+    probes: []
+    networks: []
+    volumes: []
+    fragments:
+      - id: my-plugin/base
+        with:
+          key1: value1
+          key2: value2
+envs: []
+"""
+    config = parse_config(config_yaml)
+
+    assert config.env_templates is not None
+    frags = config.env_templates[0].fragments
+    assert frags is not None
+    ref = frags[0]
+    assert ref.id == "my-plugin/base"
+    assert ref.with_values == {"key1": "value1", "key2": "value2"}
+
+
+# ---------------------------------------------------------------------------
+# env_template_fragments — parse_config tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_config_with_env_template_fragments(mocker: MockerFixture):
+    """Top-level env_template_fragments section is parsed and accessible."""
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd_with_fragments.yaml")
+
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+    cMng = ConfigMng(".shpd.conf")
+
+    config = cMng.load_config()
+
+    assert config.env_template_fragments is not None
+    assert len(config.env_template_fragments) == 1
+    frag = config.env_template_fragments[0]
+    assert frag.tag == "worker-base"
+    assert frag.service_template.template == "worker"
+    assert frag.service_template.tag == "job"
+    assert frag.probes is not None and len(frag.probes) == 1
+    assert frag.probes[0].tag == "job-ready"
+    assert frag.volumes is not None and len(frag.volumes) == 1
+    assert frag.volumes[0].tag == "job_data"
+    assert frag.networks is not None and len(frag.networks) == 1
+    assert frag.networks[0].tag == "default"
+
+    assert config.env_templates is not None
+    tmpl = config.env_templates[0]
+    assert tmpl.fragments is not None and len(tmpl.fragments) == 1
+    ref = tmpl.fragments[0]
+    assert ref.id == "worker-base"
+    assert ref.with_values == {"job_name": "my-job"}
+
+
+# ---------------------------------------------------------------------------
+# _apply_fragment_values tests
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_config_mng(mocker: MockerFixture) -> ConfigMng:
+    """Return a ConfigMng backed by the fragment fixture."""
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd_with_fragments.yaml")
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+    cMng = ConfigMng(".shpd.conf")
+    cMng.load()
+    return cMng
+
+
+def _make_test_fragment(
+    script: str = "sh -c 'echo ${db_name}'",
+) -> EnvTemplateFragmentCfg:
+    from config.config import (
+        ContainerCfg,
+        ProbeCfg,
+        VolumeCfg,
+    )
+
+    return EnvTemplateFragmentCfg(
+        tag="test-frag",
+        service_template=ServiceTemplateRefCfg(template="svc/main", tag="svc"),
+        probes=[
+            ProbeCfg(
+                tag="svc-ready",
+                container=ContainerCfg(
+                    tag="probe",
+                    image="busybox:stable-glibc",
+                    networks=["#{env.tag}-net"],
+                ),
+                script=script,
+            )
+        ],
+        volumes=[VolumeCfg(tag="svc_data", external="false")],
+        networks=[],
+    )
+
+
+@pytest.mark.cfg
+def test_apply_fragment_values_substitutes_known_keys(mocker: MockerFixture):
+    """${KEY} present in with_values is replaced in fragment content."""
+    cMng = _make_minimal_config_mng(mocker)
+    frag = _make_test_fragment("sh -c 'echo ${db_name}'")
+
+    result = getattr(cMng, "_apply_fragment_values")(frag, {"db_name": "myapp"})
+
+    assert result.probes is not None
+    assert result.probes[0].script == "sh -c 'echo myapp'"
+
+
+@pytest.mark.cfg
+def test_apply_fragment_values_leaves_unknown_keys_intact(
+    mocker: MockerFixture,
+):
+    """${KEY} absent from with_values is left as-is for global resolution."""
+    cMng = _make_minimal_config_mng(mocker)
+    frag = _make_test_fragment("sh -c 'echo ${unknown_var}'")
+
+    result = getattr(cMng, "_apply_fragment_values")(
+        frag, {"other_key": "value"}
+    )
+
+    assert result.probes is not None
+    assert result.probes[0].script == "sh -c 'echo ${unknown_var}'"
+
+
+@pytest.mark.cfg
+def test_apply_fragment_values_leaves_ref_patterns_intact(
+    mocker: MockerFixture,
+):
+    """#{ref.path} patterns pass through _apply_fragment_values unchanged."""
+    cMng = _make_minimal_config_mng(mocker)
+    frag = _make_test_fragment("sh -c 'echo ok'")
+    # networks=["#{env.tag}-net"] is set in _make_test_fragment.
+
+    result = getattr(cMng, "_apply_fragment_values")(frag, {"db_name": "myapp"})
+
+    assert result.probes is not None
+    cnt = result.probes[0].container
+    assert cnt is not None
+    assert cnt.networks is not None
+    assert "#{env.tag}-net" in cnt.networks
+
+
+# ---------------------------------------------------------------------------
+# env_cfg_from_tag fragment merge tests
+# ---------------------------------------------------------------------------
+
+
+def _load_fragment_config_mng(mocker: MockerFixture) -> ConfigMng:
+    """Return a fully loaded ConfigMng from the fragment fixture."""
+    values = read_fixture("cfg", "values.conf")
+    config_yaml = read_fixture("cfg", "shpd_with_fragments.yaml")
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+    cMng = ConfigMng(".shpd.conf")
+    cMng.load()
+    return cMng
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_merges_core_fragment(mocker: MockerFixture):
+    """Importing a core fragment adds its service, probe, volume, network."""
+    cMng = _load_fragment_config_mng(mocker)
+
+    demo_tmpl = cMng.get_environment_template("demo")
+    assert demo_tmpl is not None
+
+    env = cMng.env_cfg_from_tag(demo_tmpl, "test-env")
+
+    # Service contributed by the fragment
+    assert env.services is not None
+    tags = {s.tag for s in env.services}
+    assert "job" in tags
+
+    # Probe contributed by the fragment
+    assert env.probes is not None
+    probe_tags = {p.tag for p in env.probes}
+    assert "job-ready" in probe_tags
+
+    # Volume contributed by the fragment
+    assert env.volumes is not None
+    vol_tags = {v.tag for v in env.volumes}
+    assert "job_data" in vol_tags
+
+    # Network contributed by the fragment
+    assert env.networks is not None
+    net_tags = {n.tag for n in env.networks}
+    assert "default" in net_tags
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_applies_with_values_in_fragment(
+    mocker: MockerFixture,
+):
+    """with: values are substituted into fragment content at merge time."""
+    cMng = _load_fragment_config_mng(mocker)
+
+    demo_tmpl = cMng.get_environment_template("demo")
+    assert demo_tmpl is not None
+
+    env = cMng.env_cfg_from_tag(demo_tmpl, "test-env")
+
+    # The fixture fragment probe script is "sh -c 'echo ${job_name} && sleep 1'"
+    # and with: {job_name: my-job}, so after merge it must be substituted.
+    assert env.probes is not None
+    probe = next(p for p in env.probes if p.tag == "job-ready")
+    assert probe.script is not None
+    assert "${job_name}" not in probe.script
+    assert "my-job" in probe.script
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_fails_on_unknown_fragment(mocker: MockerFixture):
+    """Referencing an unknown fragment ID causes a hard failure."""
+    from config.config import EnvironmentTemplateCfg
+
+    cMng = _load_fragment_config_mng(mocker)
+
+    bad_tmpl = EnvironmentTemplateCfg(
+        tag="bad",
+        factory="docker-compose",
+        service_templates=[],
+        probes=[],
+        networks=[],
+        volumes=[],
+        fragments=[FragmentRefCfg(id="does-not-exist")],
+    )
+
+    with pytest.raises(SystemExit):
+        cMng.env_cfg_from_tag(bad_tmpl, "test-env")
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_fails_on_duplicate_service_tag(mocker: MockerFixture):
+    """Two fragment refs with the same service tag cause a hard failure."""
+    from config.config import EnvironmentTemplateCfg
+
+    cMng = _load_fragment_config_mng(mocker)
+
+    # Both fragments use service tag "job" (the fixture fragment does)
+    dup_tmpl = EnvironmentTemplateCfg(
+        tag="dup",
+        factory="docker-compose",
+        service_templates=[],
+        probes=[],
+        networks=[],
+        volumes=[],
+        fragments=[
+            FragmentRefCfg(id="worker-base", with_values={"job_name": "a"}),
+            FragmentRefCfg(id="worker-base", with_values={"job_name": "b"}),
+        ],
+    )
+
+    with pytest.raises(SystemExit):
+        cMng.env_cfg_from_tag(dup_tmpl, "test-env")

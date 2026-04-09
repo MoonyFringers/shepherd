@@ -638,3 +638,303 @@ def test_plugin_install_force_preserves_enabled_state_and_config(
     plugin = next(p for p in stored["plugins"] if p["id"] == "runtime-plugin")
     assert plugin["enabled"] is False
     assert plugin["config"] == {"region": "us-east-1"}
+
+
+# ---------------------------------------------------------------------------
+# env_template_fragments — registration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_shepherd_loads_plugin_fragments_into_registry(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """Plugin fragments are registered in the runtime registry."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": {"region": "eu-west-1"},
+            }
+        ],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    registry = shepherd.pluginRuntimeMng.registry
+
+    assert "runtime-plugin/db-bundle" in registry.env_template_fragments
+    frag = registry.env_template_fragments["runtime-plugin/db-bundle"]
+    # Local "api" ref is auto-namespaced to "runtime-plugin/api"
+    assert frag.service_template.template == "runtime-plugin/api"
+    assert frag.service_template.tag == "db"
+    assert frag.probes is not None
+    assert frag.probes[0].tag == "db-ready"
+    assert frag.volumes is not None
+    assert frag.volumes[0].tag == "db_data"
+
+
+@pytest.mark.shpd
+def test_fragment_namespace_rejects_slash_in_tag(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """A fragment tag containing '/' is rejected at load time."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["env_template_fragments"] = [
+        {
+            "tag": "bad/tag",
+            "service_template": {"template": "api", "tag": "db"},
+            "probes": [],
+            "volumes": [],
+            "networks": [],
+        }
+    ]
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "must not contain '/'" in result.output
+
+
+@pytest.mark.shpd
+def test_fragment_duplicate_in_same_plugin_fails(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """Two fragments with the same tag in one plugin descriptor fail at load."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor: dict[str, object] = yaml.safe_load(descriptor_path.read_text())
+    frag: dict[str, object] = {
+        "tag": "dup-frag",
+        "service_template": {"template": "api", "tag": "db"},
+        "probes": [],
+        "volumes": [],
+        "networks": [],
+    }
+    descriptor["env_template_fragments"] = [frag, frag.copy()]
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "duplicate fragment" in result.output
+
+
+# ---------------------------------------------------------------------------
+# depends_on — plugin dependency tests
+# ---------------------------------------------------------------------------
+
+
+def _install_minimal_plugin(
+    shpd_path: Path,
+    plugin_id: str,
+    *,
+    version: str = "1.0.0",
+    extra_descriptor: dict[str, object] | None = None,
+) -> Path:
+    """Install a self-contained stub plugin with a unique module root.
+
+    Unlike :func:`_install_fixture_plugin`, each call creates a fresh Python
+    package so multiple minimal plugins can be loaded in the same process
+    without module-root collisions.
+    """
+    module_name = plugin_id.replace("-", "_") + "_impl"
+    plugin_dir = shpd_path / "plugins" / plugin_id
+    pkg_dir = plugin_dir / module_name
+    pkg_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    (pkg_dir / "main.py").write_text(
+        "from plugin import ShepherdPlugin\n\n\n"
+        "class Plugin(ShepherdPlugin):\n    pass\n"
+    )
+    (plugin_dir / "templates" / "svcs").mkdir(parents=True)
+
+    descriptor: dict[str, object] = {
+        "id": plugin_id,
+        "name": plugin_id,
+        "version": version,
+        "plugin_api_version": 1,
+        "entrypoint": {
+            "module": f"{module_name}.main",
+            "class": "Plugin",
+        },
+    }
+    if extra_descriptor:
+        descriptor.update(extra_descriptor)
+    (plugin_dir / "plugin.yaml").write_text(
+        yaml.dump(descriptor, sort_keys=False)
+    )
+    return plugin_dir
+
+
+@pytest.mark.shpd
+def test_depends_on_fails_for_missing_dependency(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """A plugin that depends on an absent plugin fails at startup."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-b",
+        extra_descriptor={"depends_on": [{"id": "missing-plugin"}]},
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "plugin-b", "enabled": True, "version": "1.0.0"}],
+    )
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "missing-plugin" in result.output
+
+
+@pytest.mark.shpd
+def test_depends_on_version_constraint_satisfied(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """A satisfied version constraint loads both plugins successfully."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_minimal_plugin(shpd_path, "plugin-a", version="1.2.0")
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-b",
+        extra_descriptor={
+            "depends_on": [{"id": "plugin-a", "version": ">=1.0.0"}]
+        },
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "plugin-a", "enabled": True, "version": "1.2.0"},
+            {"id": "plugin-b", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    registry = shepherd.pluginRuntimeMng.registry
+    assert "plugin-a" in registry.plugins
+    assert "plugin-b" in registry.plugins
+
+
+@pytest.mark.shpd
+def test_depends_on_version_constraint_violated(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """An unsatisfied version constraint causes a hard failure at startup."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_minimal_plugin(shpd_path, "plugin-a", version="1.2.0")
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-b",
+        extra_descriptor={
+            "depends_on": [{"id": "plugin-a", "version": ">=2.0.0"}]
+        },
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "plugin-a", "enabled": True, "version": "1.2.0"},
+            {"id": "plugin-b", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "1.2.0" in result.output
+
+
+@pytest.mark.shpd
+def test_depends_on_cycle_fails(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """A dependency cycle between two plugins is detected and reported."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-a",
+        extra_descriptor={"depends_on": [{"id": "plugin-b"}]},
+    )
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-b",
+        extra_descriptor={"depends_on": [{"id": "plugin-a"}]},
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "plugin-a", "enabled": True, "version": "1.0.0"},
+            {"id": "plugin-b", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    result = runner.invoke(cli, ["test"])
+
+    assert result.exit_code == 1
+    assert "Circular dependency" in result.output
+
+
+@pytest.mark.shpd
+def test_plugins_loaded_in_dependency_order(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """A dependent plugin loads after its dependency."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_minimal_plugin(shpd_path, "plugin-a", version="1.0.0")
+    _install_minimal_plugin(
+        shpd_path,
+        "plugin-b",
+        extra_descriptor={
+            "depends_on": [{"id": "plugin-a", "version": ">=1.0.0"}]
+        },
+    )
+    # List plugin-b first to confirm topo sort overrides list order.
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "plugin-b", "enabled": True, "version": "1.0.0"},
+            {"id": "plugin-a", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    registry = shepherd.pluginRuntimeMng.registry
+    loaded_order = list(registry.plugins.keys())
+    assert "plugin-a" in loaded_order
+    assert "plugin-b" in loaded_order
+    # plugin-a must appear before plugin-b in the insertion-ordered dict
+    assert loaded_order.index("plugin-a") < loaded_order.index("plugin-b")

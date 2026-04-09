@@ -1,0 +1,113 @@
+# Data Plugin — a fragment-provider plugin example.
+#
+# This plugin demonstrates the env_template_fragments feature of Shepherd.
+# It exposes a key-value store service bundled with its readiness probe and
+# data volume as a reusable, named fragment that other plugins can import.
+#
+# Fragment contract
+# -----------------
+# The "data-plugin/kv-base" fragment requires one placeholder filled by the
+# embedder at import time:
+#
+#   kv_name  — the name given to the key-value store instance
+#
+# Any placeholder that the embedder does not supply via its ``with:`` block
+# falls through to Shepherd's standard ${VAR} global resolution.
+
+id: data-plugin
+name: Data Plugin
+version: 0.1.0
+
+# Must be 1 — the only supported value at this time.
+plugin_api_version: 1
+
+description: >
+  Reference fragment-provider plugin.  Exposes a key-value store service
+  bundled with its readiness probe and data volume as a reusable fragment.
+
+# The Python class Shepherd will import and instantiate at startup.
+entrypoint:
+  module: data_plugin.main
+  class: DataPlugin
+
+# ---------------------------------------------------------------------------
+# Declarative service templates
+#
+# Registered under the namespaced id "data-plugin/kv-store".
+# The fragment below references this template by its local id "kv-store";
+# Shepherd auto-namespaces it to "data-plugin/kv-store" during registration.
+# ---------------------------------------------------------------------------
+service_templates:
+  - tag: kv-store
+    factory: docker
+    labels: []
+    properties: {}
+    containers:
+      - tag: kv
+        image: busybox:stable-glibc
+        container_name: null
+        hostname: null
+        workdir: null
+        command:
+          - sh
+          - -c
+          - sleep infinity
+        environment:
+          - KV_NAME=${kv_name}
+        volumes:
+          - kv_data:/data
+        ports: []
+        networks:
+          - demo-net
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null
+
+# ---------------------------------------------------------------------------
+# Declarative env template fragments
+#
+# Registered under the namespaced id "data-plugin/kv-base".
+# Embedder plugins reference it as "data-plugin/kv-base" in their
+# env_templates fragments list and supply the required kv_name placeholder
+# through the ``with:`` block.
+# ---------------------------------------------------------------------------
+env_template_fragments:
+  - tag: kv-base
+    service_template:
+      template: kv-store    # auto-namespaced → data-plugin/kv-store
+      tag: kv
+    probes:
+      - tag: kv-ready
+        container:
+          tag: kv-probe
+          image: busybox:stable-glibc
+          container_name: null
+          hostname: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - demo-net
+          extra_hosts: []
+          inits: null
+          build: null
+        script: "sh -c 'sleep 1 && echo ok'"
+        script_path: null
+    volumes:
+      - tag: kv_data
+        external: false
+        driver: local
+        name: null
+        driver_opts: null
+        labels: null
+    networks:
+      - tag: demo-net
+        name: null
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
