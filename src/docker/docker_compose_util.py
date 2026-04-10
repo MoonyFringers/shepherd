@@ -211,7 +211,9 @@ def render_container(
     if cnt.workdir:
         container_def["working_dir"] = cnt.workdir
     if cnt.volumes:
-        container_def["volumes"] = cnt.volumes
+        container_def["volumes"] = [
+            Util.translate_volume_binding(volume) for volume in cnt.volumes
+        ]
     if cnt.environment:
         container_def["environment"] = cnt.environment
     if cnt.ports:

@@ -16,8 +16,14 @@ else
   PYTHON="python3"
 fi
 
+OS_NAME="$(uname -s)"
+
 # If no arguments or --help, run without sudo
 if [ $# -eq 0 ] || [[ "$1" == "--help" ]]; then
+  PYTHONPATH=src $PYTHON -m installer.install "$@"
+elif [ "$OS_NAME" = "Darwin" ] && [ "$1" = "uninstall" ]; then
+  sudo PYTHONPATH=src $PYTHON -m installer.install "$@"
+elif [ "$OS_NAME" = "Darwin" ]; then
   PYTHONPATH=src $PYTHON -m installer.install "$@"
 else
   sudo PYTHONPATH=src $PYTHON -m installer.install "$@"

@@ -45,7 +45,8 @@ class ShepherdMng:
         load_runtime_plugins: bool = True,
         plugin_runtime_mng: Optional[PluginRuntimeMng] = None,
     ):
-        shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
+        shpd_conf = os.environ.get("SHPD_CONF") or "~/.shpd.conf"
+        Util.ensure_config_values_file(shpd_conf)
         self.configMng = ConfigMng(shpd_conf)
         setup_logging(
             self.configMng.constants.LOG_FILE,
@@ -110,7 +111,8 @@ def _load_plugin_runtime_for_click(ctx: click.Context) -> PluginRuntimeMng:
     if runtime_mng is not None:
         return runtime_mng
 
-    shpd_conf = os.environ.get("SHPD_CONF", "~/.shpd.conf")
+    shpd_conf = os.environ.get("SHPD_CONF") or "~/.shpd.conf"
+    Util.ensure_config_values_file(shpd_conf)
     configMng = ConfigMng(shpd_conf)
     Util.ensure_shpd_dirs(configMng.constants)
     Util.ensure_config_file(configMng.constants)
@@ -125,7 +127,7 @@ class PluginRootGroup(click.Group):
     """Root Click group extended with runtime plugin scopes."""
 
     def list_commands(self, ctx: click.Context) -> list[str]:
-        commands = list(super().list_commands(ctx))
+        commands = builtins.list(super().list_commands(ctx))
         registry = _load_plugin_runtime_for_click(ctx).registry
         for scope in sorted(registry.commands):
             if scope not in commands:
@@ -152,7 +154,7 @@ class PluginScopeGroup(click.Group):
     """Click scope group extended with runtime plugin verbs."""
 
     def list_commands(self, ctx: click.Context) -> list[str]:
-        commands = list(super().list_commands(ctx))
+        commands = builtins.list(super().list_commands(ctx))
         if self.name == "plugin":
             return commands
 

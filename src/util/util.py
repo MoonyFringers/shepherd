@@ -12,6 +12,7 @@ import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal, Optional, Union
 
 import yaml
@@ -24,6 +25,23 @@ from .constants import Constants
 
 JustifyMethod = Literal["default", "left", "center", "right", "full"]
 ColumnJustify = Literal["left", "center", "right"]
+DEFAULT_SHPD_VALUES_TEMPLATE = """# Shepherd workspace directory
+shpd_path=~/shpd
+templates_path=${shpd_path}/templates
+envs_path=${shpd_path}/envs
+volumes_path=${shpd_path}/volumes
+staging_area_volumes_path=${shpd_path}/sa_volumes
+staging_area_images_path=${shpd_path}/sa_images
+
+# Shepherd default environment type
+default_env_type=docker-compose
+
+# Logging Configuration
+log_file=${shpd_path}/logs/shepctl.log
+log_level=WARNING
+log_stdout=false
+log_format=%(asctime)s - %(levelname)s - %(message)s
+"""
 
 
 class Util:
@@ -36,6 +54,13 @@ class Util:
         system: str
         distro: str | None = None
         codename: str | None = None
+
+    @dataclass(frozen=True)
+    class InstallPaths:
+        """Default install locations for the current platform."""
+
+        install_dir: Path
+        symlink_dir: Path
 
     @staticmethod
     def confirm(prompt: str) -> bool:
@@ -356,6 +381,27 @@ class Util:
             Util.ensure_dir(resolved_path, desc)
 
     @staticmethod
+    def ensure_config_values_file(file_values_path: str) -> None:
+        config_values_path = os.path.expanduser(
+            file_values_path or "~/.shpd.conf"
+        )
+        if os.path.exists(config_values_path):
+            return
+
+        parent_dir = os.path.dirname(config_values_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        try:
+            with open(config_values_path, "w", encoding="utf-8") as f:
+                f.write(DEFAULT_SHPD_VALUES_TEMPLATE)
+        except OSError as e:
+            Util.print_error_and_die(
+                f"Failed to create config values file: "
+                f"{config_values_path}\nError: {e}"
+            )
+
+    @staticmethod
     def ensure_config_file(constants: Constants):
         config_file_path = constants.SHPD_CONFIG_FILE
         if os.path.exists(config_file_path):
@@ -457,14 +503,11 @@ class Util:
     def get_os_info() -> "Util.OsInfo":
         """
         Return normalized OS metadata for installer/repository selection.
-
-        Current policy is Linux-only for provisioning flows; Windows/macOS are
-        rejected explicitly to avoid partial/undefined installer behavior.
         """
         system = platform.system().lower()
-        if system in ("windows", "win32", "darwin"):
+        if system in ("windows", "win32"):
             raise ValueError(f"Unsupported operating system: {system}")
-        elif system == "linux":
+        if system == "linux":
             import distro
 
             dist_id = distro.id().lower()
@@ -472,7 +515,83 @@ class Util:
             return Util.OsInfo(
                 system=system, distro=dist_id, codename=code_name
             )
-        return Util.OsInfo(system=system)
+        if system == "darwin":
+            return Util.OsInfo(system=system)
+        raise ValueError(f"Unsupported operating system: {system}")
+
+    @staticmethod
+    def get_default_install_paths(
+        system: Optional[str] = None,
+    ) -> "Util.InstallPaths":
+        current_system = system or platform.system().lower()
+        if current_system == "darwin":
+            brew_prefix = (
+                Path("/opt/homebrew")
+                if platform.machine().lower() in ("arm64", "aarch64")
+                else Path("/usr/local")
+            )
+            return Util.InstallPaths(
+                install_dir=brew_prefix / "opt" / "shepctl",
+                symlink_dir=brew_prefix / "bin",
+            )
+        return Util.InstallPaths(
+            install_dir=Path("/opt/shepctl"),
+            symlink_dir=Path("/usr/local/bin"),
+        )
+
+    @staticmethod
+    def get_home_directory() -> str:
+        return str(Path.home())
+
+    @staticmethod
+    def is_macos() -> bool:
+        return platform.system().lower() == "darwin"
+
+    @staticmethod
+    def translate_host_path(path: str) -> str:
+        """
+        Translate common Linux host-home paths to the active platform.
+
+        Container-internal paths are intentionally left to callers to preserve
+        Linux paths inside images and compose specs.
+        """
+        if not Util.is_macos():
+            return path
+
+        home_dir = Util.get_home_directory()
+        expanded = path
+
+        if path == "~":
+            expanded = home_dir
+        elif path.startswith("~/"):
+            expanded = str(Path(home_dir) / path[2:])
+
+        if expanded.startswith("/home/"):
+            parts = Path(expanded).parts
+            translated = Path(home_dir)
+            if len(parts) > 3:
+                translated = translated.joinpath(*parts[3:])
+            return str(translated)
+
+        return expanded
+
+    @staticmethod
+    def translate_volume_binding(volume: str) -> str:
+        """
+        Translate only the host-side portion of a bind-mount definition.
+        """
+        if not volume:
+            return volume
+
+        if not Util.is_macos():
+            return volume
+
+        parts = volume.split(":")
+        if len(parts) < 2:
+            return Util.translate_host_path(volume)
+
+        parts[0] = Util.translate_host_path(parts[0])
+        return ":".join(parts)
 
     @staticmethod
     def download_package(url: str, dest: str) -> None:

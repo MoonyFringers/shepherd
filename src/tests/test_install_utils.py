@@ -6,6 +6,7 @@
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
 import subprocess
+from pathlib import Path
 from typing import List
 from unittest.mock import MagicMock, patch
 
@@ -251,6 +252,17 @@ class TestInstallUtils:
                 Util.get_os_info()
             assert "Unsupported operating system" in str(exc_info.value)
 
+        with patch("platform.system", return_value="Darwin"):
+            result = Util.get_os_info()
+            assert result.system == "darwin"
+            assert result.distro is None
+            assert result.codename is None
+
+        with patch("platform.system", return_value="FreeBSD"):
+            with pytest.raises(ValueError) as exc_info:
+                Util.get_os_info()
+            assert "Unsupported operating system" in str(exc_info.value)
+
         # Test Linux with distribution info
         with (
             patch("platform.system", return_value="Linux"),
@@ -261,3 +273,75 @@ class TestInstallUtils:
             assert result.system == "linux"
             assert result.distro == "ubuntu"
             assert result.codename == "focal"
+
+    def test_ensure_config_values_file(self, tmp_path: Path):
+        config_values_path = tmp_path / ".shpd.conf"
+
+        Util.ensure_config_values_file(str(config_values_path))
+
+        assert config_values_path.exists()
+        content = config_values_path.read_text()
+        assert "shpd_path=~/shpd" in content
+        assert "default_env_type=docker-compose" in content
+
+    def test_ensure_config_values_file_keeps_existing(self, tmp_path: Path):
+        config_values_path = tmp_path / ".shpd.conf"
+        config_values_path.write_text("shpd_path=/custom/shpd\n")
+
+        Util.ensure_config_values_file(str(config_values_path))
+
+        assert config_values_path.read_text() == "shpd_path=/custom/shpd\n"
+
+    def test_translate_host_path(self):
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=Path("/Users/testuser")),
+        ):
+            assert (
+                Util.translate_host_path("/home/test/.ssh")
+                == "/Users/testuser/.ssh"
+            )
+            assert (
+                Util.translate_host_path("~/workspace")
+                == "/Users/testuser/workspace"
+            )
+            assert Util.translate_host_path("/etc/ssh") == "/etc/ssh"
+
+    def test_translate_host_path_linux_noop(self):
+        with patch("platform.system", return_value="Linux"):
+            assert (
+                Util.translate_host_path("/home/test/.ssh") == "/home/test/.ssh"
+            )
+            assert Util.translate_host_path("~/workspace") == "~/workspace"
+
+    def test_translate_volume_binding(self):
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("pathlib.Path.home", return_value=Path("/Users/testuser")),
+        ):
+            assert (
+                Util.translate_volume_binding("/home/test/.ssh:/home/test/.ssh")
+                == "/Users/testuser/.ssh:/home/test/.ssh"
+            )
+            assert (
+                Util.translate_volume_binding(
+                    "/home/test/.ssh:/home/test/.ssh:ro"
+                )
+                == "/Users/testuser/.ssh:/home/test/.ssh:ro"
+            )
+
+    def test_translate_volume_binding_linux_noop(self):
+        with patch("platform.system", return_value="Linux"):
+            assert (
+                Util.translate_volume_binding("/home/test/.ssh:/home/test/.ssh")
+                == "/home/test/.ssh:/home/test/.ssh"
+            )
+
+    def test_get_default_install_paths_macos_arm(self):
+        with (
+            patch("platform.system", return_value="Darwin"),
+            patch("platform.machine", return_value="arm64"),
+        ):
+            paths = Util.get_default_install_paths()
+            assert paths.install_dir == Path("/opt/homebrew/opt/shepctl")
+            assert paths.symlink_dir == Path("/opt/homebrew/bin")
