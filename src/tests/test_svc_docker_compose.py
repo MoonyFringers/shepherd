@@ -5,14 +5,11 @@
 # Open-source: see LICENSE (AGPL-3.0-only).
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
-# flake8: noqa E501
-
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
-from typing import cast
 
 import pytest
 import yaml
@@ -44,11 +41,7 @@ def mock_subprocess_with_running_ps(mocker: MockerFixture):
     def fake_run(
         *args: object, **kwargs: object
     ) -> subprocess.CompletedProcess[str]:
-        cmd = (
-            cast(list[str], args[0])
-            if args and isinstance(args[0], list)
-            else []
-        )
+        cmd = args[0] if args and isinstance(args[0], list) else []
         if "ps" in cmd:
             return subprocess.CompletedProcess(
                 args=cmd,

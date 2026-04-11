@@ -552,9 +552,7 @@ def test_attach_managers_populates_plugin_contexts(
     )
 
     shepherd = ShepherdMng()
-    runtime_mng: PluginRuntimeMng = (
-        shepherd.pluginRuntimeMng  # type: ignore[assignment]
-    )
+    runtime_mng: PluginRuntimeMng = shepherd.pluginRuntimeMng
 
     # Pre-bootstrap: build a fresh runtime with no managers passed in.
     runtime_no_managers = PluginRuntimeMng(shepherd.configMng)

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import time
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
@@ -210,7 +210,7 @@ def test_stop_env_no_wait_skips_wait_for_down(mocker: MockerFixture):
     wait_mock = mocker.patch.object(mng, "wait_for_env_down")
     mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
 
-    mng.stop_env(cast(Any, env_cfg), wait=False)
+    mng.stop_env(env_cfg, wait=False)
 
     wait_mock.assert_not_called()
     env.stop.assert_called_once_with()
@@ -395,7 +395,7 @@ def test_status_env_watch_delegates_to_waiter(mocker: MockerFixture):
     mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
     wait_mock = mocker.patch.object(mng, "wait_for_env_up")
 
-    mng.status_env(cast(Any, env_cfg), watch=True)
+    mng.status_env(env_cfg, watch=True)
 
     wait_mock.assert_called_once_with(
         env,
@@ -432,12 +432,12 @@ def test_status_env_renders_tree(mocker: MockerFixture):
     fake_console = mocker.Mock()
     mocker.patch.object(Util, "console", fake_console)
 
-    mng.status_env(cast(Any, env_cfg), watch=False)
+    mng.status_env(env_cfg, watch=False)
 
     collect_mock.assert_called_once_with(env, include_gates=False)
-    printed_group = cast(Group, fake_console.print.call_args.args[0])
-    printed_tree = cast(Tree, printed_group.renderables[0])
-    summary = cast(Text, printed_group.renderables[1])
+    printed_group = fake_console.print.call_args.args[0]
+    printed_tree = printed_group.renderables[0]
+    summary = printed_group.renderables[1]
     assert str(printed_tree.label) == "[bold white]env-1[/bold white]"
     service_node = printed_tree.children[0]
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
@@ -447,24 +447,17 @@ def test_status_env_renders_tree(mocker: MockerFixture):
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
 
     gated = SimpleNamespace(
         svcCfg=SimpleNamespace(start=SimpleNamespace(when_probes=["p2", "p1"]))
     )
     ungated = SimpleNamespace(svcCfg=SimpleNamespace(start=None))
 
-    assert (
-        mng_any._format_service_gate_glyphs(cast(Any, ungated))
-        == "[dim]-[/dim]"
-    )
-    assert (
-        mng_any._format_service_gate_glyphs(cast(Any, gated))
-        == "[dim]·[/dim][dim]·[/dim]"
-    )
+    assert mng._format_service_gate_glyphs(ungated) == "[dim]-[/dim]"
+    assert mng._format_service_gate_glyphs(gated) == "[dim]·[/dim][dim]·[/dim]"
 
-    glyphs = mng_any._format_service_gate_glyphs(
-        cast(Any, gated),
+    glyphs = mng._format_service_gate_glyphs(
+        gated,
         gate_status={"p1": True, "p2": False},
     )
     assert "[bold red]✗[/bold red]" in glyphs
@@ -473,7 +466,6 @@ def test_format_service_gate_glyphs_states(mocker: MockerFixture):
 
 def test_format_service_gate_details_sorted_and_colored(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
 
     gated = SimpleNamespace(
         svcCfg=SimpleNamespace(
@@ -482,13 +474,10 @@ def test_format_service_gate_details_sorted_and_colored(mocker: MockerFixture):
     )
     ungated = SimpleNamespace(svcCfg=SimpleNamespace(start=None))
 
-    assert (
-        mng_any._format_service_gate_details(cast(Any, ungated))
-        == "[dim]-[/dim]"
-    )
+    assert mng._format_service_gate_details(ungated) == "[dim]-[/dim]"
 
-    details = mng_any._format_service_gate_details(
-        cast(Any, gated),
+    details = mng._format_service_gate_details(
+        gated,
         gate_status={"alpha": True, "beta": False, "zeta": None},
     )
     assert details.find("alpha") < details.find("beta") < details.find("zeta")
@@ -499,7 +488,7 @@ def test_format_service_gate_details_sorted_and_colored(mocker: MockerFixture):
 
 def test_evaluate_gate_status_success_and_exception(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
+
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
 
@@ -509,14 +498,14 @@ def test_evaluate_gate_status_success_and_exception(mocker: MockerFixture):
         ProbeRunResult(tag="c", exit_code=0, timed_out=True),
     ]
 
-    status = mng_any._evaluate_gate_status(env, {"a", "b", "c", "d"})
+    status = mng._evaluate_gate_status(env, {"a", "b", "c", "d"})
     assert status["a"] is True
     assert status["b"] is False
     assert status["c"] is False
     assert status["d"] is None
 
     env.check_probes.side_effect = RuntimeError("probe error")
-    status_err = mng_any._evaluate_gate_status(env, {"a", "b"})
+    status_err = mng._evaluate_gate_status(env, {"a", "b"})
     assert status_err == {"a": None, "b": None}
 
 
@@ -531,8 +520,8 @@ def test_build_probe_status_tree_returns_colored_probe_nodes():
         title="[white]env-1[/white] probes",
     )
     assert isinstance(renderable, Group)
-    tree = cast(Tree, renderable.renderables[0])
-    summary = cast(Text, renderable.renderables[1])
+    tree = renderable.renderables[0]
+    summary = renderable.renderables[1]
     assert str(tree.label) == "[white]env-1[/white] probes"
     child_labels = [str(child.label) for child in tree.children]
     assert "[green]ok-probe[/green]" in child_labels
@@ -559,7 +548,7 @@ def test_check_probes_renders_probe_status_tree(mocker: MockerFixture):
     fake_console = mocker.Mock()
     mocker.patch.object(Util, "console", fake_console)
 
-    exit_code = mng.check_probes(cast(Any, env_cfg), probe_tag=None)
+    exit_code = mng.check_probes(env_cfg, probe_tag=None)
 
     assert exit_code == 0
     build_tree.assert_called_once()
@@ -568,7 +557,7 @@ def test_check_probes_renders_probe_status_tree(mocker: MockerFixture):
 
 def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
+
     grouped = {
         "svc-1": [
             [
@@ -580,7 +569,7 @@ def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
         ]
     }
 
-    renderable = mng_any._build_env_status_tree(
+    renderable = mng._build_env_status_tree(
         "env-1",
         grouped,
         command_log=["[green]ok[/green]", "[red]fail[/red]"],
@@ -600,7 +589,7 @@ def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
 
 def test_build_env_status_tree_with_error_panel(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
+
     grouped = {
         "svc-1": [
             [
@@ -612,7 +601,7 @@ def test_build_env_status_tree_with_error_panel(mocker: MockerFixture):
         ]
     }
 
-    renderable = mng_any._build_env_status_tree(
+    renderable = mng._build_env_status_tree(
         "env-1",
         grouped,
         command_log=["[green]ok[/green]"],
@@ -653,8 +642,8 @@ def test_build_env_status_tree_returns_tree_with_service_metadata():
     )
 
     assert isinstance(renderable, Group)
-    tree = cast(Tree, renderable.renderables[0])
-    summary = cast(Text, renderable.renderables[1])
+    tree = renderable.renderables[0]
+    summary = renderable.renderables[1]
     assert str(tree.label) == "[bold white]env-1[/bold white]"
     service_node = tree.children[0]
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
@@ -678,7 +667,7 @@ def test_build_env_status_tree_manager_method_returns_tree(
     mocker: MockerFixture,
 ):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
+
     grouped = {
         "svc-1": [
             [
@@ -690,7 +679,7 @@ def test_build_env_status_tree_manager_method_returns_tree(
         ]
     }
 
-    renderable = mng_any._build_env_status_tree("env-1", grouped)
+    renderable = mng._build_env_status_tree("env-1", grouped)
 
     assert isinstance(renderable, Group)
     assert isinstance(renderable.renderables[0], Tree)
@@ -715,7 +704,7 @@ def test_build_env_status_tree_omits_gates_node_without_probes():
     )
 
     assert isinstance(renderable, Group)
-    tree = cast(Tree, renderable.renderables[0])
+    tree = renderable.renderables[0]
     service_node = tree.children[0]
     child_labels = [str(child.label) for child in service_node.children]
     assert "[cyan]gates[/cyan]" not in child_labels
@@ -744,7 +733,7 @@ def test_build_env_status_tree_applies_flash_to_changed_nodes():
         flashing_probes={("svc-1", "probe-a")},
     )
 
-    tree = cast(Tree, cast(Group, renderable).renderables[0])
+    tree = renderable.renderables[0]
     service_node = tree.children[0]
     gates_node = service_node.children[0]
     gate_labels = [str(child.label) for child in gates_node.children]
@@ -776,7 +765,7 @@ def test_build_env_status_tree_applies_flash_to_changed_summary_values():
         flashing_summary_keys={"RUNNING", "GATES OK"},
     )
 
-    summary = cast(Text, cast(Group, renderable).renderables[1])
+    summary = renderable.renderables[1]
     assert "RUNNING: 1" in summary.plain
     assert "GATES OK: 1" in summary.plain
     assert len(summary.spans) >= 2
@@ -791,7 +780,6 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
     mocker: MockerFixture,
 ):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
 
     container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
     svc = SimpleNamespace(
@@ -805,7 +793,7 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, _, _, _ = mng_any._collect_env_status(
+    grouped, _, _, _ = mng._collect_env_status(
         env,
         gate_status={"p1": True, "p2": None},
     )
@@ -815,7 +803,6 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
 
 def test_collect_env_status_details_row_shape(mocker: MockerFixture):
     mng = _new_environment_mng(mocker, cli_flags={"details": True})
-    mng_any = cast(Any, mng)
 
     container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
     svc = SimpleNamespace(
@@ -829,11 +816,9 @@ def test_collect_env_status_details_row_shape(mocker: MockerFixture):
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, all_running, any_running, has_containers = (
-        mng_any._collect_env_status(
-            env,
-            gate_status={"p1": True, "p2": None},
-        )
+    grouped, all_running, any_running, has_containers = mng._collect_env_status(
+        env,
+        gate_status={"p1": True, "p2": None},
     )
     assert all_running is True
     assert any_running is True
@@ -845,7 +830,6 @@ def test_collect_env_status_details_row_shape(mocker: MockerFixture):
 
 def test_collect_env_status_can_omit_gate_details(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
-    mng_any = cast(Any, mng)
 
     container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
     svc = SimpleNamespace(
@@ -859,12 +843,10 @@ def test_collect_env_status_can_omit_gate_details(mocker: MockerFixture):
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, all_running, any_running, has_containers = (
-        mng_any._collect_env_status(
-            env,
-            gate_status={"p1": True, "p2": None},
-            include_gates=False,
-        )
+    grouped, all_running, any_running, has_containers = mng._collect_env_status(
+        env,
+        gate_status={"p1": True, "p2": None},
+        include_gates=False,
     )
 
     assert all_running is True

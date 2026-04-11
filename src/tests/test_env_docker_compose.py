@@ -5,15 +5,13 @@
 # Open-source: see LICENSE (AGPL-3.0-only).
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
-# flake8: noqa E501
-
 from __future__ import annotations
 
 import os
 import subprocess
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, cast
+from typing import Any
 
 import pytest
 import yaml
@@ -46,7 +44,7 @@ def normalize_expected_bind_paths(content: str) -> str:
 
 def mock_subprocess_with_running_ps(mocker: MockerFixture):
     def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
-        cmd = cast(list[str], args[0]) if args else []
+        cmd = args[0] if args else []
         if "ps" in cmd:
             return subprocess.CompletedProcess(
                 args=cmd,
@@ -665,7 +663,7 @@ def test_start_impl_starts_only_available_gates(mocker: MockerFixture):
             }
         ),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
     run_compose_mock = mocker.patch(
         "docker.docker_compose_env.run_compose",
@@ -714,7 +712,7 @@ def test_start_impl_logs_compose_command_with_category(mocker: MockerFixture):
     env = DockerComposeEnv(
         mocker.Mock(),
         mocker.Mock(),
-        cast(Any, env_cfg),
+        env_cfg,
         cli_flags={"show_commands": True, "show_commands_limit": 5},
     )
 
@@ -751,7 +749,7 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
     env = DockerComposeEnv(
         mocker.Mock(),
         mocker.Mock(),
-        cast(Any, env_cfg),
+        env_cfg,
         cli_flags={"show_commands": True, "show_commands_limit": 5},
     )
 
@@ -784,7 +782,7 @@ def test_start_rolls_back_with_stop_on_non_recoverable_gate_failure(
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
     rendered_map = {
         "ungated": "name: rollback-env\nservices:\n  app: {}\n",
     }
@@ -828,32 +826,29 @@ def test_start_runs_init_when_probe_turns_true(mocker: MockerFixture):
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
-    env.services = cast(
-        list[Any],
-        [
-            SimpleNamespace(
-                svcCfg=SimpleNamespace(
-                    tag="db",
-                    start=None,
-                    containers=[
-                        SimpleNamespace(
-                            tag="pg",
-                            run_container_name="db-init-env",
-                            inits=[
-                                SimpleNamespace(
-                                    tag="create-user",
-                                    script="echo init ok",
-                                    script_path=None,
-                                    when_probes=["ready"],
-                                )
-                            ],
-                        )
-                    ],
-                )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="db",
+                start=None,
+                containers=[
+                    SimpleNamespace(
+                        tag="pg",
+                        run_container_name="db-init-env",
+                        inits=[
+                            SimpleNamespace(
+                                tag="create-user",
+                                script="echo init ok",
+                                script_path=None,
+                                when_probes=["ready"],
+                            )
+                        ],
+                    )
+                ],
             )
-        ],
-    )
+        )
+    ]
     rendered_map = {
         "ungated": "name: init-env\nservices:\n  db-init-env: {}\n",
         "ready": "name: init-env\nservices:\n  ready-svc: {}\n",
@@ -912,44 +907,41 @@ def test_start_runs_init_in_enclosing_container(mocker: MockerFixture):
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
-    env.services = cast(
-        list[Any],
-        [
-            SimpleNamespace(
-                svcCfg=SimpleNamespace(
-                    tag="svc",
-                    start=None,
-                    containers=[
-                        SimpleNamespace(
-                            tag="api",
-                            run_container_name="api-enclosing-env",
-                            inits=[
-                                SimpleNamespace(
-                                    tag="init-api",
-                                    script="echo api",
-                                    script_path=None,
-                                    when_probes=[],
-                                )
-                            ],
-                        ),
-                        SimpleNamespace(
-                            tag="worker",
-                            run_container_name="worker-enclosing-env",
-                            inits=[
-                                SimpleNamespace(
-                                    tag="init-worker",
-                                    script="echo worker",
-                                    script_path=None,
-                                    when_probes=[],
-                                )
-                            ],
-                        ),
-                    ],
-                )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc",
+                start=None,
+                containers=[
+                    SimpleNamespace(
+                        tag="api",
+                        run_container_name="api-enclosing-env",
+                        inits=[
+                            SimpleNamespace(
+                                tag="init-api",
+                                script="echo api",
+                                script_path=None,
+                                when_probes=[],
+                            )
+                        ],
+                    ),
+                    SimpleNamespace(
+                        tag="worker",
+                        run_container_name="worker-enclosing-env",
+                        inits=[
+                            SimpleNamespace(
+                                tag="init-worker",
+                                script="echo worker",
+                                script_path=None,
+                                when_probes=[],
+                            )
+                        ],
+                    ),
+                ],
             )
-        ],
-    )
+        )
+    ]
     rendered_map = {
         "ungated": (
             "name: enclosing-env\n"
@@ -1010,34 +1002,31 @@ def test_start_records_init_compose_failure_output(mocker: MockerFixture):
     env = DockerComposeEnv(
         mocker.Mock(),
         mocker.Mock(),
-        cast(Any, env_cfg),
+        env_cfg,
         cli_flags={"show_commands": True, "show_commands_limit": 5},
     )
-    env.services = cast(
-        list[Any],
-        [
-            SimpleNamespace(
-                svcCfg=SimpleNamespace(
-                    tag="svc",
-                    start=None,
-                    containers=[
-                        SimpleNamespace(
-                            tag="api",
-                            run_container_name="api-init-fail-env",
-                            inits=[
-                                SimpleNamespace(
-                                    tag="seed",
-                                    script="echo seed",
-                                    script_path=None,
-                                    when_probes=[],
-                                )
-                            ],
-                        )
-                    ],
-                )
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc",
+                start=None,
+                containers=[
+                    SimpleNamespace(
+                        tag="api",
+                        run_container_name="api-init-fail-env",
+                        inits=[
+                            SimpleNamespace(
+                                tag="seed",
+                                script="echo seed",
+                                script_path=None,
+                                when_probes=[],
+                            )
+                        ],
+                    )
+                ],
             )
-        ],
-    )
+        )
+    ]
     rendered_map = {
         "ungated": "name: init-fail-env\nservices:\n  api-init-fail-env: {}\n",
     }
@@ -1098,32 +1087,29 @@ def test_start_does_not_rerun_init_across_probe_poll_cycles(
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
-    env.services = cast(
-        list[Any],
-        [
-            SimpleNamespace(
-                svcCfg=SimpleNamespace(
-                    tag="svc",
-                    start=SimpleNamespace(when_probes=["ready"]),
-                    containers=[
-                        SimpleNamespace(
-                            tag="api",
-                            run_container_name="api-init-dedup-env",
-                            inits=[
-                                SimpleNamespace(
-                                    tag="seed",
-                                    script="echo seed once",
-                                    script_path=None,
-                                    when_probes=["ready"],
-                                )
-                            ],
-                        )
-                    ],
-                )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc",
+                start=SimpleNamespace(when_probes=["ready"]),
+                containers=[
+                    SimpleNamespace(
+                        tag="api",
+                        run_container_name="api-init-dedup-env",
+                        inits=[
+                            SimpleNamespace(
+                                tag="seed",
+                                script="echo seed once",
+                                script_path=None,
+                                when_probes=["ready"],
+                            )
+                        ],
+                    )
+                ],
             )
-        ],
-    )
+        )
+    ]
     rendered_map = {
         "ungated": "name: init-dedup-env\nservices:\n  base: {}\n",
         "ready": "name: init-dedup-env\nservices:\n  api-init-dedup-env: {}\n",
@@ -1195,7 +1181,7 @@ def test_render_target_merged_includes_gated_services(mocker: MockerFixture):
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
     rendered_map = {
         "ungated": "name: merge-env\nservices: {base: {}}\n",
@@ -1218,7 +1204,7 @@ def test_render_target_grouped_uses_literal_blocks(mocker: MockerFixture):
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
     rendered_map = {
         "ungated": "name: group-env\nservices: {base: {}}\n",
@@ -1240,7 +1226,7 @@ def test_start_loops_and_unblocks_gated_compose(mocker: MockerFixture):
         status=SimpleNamespace(rendered_config=None),
     )
     config_mng = mocker.Mock()
-    env = DockerComposeEnv(config_mng, mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(config_mng, mocker.Mock(), env_cfg)
 
     rendered_map = {
         "ungated": "name: loop-env\nservices: {}\n",
@@ -1289,7 +1275,7 @@ def test_start_retries_gates_until_probe_turns_true(mocker: MockerFixture):
         volumes=[],
         status=SimpleNamespace(rendered_config=None),
     )
-    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), cast(Any, env_cfg))
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
     rendered_map = {
         "ungated": "name: retry-env\nservices: {}\n",
