@@ -1,0 +1,34 @@
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+
+# ---------------------------------------------------------------------------
+# Plugins
+#
+# data-plugin must be listed before app-plugin here so that Shepherd's plugin
+# loader sees both entries, but the actual load *order* is determined by the
+# topological sort of the depends_on graph — data-plugin always loads first
+# regardless of declaration order.
+# ---------------------------------------------------------------------------
+plugins:
+  - id: data-plugin
+    enabled: true
+    version: 0.1.0
+  - id: app-plugin
+    enabled: true
+    version: 0.1.0
+
+# ---------------------------------------------------------------------------
+# Environments
+#
+# "my-app" is created from the "app-plugin/demo" template.  The template
+# merges the "data-plugin/kv-base" fragment (kv service + kv-ready probe +
+# kv_data volume + demo-net network) with app-plugin's own "web" service.
+# ---------------------------------------------------------------------------
+envs:
+  - template: app-plugin/demo
+    factory: docker-compose
+    tag: my-app

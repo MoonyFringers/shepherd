@@ -1,0 +1,82 @@
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+
+service_templates:
+  - tag: worker
+    factory: docker
+    labels: []
+    properties: {}
+    containers:
+      - tag: worker
+        image: busybox:stable-glibc
+        container_name: null
+        hostname: null
+        workdir: null
+        environment:
+          - JOB_NAME=${job_name}
+        volumes: []
+        ports: []
+        networks:
+          - default
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null
+
+env_template_fragments:
+  - tag: worker-base
+    service_template:
+      template: worker
+      tag: job
+    probes:
+      - tag: job-ready
+        container:
+          tag: job-probe
+          image: busybox:stable-glibc
+          container_name: null
+          hostname: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - default
+          extra_hosts: []
+          inits: null
+          build: null
+        script: "sh -c 'echo ${job_name} && sleep 1'"
+        script_path: null
+    volumes:
+      - tag: job_data
+        external: false
+        driver: local
+        name: null
+        driver_opts: null
+        labels: null
+    networks:
+      - tag: default
+        name: null
+        external: false
+        driver: bridge
+        attachable: null
+        enable_ipv6: null
+        driver_opts: null
+        ipam: null
+
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    service_templates: []
+    probes: []
+    networks: []
+    volumes: []
+    fragments:
+      - id: worker-base
+        with:
+          job_name: my-job
+
+envs: []

@@ -23,6 +23,24 @@ env_templates:
     probes: null
     networks: null
     volumes: null
+env_template_fragments:
+  - tag: db-bundle
+    service_template:
+      template: api
+      tag: db
+    probes:
+      - tag: db-ready
+        container:
+          tag: db-probe
+          image: busybox:stable-glibc
+          networks: []
+        script: "sh -c 'sleep 1'"
+    volumes:
+      - tag: db_data
+        external: false
+        driver: local
+    networks: []
+
 service_templates:
   - tag: api
     factory: api-factory

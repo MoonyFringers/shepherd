@@ -1,0 +1,104 @@
+# App Plugin — a fragment-embedder plugin example.
+#
+# This plugin demonstrates how to import a fragment from another plugin and
+# supply values for its placeholders through the ``with:`` block.
+#
+# Dependency
+# ----------
+# This plugin declares a hard dependency on data-plugin >= 0.1.0.  Shepherd
+# validates the constraint at startup and loads data-plugin before app-plugin
+# so that "data-plugin/kv-base" is already registered when app-plugin's
+# env_template is processed.
+#
+# Fragment import
+# ---------------
+# The "demo" env_template imports "data-plugin/kv-base" and supplies the
+# kv_name placeholder via the ``with:`` block.  The value "${app_name}-store"
+# contains its own ${app_name} placeholder which is *not* in the with: block
+# — Shepherd passes it through and resolves it globally from the environment's
+# variable substitution context.
+
+id: app-plugin
+name: App Plugin
+version: 0.1.0
+
+# Must be 1 — the only supported value at this time.
+plugin_api_version: 1
+
+description: >
+  Reference fragment-embedder plugin.  Demonstrates importing a fragment
+  from data-plugin and supplying placeholder values via the with: block.
+
+# The Python class Shepherd will import and instantiate at startup.
+entrypoint:
+  module: app_plugin.main
+  class: AppPlugin
+
+# ---------------------------------------------------------------------------
+# Plugin dependencies
+#
+# Shepherd validates these at startup using PEP 440 version specifiers and
+# loads dependencies before the plugins that declare them.
+# ---------------------------------------------------------------------------
+depends_on:
+  - id: data-plugin
+    version: ">=0.1.0"
+
+# ---------------------------------------------------------------------------
+# Declarative service templates
+#
+# Registered under the namespaced id "app-plugin/web".
+# ---------------------------------------------------------------------------
+service_templates:
+  - tag: web
+    factory: docker
+    labels: []
+    properties: {}
+    containers:
+      - tag: web
+        image: busybox:stable-glibc
+        container_name: null
+        hostname: null
+        workdir: null
+        command:
+          - sh
+          - -c
+          - sleep infinity
+        environment:
+          - APP_NAME=${app_name}
+        volumes: []
+        ports: []
+        networks:
+          - demo-net
+        extra_hosts: []
+        inits: null
+        build: null
+    start: null
+
+# ---------------------------------------------------------------------------
+# Declarative environment templates
+#
+# The "demo" env_template imports "data-plugin/kv-base" and adds its own
+# "web" service alongside the fragment's "kv" service.
+#
+# Fragment merge order
+# --------------------
+# Shepherd merges fragments in declaration order, then appends inline
+# service_templates.  Duplicate instance tags across fragments or between a
+# fragment and an inline service_template cause a hard startup failure.
+# ---------------------------------------------------------------------------
+env_templates:
+  - tag: demo
+    factory: docker-compose
+    fragments:
+      - id: data-plugin/kv-base
+        with:
+          # kv_name is resolved by the fragment merge; ${app_name} inside the
+          # value falls through to Shepherd's global ${VAR} resolution.
+          kv_name: "${app_name}-store"
+    service_templates:
+      - template: web    # auto-namespaced → app-plugin/web
+        tag: web
+    probes: []
+    networks: []
+    volumes: []

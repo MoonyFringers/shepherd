@@ -10,17 +10,22 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections import deque
 from dataclasses import dataclass, field
 from types import ModuleType
 from typing import Any, Callable, Sequence
 
 import click
 import yaml
+from packaging.specifiers import InvalidSpecifier, SpecifierSet
+from packaging.version import InvalidVersion, Version
 
 from completion import CompletionMng
 from config import (
     ConfigMng,
     EnvironmentTemplateCfg,
+    EnvTemplateFragmentCfg,
+    FragmentRefCfg,
     PluginCfg,
     PluginDescriptorCfg,
     ServiceTemplateCfg,
@@ -81,6 +86,11 @@ def _svc_factory_registry() -> dict[str, "PluginSvcFactorySpec"]:
     return {}
 
 
+def _fragment_registry() -> dict[str, EnvTemplateFragmentCfg]:
+    """Create a typed default for fragment registrations."""
+    return {}
+
+
 @dataclass(frozen=True)
 class LoadedPlugin:
     """Runtime record for one loaded plugin."""
@@ -115,6 +125,9 @@ class PluginRegistry:
     )
     service_templates: dict[str, ServiceTemplateCfg] = field(
         default_factory=_service_template_registry
+    )
+    env_template_fragments: dict[str, EnvTemplateFragmentCfg] = field(
+        default_factory=_fragment_registry
     )
     env_factories: dict[str, PluginEnvFactorySpec] = field(
         default_factory=_env_factory_registry
@@ -182,16 +195,131 @@ class PluginRuntimeMng:
 
         Plugins are loaded eagerly so command registration, collision checks,
         and later extension hooks see the complete active plugin set.
+        Dependencies declared via ``depends_on`` are validated and plugins are
+        loaded in dependency order (dependents after their dependencies).
         """
-        for plugin_cfg in self.configMng.get_plugins():
-            if not plugin_cfg.is_enabled():
-                continue
-            loaded = self._load_plugin(plugin_cfg)
+        enabled = [p for p in self.configMng.get_plugins() if p.is_enabled()]
+        sorted_plugins, descriptors = self._topo_sort_plugins(enabled)
+        for plugin_cfg in sorted_plugins:
+            loaded = self._load_plugin(plugin_cfg, descriptors[plugin_cfg.id])
             self._register_plugin(loaded)
         return self.registry
 
-    def _load_plugin(self, plugin_cfg: PluginCfg) -> LoadedPlugin:
-        """Load one enabled plugin from its managed install directory."""
+    def _topo_sort_plugins(
+        self, enabled: list[PluginCfg]
+    ) -> tuple[list[PluginCfg], dict[str, PluginDescriptorCfg]]:
+        """Return *enabled* plugins in dependency order (Kahn's algorithm).
+
+        Reads each plugin's descriptor (parse-only, no import) to inspect
+        ``depends_on``.  Hard-fails when a declared dependency is absent from
+        the enabled set, when a version constraint is not satisfied, or when
+        the dependency graph contains a cycle.
+
+        Returns the sorted plugin list together with the already-parsed
+        descriptor map so callers can reuse it without a second disk read.
+        """
+        by_id: dict[str, PluginCfg] = {p.id: p for p in enabled}
+
+        # Load descriptors (parse only) to inspect depends_on.
+        descriptors: dict[str, PluginDescriptorCfg] = {}
+        for plugin_cfg in enabled:
+            plugin_dir = self.configMng.get_plugin_dir(plugin_cfg.id)
+            if not os.path.isdir(plugin_dir):
+                Util.print_error_and_die(
+                    f"Enabled plugin '{plugin_cfg.id}' is missing from the "
+                    f"managed plugin root: {plugin_dir}"
+                )
+            descriptor_path = os.path.join(
+                plugin_dir, self.configMng.constants.PLUGIN_DESCRIPTOR_FILE
+            )
+            descriptors[plugin_cfg.id] = self._load_descriptor(
+                plugin_cfg.id, descriptor_path
+            )
+
+        # Build adjacency: plugin_id → set of plugin_ids it depends on.
+        in_degree: dict[str, int] = {p.id: 0 for p in enabled}
+        dependents: dict[str, list[str]] = {p.id: [] for p in enabled}
+
+        for plugin_cfg in enabled:
+            desc = descriptors[plugin_cfg.id]
+            for dep in desc.depends_on or []:
+                if dep.id not in by_id:
+                    Util.print_error_and_die(
+                        f"Plugin '{plugin_cfg.id}' depends on '{dep.id}' "
+                        "which is not installed or not enabled."
+                    )
+                if dep.version is not None:
+                    self._validate_version_constraint(
+                        plugin_cfg.id,
+                        dep.id,
+                        descriptors[dep.id].version,
+                        dep.version,
+                    )
+                dependents[dep.id].append(plugin_cfg.id)
+                in_degree[plugin_cfg.id] += 1
+
+        # Kahn's BFS topological sort.
+        queue: deque[str] = deque(
+            pid for pid, deg in in_degree.items() if deg == 0
+        )
+        sorted_ids: list[str] = []
+        while queue:
+            pid = queue.popleft()
+            sorted_ids.append(pid)
+            for dependent_id in dependents[pid]:
+                in_degree[dependent_id] -= 1
+                if in_degree[dependent_id] == 0:
+                    queue.append(dependent_id)
+
+        if len(sorted_ids) != len(enabled):
+            Util.print_error_and_die(
+                "Circular dependency detected among enabled plugins: "
+                + ", ".join(pid for pid in in_degree if in_degree[pid] > 0)
+            )
+
+        return [by_id[pid] for pid in sorted_ids], descriptors
+
+    def _validate_version_constraint(
+        self,
+        dependent_id: str,
+        dependency_id: str,
+        installed_version: str,
+        specifier: str,
+    ) -> None:
+        """Hard-fail if *installed_version* does not satisfy *specifier*."""
+        try:
+            ver = Version(installed_version)
+            spec = SpecifierSet(specifier)
+        except InvalidVersion as exc:
+            Util.print_error_and_die(
+                f"Plugin '{dependency_id}' has invalid version string "
+                f"'{installed_version}': {exc}"
+            )
+            raise AssertionError("unreachable")
+        except InvalidSpecifier as exc:
+            Util.print_error_and_die(
+                f"Plugin '{dependent_id}' declares invalid version specifier "
+                f"'{specifier}' for dependency '{dependency_id}': {exc}"
+            )
+            raise AssertionError("unreachable")
+
+        if ver not in spec:
+            Util.print_error_and_die(
+                f"Plugin '{dependent_id}' requires "
+                f"'{dependency_id}{specifier}' but "
+                f"installed version is '{installed_version}'."
+            )
+
+    def _load_plugin(
+        self,
+        plugin_cfg: PluginCfg,
+        descriptor: PluginDescriptorCfg | None = None,
+    ) -> LoadedPlugin:
+        """Load one enabled plugin from its managed install directory.
+
+        *descriptor* may be supplied when the caller has already parsed it
+        (e.g. from ``_topo_sort_plugins``) to avoid a redundant disk read.
+        """
         plugin_dir = self.configMng.get_plugin_dir(plugin_cfg.id)
         if not os.path.isdir(plugin_dir):
             Util.print_error_and_die(
@@ -199,10 +327,11 @@ class PluginRuntimeMng:
                 f"managed plugin root: {plugin_dir}"
             )
 
-        descriptor_path = os.path.join(
-            plugin_dir, self.configMng.constants.PLUGIN_DESCRIPTOR_FILE
-        )
-        descriptor = self._load_descriptor(plugin_cfg.id, descriptor_path)
+        if descriptor is None:
+            descriptor_path = os.path.join(
+                plugin_dir, self.configMng.constants.PLUGIN_DESCRIPTOR_FILE
+            )
+            descriptor = self._load_descriptor(plugin_cfg.id, descriptor_path)
         self._validate_descriptor(plugin_cfg, descriptor)
         plugin = self._import_plugin(plugin_cfg.id, plugin_dir, descriptor)
         return LoadedPlugin(
@@ -498,14 +627,24 @@ class PluginRuntimeMng:
             template.tag
             for template in (loaded.descriptor.service_templates or [])
         }
+        fragment_local_ids = {
+            fragment.tag
+            for fragment in (loaded.descriptor.env_template_fragments or [])
+        }
         self._register_env_templates(
             plugin_id,
             loaded.descriptor.env_templates or (),
             service_local_ids,
+            fragment_local_ids,
         )
         self._register_service_templates(
             plugin_id,
             loaded.descriptor.service_templates or (),
+        )
+        self._register_fragments(
+            plugin_id,
+            loaded.descriptor.env_template_fragments or (),
+            service_local_ids,
         )
 
     def _register_env_templates(
@@ -513,6 +652,7 @@ class PluginRuntimeMng:
         plugin_id: str,
         templates: Sequence[EnvironmentTemplateCfg],
         service_local_ids: set[str],
+        fragment_local_ids: set[str] | None = None,
     ) -> None:
         """Register namespaced environment templates from the descriptor."""
         for template in templates:
@@ -530,7 +670,10 @@ class PluginRuntimeMng:
                 )
             self.registry.env_templates[canonical_id] = (
                 self._namespace_environment_template(
-                    plugin_id, template, service_local_ids
+                    plugin_id,
+                    template,
+                    service_local_ids,
+                    fragment_local_ids or set(),
                 )
             )
 
@@ -556,11 +699,52 @@ class PluginRuntimeMng:
                 self._namespace_service_template(plugin_id, template)
             )
 
+    def _register_fragments(
+        self,
+        plugin_id: str,
+        fragments: Sequence[EnvTemplateFragmentCfg],
+        service_local_ids: set[str],
+    ) -> None:
+        """Register namespaced env template fragments from the descriptor."""
+        for fragment in fragments:
+            if "/" in fragment.tag:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' fragment id '{fragment.tag}' must "
+                    "not contain '/'."
+                )
+            canonical_id = f"{plugin_id}/{fragment.tag}"
+            if canonical_id in self.registry.env_template_fragments:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' declares duplicate fragment "
+                    f"'{canonical_id}'."
+                )
+            self.registry.env_template_fragments[canonical_id] = (
+                self._namespace_fragment(plugin_id, fragment, service_local_ids)
+            )
+
+    def _namespace_fragment(
+        self,
+        plugin_id: str,
+        fragment: EnvTemplateFragmentCfg,
+        service_local_ids: set[str],
+    ) -> EnvTemplateFragmentCfg:
+        """Return one plugin fragment with canonicalized ids."""
+        return EnvTemplateFragmentCfg(
+            tag=f"{plugin_id}/{fragment.tag}",
+            service_template=self._namespace_service_template_ref(
+                plugin_id, fragment.service_template, service_local_ids
+            ),
+            probes=fragment.probes,
+            volumes=fragment.volumes,
+            networks=fragment.networks,
+        )
+
     def _namespace_environment_template(
         self,
         plugin_id: str,
         template: EnvironmentTemplateCfg,
         service_local_ids: set[str],
+        fragment_local_ids: set[str] | None = None,
     ) -> EnvironmentTemplateCfg:
         """Return one plugin env template with canonicalized ids."""
         service_templates = template.service_templates
@@ -570,6 +754,15 @@ class PluginRuntimeMng:
                     plugin_id, service_template, service_local_ids
                 )
                 for service_template in service_templates
+            ]
+
+        fragments = template.fragments
+        if fragments is not None:
+            fragments = [
+                self._namespace_fragment_ref(
+                    plugin_id, frag_ref, fragment_local_ids or set()
+                )
+                for frag_ref in fragments
             ]
 
         return EnvironmentTemplateCfg(
@@ -583,6 +776,7 @@ class PluginRuntimeMng:
             probes=template.probes,
             networks=template.networks,
             volumes=template.volumes,
+            fragments=fragments,
             ready=template.ready,
         )
 
@@ -619,6 +813,24 @@ class PluginRuntimeMng:
             template=template_name,
             tag=template_ref.tag,
         )
+
+    def _namespace_fragment_ref(
+        self,
+        plugin_id: str,
+        frag_ref: FragmentRefCfg,
+        fragment_local_ids: set[str],
+    ) -> FragmentRefCfg:
+        """Return one env_template->fragment reference with a canonical id.
+
+        A local fragment id (no ``/``) that matches one declared in the same
+        plugin's ``env_template_fragments`` is expanded to
+        ``plugin-id/local-id``.  Already-namespaced ids (containing ``/``) are
+        left unchanged so cross-plugin references work transparently.
+        """
+        frag_id = frag_ref.id
+        if "/" not in frag_id and frag_id in fragment_local_ids:
+            frag_id = f"{plugin_id}/{frag_id}"
+        return type(frag_ref)(id=frag_id, with_values=frag_ref.with_values)
 
     def _namespace_factory_id(
         self,

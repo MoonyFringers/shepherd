@@ -3,3 +3,4 @@ rich
 distro
 pyyaml
 glom
+packaging
