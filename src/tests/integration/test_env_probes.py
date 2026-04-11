@@ -31,8 +31,8 @@ def test_gated_service_starts_after_probe_passes(
     shpd_gated_env: Path, runner: CliRunner
 ):
     # env up runs the full gate/probe loop: web starts immediately,
-    # then the 'ready' probe fires against the live cache container,
-    # and cache starts once the probe passes.
+    # the 'warmup' probe fires (trivially passing), and api starts
+    # once the probe passes.
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0, result.output
 

@@ -1,0 +1,48 @@
+name: Installation Test
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  install-test:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set up Git repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+
+      - name: Create virtual environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r src/requirements.txt
+
+      - name: Install shepctl from source
+        run: ./scripts/install.sh -m source -s install
+
+      - name: Verify installation
+        run: |
+          test -d /opt/shepctl
+          test -f /usr/local/bin/shepctl
+          shepctl --help
+
+      - name: Uninstall shepctl
+        run: ./scripts/install.sh uninstall
+
+      - name: Verify uninstallation
+        run: |
+          test ! -d /opt/shepctl
+          test ! -f /usr/local/bin/shepctl
+          ! command -v shepctl

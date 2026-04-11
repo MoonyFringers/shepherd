@@ -37,18 +37,23 @@ def shpd_env(tmp_path: Path):
     shpd_yaml = temp_home / ".shpd.yaml"
     shpd_yaml.write_text(read_fixture("basic", "shpd.yaml"))
 
+    prev = os.environ.get("SHPD_CONF")
     os.environ["SHPD_CONF"] = str(config_file)
 
     yield temp_home
 
     CliRunner().invoke(cli, ["env", "halt"])
+    if prev is None:
+        os.environ.pop("SHPD_CONF", None)
+    else:
+        os.environ["SHPD_CONF"] = prev
 
 
 @pytest.fixture
 def shpd_gated_env(tmp_path: Path):
     """
     Set up a temporary shepherd home with the probe-gated env config
-    (web ungated + cache gated on the 'ready' probe).
+    (web ungated + api gated on the trivially-passing 'warmup' probe).
     Tears down running containers after the test (best-effort).
     """
     temp_home = tmp_path / "home"
@@ -61,11 +66,16 @@ def shpd_gated_env(tmp_path: Path):
     shpd_yaml = temp_home / ".shpd.yaml"
     shpd_yaml.write_text(read_fixture("gated", "shpd.yaml"))
 
+    prev = os.environ.get("SHPD_CONF")
     os.environ["SHPD_CONF"] = str(config_file)
 
     yield temp_home
 
     CliRunner().invoke(cli, ["env", "halt"])
+    if prev is None:
+        os.environ.pop("SHPD_CONF", None)
+    else:
+        os.environ["SHPD_CONF"] = prev
 
 
 @pytest.fixture
@@ -86,11 +96,16 @@ def shpd_redis_gated_env(tmp_path: Path):
     shpd_yaml = temp_home / ".shpd.yaml"
     shpd_yaml.write_text(read_fixture("gated_redis", "shpd.yaml"))
 
+    prev = os.environ.get("SHPD_CONF")
     os.environ["SHPD_CONF"] = str(config_file)
 
     yield temp_home
 
     CliRunner().invoke(cli, ["env", "halt"])
+    if prev is None:
+        os.environ.pop("SHPD_CONF", None)
+    else:
+        os.environ["SHPD_CONF"] = prev
 
 
 @pytest.fixture
