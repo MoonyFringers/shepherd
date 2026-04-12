@@ -13,6 +13,7 @@ helpers, consistent with the ``config.py`` dataclass style.
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,14 +46,47 @@ class SnapshotManifest:
     @staticmethod
     def build_id(created_at: str, manifest_bytes: bytes) -> str:
         """Return ``{created_at}-{first-6-chars-sha256(manifest_bytes)}``."""
-        raise NotImplementedError  # TODO: Issue 5
+        suffix = hashlib.sha256(manifest_bytes).hexdigest()[:6]
+        return f"{created_at}-{suffix}"
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> SnapshotManifest:
-        raise NotImplementedError  # TODO: Issue 5
+        return cls(
+            snapshot_id=d["snapshot_id"],
+            environment=d["environment"],
+            shepherd_version=d["shepherd_version"],
+            created_at=d["created_at"],
+            chunks=d["chunks"],
+            chunk_count=d["chunk_count"],
+            total_size_bytes=d["total_size_bytes"],
+            stored_size_bytes=d["stored_size_bytes"],
+            compression=d.get("compression", "zstd"),
+            chunk_algo=d.get("chunk_algo", "fastcdc"),
+            avg_chunk_size_kb=d.get("avg_chunk_size_kb", 2048),
+            labels=d.get("labels", []),
+            db_included=d.get("db_included", False),
+            db_engine=d.get("db_engine"),
+            db_version=d.get("db_version"),
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        raise NotImplementedError  # TODO: Issue 5
+        return {
+            "snapshot_id": self.snapshot_id,
+            "environment": self.environment,
+            "shepherd_version": self.shepherd_version,
+            "created_at": self.created_at,
+            "chunks": self.chunks,
+            "chunk_count": self.chunk_count,
+            "total_size_bytes": self.total_size_bytes,
+            "stored_size_bytes": self.stored_size_bytes,
+            "compression": self.compression,
+            "chunk_algo": self.chunk_algo,
+            "avg_chunk_size_kb": self.avg_chunk_size_kb,
+            "labels": self.labels,
+            "db_included": self.db_included,
+            "db_engine": self.db_engine,
+            "db_version": self.db_version,
+        }
 
 
 @dataclass
@@ -64,10 +98,16 @@ class LatestPointer:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> LatestPointer:
-        raise NotImplementedError  # TODO: Issue 5
+        return cls(
+            snapshot_id=d["snapshot_id"],
+            updated_at=d["updated_at"],
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        raise NotImplementedError  # TODO: Issue 5
+        return {
+            "snapshot_id": self.snapshot_id,
+            "updated_at": self.updated_at,
+        }
 
 
 @dataclass
@@ -83,10 +123,24 @@ class IndexCatalogueEntry:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> IndexCatalogueEntry:
-        raise NotImplementedError  # TODO: Issue 5
+        return cls(
+            latest_snapshot=d["latest_snapshot"],
+            snapshot_count=d["snapshot_count"],
+            last_backup=d["last_backup"],
+            labels=d.get("labels", []),
+            total_size_bytes=d["total_size_bytes"],
+            stored_size_bytes=d["stored_size_bytes"],
+        )
 
     def to_dict(self) -> dict[str, Any]:
-        raise NotImplementedError  # TODO: Issue 5
+        return {
+            "latest_snapshot": self.latest_snapshot,
+            "snapshot_count": self.snapshot_count,
+            "last_backup": self.last_backup,
+            "labels": self.labels,
+            "total_size_bytes": self.total_size_bytes,
+            "stored_size_bytes": self.stored_size_bytes,
+        }
 
 
 @dataclass
@@ -104,7 +158,17 @@ class IndexCatalogue:
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> IndexCatalogue:
-        raise NotImplementedError  # TODO: Issue 5
+        envs = {
+            name: IndexCatalogueEntry.from_dict(entry)
+            for name, entry in d.get("environments", {}).items()
+        }
+        return cls(updated_at=d["updated_at"], environments=envs)
 
     def to_dict(self) -> dict[str, Any]:
-        raise NotImplementedError  # TODO: Issue 5
+        return {
+            "updated_at": self.updated_at,
+            "environments": {
+                name: entry.to_dict()
+                for name, entry in self.environments.items()
+            },
+        }
