@@ -39,9 +39,6 @@ class SnapshotManifest:
     chunk_algo: str = "fastcdc"
     avg_chunk_size_kb: int = 2048
     labels: list[str] = field(default_factory=lambda: [])
-    db_included: bool = False
-    db_engine: str | None = None
-    db_version: str | None = None
 
     @staticmethod
     def build_id(created_at: str, manifest_bytes: bytes) -> str:
@@ -64,9 +61,6 @@ class SnapshotManifest:
             chunk_algo=d.get("chunk_algo", "fastcdc"),
             avg_chunk_size_kb=d.get("avg_chunk_size_kb", 2048),
             labels=d.get("labels", []),
-            db_included=d.get("db_included", False),
-            db_engine=d.get("db_engine"),
-            db_version=d.get("db_version"),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -83,9 +77,6 @@ class SnapshotManifest:
             "chunk_algo": self.chunk_algo,
             "avg_chunk_size_kb": self.avg_chunk_size_kb,
             "labels": self.labels,
-            "db_included": self.db_included,
-            "db_engine": self.db_engine,
-            "db_version": self.db_version,
         }
 
 

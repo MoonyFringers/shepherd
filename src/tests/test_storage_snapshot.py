@@ -120,6 +120,3 @@ def test_from_dict_tolerates_missing_optional_fields() -> None:
     assert m.chunk_algo == "fastcdc"
     assert m.avg_chunk_size_kb == 2048
     assert m.labels == []
-    assert m.db_included is False
-    assert m.db_engine is None
-    assert m.db_version is None
