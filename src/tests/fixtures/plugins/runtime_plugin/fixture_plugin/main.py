@@ -13,10 +13,34 @@ from plugin import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginEnvFactorySpec,
+    PluginRemoteBackendSpec,
     PluginSvcFactorySpec,
     ShepherdPlugin,
 )
+from remote import RemoteBackend
 from service import Service, ServiceFactory
+
+
+class FakeRemoteBackend(RemoteBackend):
+    """Minimal no-op backend for plugin registry tests."""
+
+    def exists(self, path: str) -> bool:
+        return False
+
+    def upload(self, path: str, data: bytes) -> None:
+        pass
+
+    def download(self, path: str) -> bytes:
+        return b""
+
+    def list_prefix(self, prefix: str) -> list[str]:
+        return []
+
+    def delete(self, path: str) -> None:
+        pass
+
+    def close(self) -> None:
+        pass
 
 
 class FixturePluginServiceFactory(ServiceFactory):
@@ -108,5 +132,13 @@ class RuntimeFixturePlugin(ShepherdPlugin):
             PluginSvcFactorySpec(
                 id="api-factory",
                 provider=FixturePluginServiceFactory,
+            )
+        ]
+
+    def get_remote_backends(self):
+        return [
+            PluginRemoteBackendSpec(
+                type_id="fake-store",
+                provider=FakeRemoteBackend,
             )
         ]

@@ -12,6 +12,7 @@ capabilities:
   templates: true
   env_factories: true
   svc_factories: true
+  remote_backends: true
 default_config:
   region: eu-west-1
 env_templates:

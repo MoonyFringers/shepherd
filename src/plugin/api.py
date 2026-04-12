@@ -23,6 +23,7 @@ import click
 from config import ConfigMng
 from environment import EnvironmentFactory
 from plugin.context import PluginContext
+from remote import RemoteBackend
 from service import ServiceFactory
 
 
@@ -82,6 +83,15 @@ Pass the **class** of your ``EnvironmentFactory`` subclass — the runtime
 calls it with ``(configMng, svc_factory, cli_flags)`` to produce the
 instance.  A pre-built instance or a builder callable with the same
 signature are also accepted.
+"""
+
+RemoteBackendProvider: TypeAlias = RemoteBackend | Callable[[], RemoteBackend]
+"""
+Accepted value for :attr:`PluginRemoteBackendSpec.provider`.
+
+Pass the **class** of your ``RemoteBackend`` subclass — the runtime calls
+it with no arguments to produce the instance.  A pre-built instance is
+also accepted.
 """
 
 
@@ -145,6 +155,24 @@ class PluginSvcFactorySpec:
     provider: SvcFactoryProvider
 
 
+@dataclass(frozen=True)
+class PluginRemoteBackendSpec:
+    """One remote storage backend transport contributed by a plugin.
+
+    ``type_id`` is the value placed in ``RemoteCfg.type`` to select this
+    transport (e.g. ``"s3"`` or ``"azure-blob"``).  It must not collide
+    with the core built-ins ``"ftp"`` and ``"sftp"``.
+
+    ``provider`` must satisfy :data:`RemoteBackendProvider` — either a
+    pre-built ``RemoteBackend`` instance or the **class** (zero-argument
+    factory callable) of your ``RemoteBackend`` subclass.  The runtime
+    calls it with no arguments to produce the instance on demand.
+    """
+
+    type_id: str
+    provider: RemoteBackendProvider
+
+
 class ShepherdPlugin(ABC):
     """
     Root runtime interface implemented by external plugins.
@@ -182,4 +210,8 @@ class ShepherdPlugin(ABC):
 
     def get_service_factories(self) -> Sequence[PluginSvcFactorySpec]:
         """Return service factories owned by the plugin."""
+        return ()
+
+    def get_remote_backends(self) -> Sequence[PluginRemoteBackendSpec]:
+        """Return remote storage backend transport contributions."""
         return ()
