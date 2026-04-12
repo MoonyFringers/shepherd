@@ -688,6 +688,7 @@ class EnvironmentCfg(Resolvable):
     networks: Optional[list[NetworkCfg]]
     volumes: Optional[list[VolumeCfg]]
     ready: Optional[ReadyCfg] = None
+    tracking_remote: Optional[str] = None
     status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
@@ -856,6 +857,51 @@ class PluginDescriptorCfg(Resolvable):
 
 
 @dataclass
+class RemoteChunkCfg(Resolvable):
+    """Tunable FastCDC chunk size parameters for a remote."""
+
+    min_size_kb: int = 512
+    avg_size_kb: int = 2048
+    max_size_kb: int = 8192
+
+
+@dataclass
+class RemoteLocalCacheCfg(Resolvable):
+    """Optional on-disk LRU cache for downloaded chunk bytes."""
+
+    path: str = ""
+    max_size_gb: int = 20
+
+
+@dataclass
+class RemoteCfg(Resolvable):
+    """Represents one registered remote storage backend.
+
+    ``type`` is the discriminator: ``"ftp"`` and ``"sftp"`` are built-in;
+    any other value is resolved against the plugin-registered backend
+    registry.  FTP and SFTP share the same connection field names since
+    ``type`` already distinguishes them.  Plugin backends can pass
+    transport-specific parameters via ``properties``.
+    """
+
+    name: str
+    type: str
+    host: Optional[str] = None
+    port: Optional[int] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    root_path: Optional[str] = None
+    identity_file: Optional[str] = None
+    default: str = field(default="false", metadata={"boolify": True})
+    chunk: RemoteChunkCfg = field(default_factory=RemoteChunkCfg)
+    local_cache: Optional[RemoteLocalCacheCfg] = None
+    properties: Optional[dict[str, Any]] = None
+
+    def is_default(self) -> bool:
+        return str_to_bool(self.default)
+
+
+@dataclass
 class Config(Resolvable):
     """
     Represents the shepherd configuration.
@@ -869,6 +915,7 @@ class Config(Resolvable):
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     env_template_fragments: Optional[list[EnvTemplateFragmentCfg]] = None
     plugins: Optional[list[PluginCfg]] = None
+    remotes: Optional[list[RemoteCfg]] = None
     envs: list[EnvironmentCfg] = field(default_factory=list[EnvironmentCfg])
 
 
@@ -1130,6 +1177,51 @@ def _parse_plugin(item: Any) -> PluginCfg:
     )
 
 
+def _parse_remote_chunk_cfg(item: Any) -> RemoteChunkCfg:
+    return RemoteChunkCfg(
+        min_size_kb=item.get("min_size_kb", 512),
+        avg_size_kb=item.get("avg_size_kb", 2048),
+        max_size_kb=item.get("max_size_kb", 8192),
+    )
+
+
+def _parse_remote_local_cache_cfg(item: Any) -> RemoteLocalCacheCfg:
+    return RemoteLocalCacheCfg(
+        path=item.get("path", ""),
+        max_size_gb=item.get("max_size_gb", 20),
+    )
+
+
+def _parse_remote(item: Any) -> RemoteCfg:
+    default_value = item.get("default", False)
+    return RemoteCfg(
+        name=item["name"],
+        type=item["type"],
+        host=item.get("host"),
+        port=item.get("port"),
+        user=item.get("user"),
+        password=item.get("password"),
+        root_path=item.get("root_path"),
+        identity_file=item.get("identity_file"),
+        default=(
+            bool_to_str(default_value)
+            if isinstance(default_value, bool)
+            else default_value
+        ),
+        chunk=(
+            _parse_remote_chunk_cfg(item["chunk"])
+            if item.get("chunk")
+            else RemoteChunkCfg()
+        ),
+        local_cache=(
+            _parse_remote_local_cache_cfg(item["local_cache"])
+            if item.get("local_cache")
+            else None
+        ),
+        properties=item.get("properties"),
+    )
+
+
 def _parse_environment(item: Any) -> EnvironmentCfg:
     services_data = cast(list[dict[str, Any]], item.get("services") or [])
     probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
@@ -1144,6 +1236,7 @@ def _parse_environment(item: Any) -> EnvironmentCfg:
         ready=_parse_ready(item["ready"]) if item.get("ready") else None,
         networks=[_parse_network(network) for network in networks_data],
         volumes=[_parse_volume(volume) for volume in volumes_data],
+        tracking_remote=item.get("tracking_remote"),
         status=_parse_status(item["status"]),
     )
 
@@ -1292,6 +1385,11 @@ def parse_config(yaml_str: str) -> Config:
         plugins=(
             [_parse_plugin(plugin) for plugin in data.get("plugins", [])]
             if data.get("plugins") is not None
+            else None
+        ),
+        remotes=(
+            [_parse_remote(r) for r in data.get("remotes", [])]
+            if data.get("remotes") is not None
             else None
         ),
         envs=[_parse_environment(env) for env in data["envs"]],
@@ -1713,6 +1811,38 @@ class ConfigMng:
                 return plugin
         return None
 
+    def get_remotes(self) -> list[RemoteCfg]:
+        """Return all configured remotes."""
+        return list(self.config.remotes or [])
+
+    def get_remote(self, name: str) -> Optional[RemoteCfg]:
+        """Return a configured remote by name."""
+        return next((r for r in self.get_remotes() if r.name == name), None)
+
+    def get_default_remote(self) -> Optional[RemoteCfg]:
+        """Return the remote marked as default, if any."""
+        return next((r for r in self.get_remotes() if r.is_default()), None)
+
+    def add_remote(self, remote: RemoteCfg) -> None:
+        """Append a new remote entry and persist the config.
+
+        :raises ValueError: If a remote with the same name already exists.
+        """
+        if any(r.name == remote.name for r in self.get_remotes()):
+            raise ValueError(f"Remote '{remote.name}' already exists.")
+        if self.config.remotes is None:
+            self.config.remotes = []
+        self.config.remotes.append(remote)
+        self.store()
+
+    def remove_remote(self, name: str) -> None:
+        """Remove a remote entry by name and persist the config."""
+        if self.config.remotes:
+            self.config.remotes = [
+                r for r in self.config.remotes if r.name != name
+            ]
+        self.store()
+
     def get_plugin_dir(self, plugin_id: str) -> str:
         """Return the managed install directory for one plugin id."""
         return os.path.join(self.constants.SHPD_PLUGINS_DIR, plugin_id)
@@ -2010,6 +2140,7 @@ class ConfigMng:
             ready=deepcopy(other.ready),
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
+            tracking_remote=other.tracking_remote,
         )
 
     def svc_tmpl_cfg_from_other(self, other: ServiceTemplateCfg):

@@ -162,6 +162,7 @@ class Constants:
                 "images_path": "${staging_area_images_path}",
             },
             "plugins": [],
+            "remotes": [],
             "envs": [],
         }
 

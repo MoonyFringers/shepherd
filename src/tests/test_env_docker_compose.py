@@ -230,6 +230,7 @@ status:
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
     expected_obj = yaml.safe_load(expected)
     expected_obj.setdefault("ready", None)
+    expected_obj.setdefault("tracking_remote", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
@@ -380,6 +381,7 @@ status:
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
     expected_obj = yaml.safe_load(expected)
     expected_obj.setdefault("ready", None)
+    expected_obj.setdefault("tracking_remote", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 

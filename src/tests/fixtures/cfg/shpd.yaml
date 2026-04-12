@@ -11,6 +11,34 @@ plugins:
     config:
       region: eu-west-1
       enabled_feature: true
+remotes:
+  - name: prod-backup
+    type: ftp
+    host: storage.example.com
+    port: 21
+    user: backup
+    password: "${BACKUP_PWD}"
+    root_path: /shepherd
+    default: true
+    chunk:
+      min_size_kb: 512
+      avg_size_kb: 2048
+      max_size_kb: 8192
+    local_cache:
+      path: "${shpd_path}/remote_cache"
+      max_size_gb: 10
+  - name: dev-backup
+    type: sftp
+    host: dev.example.com
+    port: 22
+    user: deploy
+    identity_file: ~/.ssh/id_ed25519
+    root_path: /backups/shepherd
+    default: false
+    chunk:
+      min_size_kb: 512
+      avg_size_kb: 2048
+      max_size_kb: 8192
 env_templates:
   - tag: default
     factory: docker-compose
@@ -246,6 +274,7 @@ envs:
           device: /srv/data
         labels:
           env: production
+    tracking_remote: prod-backup
     status:
       active: true
       rendered_config: null

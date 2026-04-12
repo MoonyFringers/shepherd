@@ -20,6 +20,8 @@ from config import (
     ConfigMng,
     EnvTemplateFragmentCfg,
     FragmentRefCfg,
+    RemoteCfg,
+    RemoteChunkCfg,
     ServiceTemplateRefCfg,
     parse_config,
     parse_plugin_descriptor,
@@ -340,11 +342,22 @@ def test_store_config_with_real_files():
             y1: str = yaml.dump(yaml.safe_load(content), sort_keys=True)
             expected = yaml.safe_load(config_yaml)
             expected.setdefault("env_template_fragments", None)
+            expected.setdefault("remotes", None)
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
                 item.setdefault("fragments", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
+                item.setdefault("tracking_remote", None)
+            for remote in expected.get("remotes") or []:
+                remote.setdefault("host", None)
+                remote.setdefault("port", None)
+                remote.setdefault("user", None)
+                remote.setdefault("password", None)
+                remote.setdefault("root_path", None)
+                remote.setdefault("identity_file", None)
+                remote.setdefault("local_cache", None)
+                remote.setdefault("properties", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
@@ -667,11 +680,13 @@ def test_store_config_with_refs_with_real_files():
             expected = yaml.safe_load(config_yaml_with_refs)
             expected.setdefault("env_template_fragments", None)
             expected.setdefault("plugins", None)
+            expected.setdefault("remotes", None)
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
                 item.setdefault("fragments", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
+                item.setdefault("tracking_remote", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
@@ -1189,3 +1204,153 @@ def test_env_cfg_from_tag_fails_on_duplicate_service_tag(mocker: MockerFixture):
 
     with pytest.raises(SystemExit):
         cMng.env_cfg_from_tag(dup_tmpl, "test-env")
+
+
+# ---------------------------------------------------------------------------
+# Remote storage config tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_load_config_with_remotes(mocker: MockerFixture):
+    """Fixture remotes block parses correctly; fields and defaults round-trip."""
+    cMng = _load_config_manager(mocker)
+    config = cMng.config
+
+    remotes = config.remotes
+    assert remotes is not None
+    assert len(remotes) == 2
+
+    prod = remotes[0]
+    assert prod.name == "prod-backup"
+    assert prod.type == "ftp"
+    assert prod.host == "storage.example.com"
+    assert prod.port == 21
+    assert prod.user == "backup"
+    assert prod.password == "${BACKUP_PWD}"
+    assert prod.root_path == "/shepherd"
+    assert prod.is_default() is True
+    assert prod.chunk.min_size_kb == 512
+    assert prod.chunk.avg_size_kb == 2048
+    assert prod.chunk.max_size_kb == 8192
+    assert prod.local_cache is not None
+    assert prod.local_cache.max_size_gb == 10
+
+    dev = remotes[1]
+    assert dev.name == "dev-backup"
+    assert dev.type == "sftp"
+    assert dev.identity_file == "~/.ssh/id_ed25519"
+    assert dev.is_default() is False
+
+
+@pytest.mark.cfg
+def test_load_config_remote_chunk_defaults():
+    """A remote with no chunk: block gets the default chunk parameters."""
+    config_yaml = """
+templates_path: /tmp
+envs_path: /tmp
+volumes_path: /tmp
+staging_area:
+  volumes_path: /tmp
+  images_path: /tmp
+remotes:
+  - name: minimal
+    type: ftp
+    host: ftp.example.com
+envs: []
+"""
+    config = parse_config(config_yaml)
+
+    assert config.remotes is not None
+    remote = config.remotes[0]
+    assert remote.chunk == RemoteChunkCfg()
+    assert remote.chunk.min_size_kb == 512
+    assert remote.chunk.avg_size_kb == 2048
+    assert remote.chunk.max_size_kb == 8192
+    assert remote.local_cache is None
+    assert remote.is_default() is False
+
+
+@pytest.mark.cfg
+def test_store_and_reload_remotes():
+    """Remotes survive a store_config → re-parse round-trip."""
+    try:
+        with (
+            open(".shpd.yaml", "w") as config_file,
+            open(".shpd.conf", "w") as values_file,
+        ):
+            values = read_fixture("cfg", "values.conf")
+            config_yaml = read_fixture("cfg", "shpd.yaml")
+            config_file.write(config_yaml)
+            values_file.write(values.replace("${test_path}", "."))
+
+        cMng = ConfigMng(values_file.name)
+        config: Config = cMng.load_config()
+        cMng.store_config(config)
+
+        with open(".shpd.yaml", "r") as f:
+            stored_yaml = f.read()
+
+        reloaded = parse_config(stored_yaml)
+        assert reloaded.remotes is not None
+        assert len(reloaded.remotes) == 2
+
+        prod = reloaded.remotes[0]
+        assert prod.name == "prod-backup"
+        assert prod.is_default() is True
+
+        dev = reloaded.remotes[1]
+        assert dev.name == "dev-backup"
+        assert dev.is_default() is False
+
+    finally:
+        for path in (".shpd.yaml", ".shpd.conf"):
+            if os.path.exists(path):
+                os.remove(path)
+
+
+@pytest.mark.cfg
+def test_tracking_remote_parses(mocker: MockerFixture):
+    """tracking_remote on an env is parsed from the fixture."""
+    cMng = _load_config_manager(mocker)
+    env = cMng.config.envs[0]
+    assert env.tracking_remote == "prod-backup"
+
+
+@pytest.mark.cfg
+def test_tracking_remote_round_trip():
+    """tracking_remote survives a store_config → re-parse round-trip."""
+    try:
+        with (
+            open(".shpd.yaml", "w") as config_file,
+            open(".shpd.conf", "w") as values_file,
+        ):
+            values = read_fixture("cfg", "values.conf")
+            config_yaml = read_fixture("cfg", "shpd.yaml")
+            config_file.write(config_yaml)
+            values_file.write(values.replace("${test_path}", "."))
+
+        cMng = ConfigMng(values_file.name)
+        config: Config = cMng.load_config()
+        cMng.store_config(config)
+
+        with open(".shpd.yaml", "r") as f:
+            stored_yaml = f.read()
+
+        reloaded = parse_config(stored_yaml)
+        assert reloaded.envs[0].tracking_remote == "prod-backup"
+
+    finally:
+        for path in (".shpd.yaml", ".shpd.conf"):
+            if os.path.exists(path):
+                os.remove(path)
+
+
+@pytest.mark.cfg
+def test_add_remote_rejects_duplicate_name(mocker: MockerFixture):
+    """add_remote raises ValueError when a remote with the same name exists."""
+    cMng = _load_config_manager(mocker)
+
+    duplicate = RemoteCfg(name="prod-backup", type="ftp")
+    with pytest.raises(ValueError, match="prod-backup"):
+        cMng.add_remote(duplicate)
