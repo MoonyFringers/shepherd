@@ -37,6 +37,7 @@ from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginEnvFactorySpec,
+    PluginRemoteBackendSpec,
     PluginSvcFactorySpec,
     ShepherdPlugin,
 )
@@ -45,6 +46,7 @@ from plugin.context import (
     PluginEnvironmentView,
     PluginServiceView,
 )
+from remote import RemoteBackend
 from service import ServiceFactory, ServiceMng
 from util import Constants, Util
 
@@ -83,6 +85,11 @@ def _env_factory_registry() -> dict[str, "PluginEnvFactorySpec"]:
 
 def _svc_factory_registry() -> dict[str, "PluginSvcFactorySpec"]:
     """Create a typed default for canonical service factory registrations."""
+    return {}
+
+
+def _remote_backend_registry() -> dict[str, "PluginRemoteBackendSpec"]:
+    """Create a typed default for remote backend registrations."""
     return {}
 
 
@@ -134,6 +141,9 @@ class PluginRegistry:
     )
     service_factories: dict[str, PluginSvcFactorySpec] = field(
         default_factory=_svc_factory_registry
+    )
+    remote_backends: dict[str, PluginRemoteBackendSpec] = field(
+        default_factory=_remote_backend_registry
     )
 
 
@@ -535,6 +545,9 @@ class PluginRuntimeMng:
         self._register_svc_factories(
             plugin_id, loaded.instance.get_service_factories()
         )
+        self._register_remote_backends(
+            plugin_id, loaded.instance.get_remote_backends()
+        )
 
     def _register_commands(
         self,
@@ -906,6 +919,51 @@ class PluginRuntimeMng:
         # (ServiceFactory | Callable[...]) via isinstance alone.
         """Return whether the svc factory provider can be materialized."""
         return isinstance(provider, ServiceFactory) or callable(provider)
+
+    _CORE_BACKEND_TYPE_IDS: frozenset[str] = frozenset({"ftp", "sftp"})
+
+    def _register_remote_backends(
+        self,
+        plugin_id: str,
+        backends: Sequence[PluginRemoteBackendSpec],
+    ) -> None:
+        """Register plugin-contributed remote backend transports."""
+        for backend in backends:
+            if backend.type_id in self._CORE_BACKEND_TYPE_IDS:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' remote backend type_id "
+                    f"'{backend.type_id}' collides with a core built-in."
+                )
+            if backend.type_id in self.registry.remote_backends:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' declares duplicate remote "
+                    f"backend type_id '{backend.type_id}'."
+                )
+            if not self._is_remote_backend_provider(backend.provider):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' remote backend "
+                    f"'{backend.type_id}' must provide a RemoteBackend "
+                    "instance or a zero-argument factory callable."
+                )
+            self.registry.remote_backends[backend.type_id] = backend
+
+    def _is_remote_backend_provider(self, provider: Any) -> bool:
+        """Return whether the remote backend provider can be materialized."""
+        return isinstance(provider, RemoteBackend) or callable(provider)
+
+    def build_remote_backend(self, type_id: str) -> RemoteBackend | None:
+        """Return a plugin-owned RemoteBackend for *type_id*, or None."""
+        spec = self.registry.remote_backends.get(type_id)
+        if spec is None:
+            return None
+        provider = spec.provider
+        if isinstance(provider, RemoteBackend):
+            return provider
+        if callable(provider):
+            return provider()
+        raise ValueError(
+            f"Plugin remote backend '{type_id}' provider is invalid."
+        )
 
     def get_environment_template(
         self, template_id: str

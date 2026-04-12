@@ -14,7 +14,9 @@ from .api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginEnvFactorySpec,
+    PluginRemoteBackendSpec,
     PluginSvcFactorySpec,
+    RemoteBackendProvider,
     ShepherdPlugin,
     SvcFactoryProvider,
 )
@@ -44,9 +46,11 @@ __all__ = [
     "PluginEnvironmentView",
     "PluginMng",
     "PluginRegistry",
+    "PluginRemoteBackendSpec",
     "PluginRuntimeMng",
     "PluginServiceView",
     "PluginSvcFactorySpec",
+    "RemoteBackendProvider",
     "ShepherdPlugin",
     "SvcFactoryProvider",
 ]

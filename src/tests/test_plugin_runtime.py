@@ -141,6 +141,7 @@ def test_shepherd_loads_enabled_plugin_runtime_registry(
     assert "runtime-plugin/api" in registry.service_templates
     assert "runtime-plugin/baseline-factory" in registry.env_factories
     assert "runtime-plugin/api-factory" in registry.service_factories
+    assert "fake-store" in registry.remote_backends
     assert callable(registry.completion_providers["observability"][0].provider)
     env_template = shepherd.configMng.get_environment_template(
         "runtime-plugin/baseline"
@@ -1001,3 +1002,94 @@ def test_plugins_loaded_in_dependency_order(
     assert "plugin-b" in loaded_order
     # plugin-a must appear before plugin-b in the insertion-ordered dict
     assert loaded_order.index("plugin-a") < loaded_order.index("plugin-b")
+
+
+# ---------------------------------------------------------------------------
+# RemoteBackend plugin registration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_plugin_remote_backend_lands_in_registry(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """PluginRemoteBackendSpec is registered and build_remote_backend works."""
+    from remote import RemoteBackend
+
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path)
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    registry = shepherd.pluginRuntimeMng.registry
+    assert "fake-store" in registry.remote_backends
+
+    backend = shepherd.pluginRuntimeMng.build_remote_backend("fake-store")
+    assert isinstance(backend, RemoteBackend)
+
+    assert shepherd.pluginRuntimeMng.build_remote_backend("unknown") is None
+
+
+@pytest.mark.shpd
+def test_plugin_remote_backend_rejects_core_type_id(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """A plugin using a core type_id ('ftp' or 'sftp') is rejected."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(
+        shpd_path,
+        main_content=(
+            "from remote import RemoteBackend\n"
+            "from plugin import PluginRemoteBackendSpec, ShepherdPlugin\n\n"
+            "class FakeBackend(RemoteBackend):\n"
+            "    def exists(self, p): return False\n"
+            "    def upload(self, p, d): pass\n"
+            "    def download(self, p): return b''\n"
+            "    def list_prefix(self, p): return []\n"
+            "    def delete(self, p): pass\n"
+            "    def close(self): pass\n\n"
+            "class RuntimeFixturePlugin(ShepherdPlugin):\n"
+            "    def get_remote_backends(self):\n"
+            "        return [PluginRemoteBackendSpec("
+            "type_id='ftp', provider=FakeBackend)]\n"
+        ),
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_plugin_remote_backend_rejects_duplicate_type_id(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """Two plugins registering the same type_id cause a hard failure."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(shpd_path, plugin_id="runtime-plugin")
+    _install_fixture_plugin(shpd_path, plugin_id="collision-plugin")
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "runtime-plugin", "enabled": True, "version": "1.0.0"},
+            {"id": "collision-plugin", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
