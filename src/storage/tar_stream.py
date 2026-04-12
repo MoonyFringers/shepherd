@@ -13,7 +13,53 @@ from __future__ import annotations
 import os
 import tarfile
 import threading
-from typing import IO
+from typing import IO, cast
+
+
+class _CheckedStream:
+    """Readable stream that re-raises background-thread errors on close.
+
+    Wraps the read end of the producer pipe.  When the caller closes the
+    stream, it joins the background thread and re-raises any exception the
+    producer stored — giving a clear root cause instead of a silent EOF.
+    ``BrokenPipeError`` (caller closed early) is never stored and therefore
+    never re-raised.
+    """
+
+    def __init__(
+        self,
+        r: IO[bytes],
+        thread: threading.Thread,
+        exc_holder: list[BaseException],
+    ) -> None:
+        self._r = r
+        self._thread = thread
+        self._exc_holder = exc_holder
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def read(self, n: int = -1) -> bytes:
+        return self._r.read(n)
+
+    def flush(self) -> None:
+        pass
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._r.close()
+            self._thread.join()
+            if self._exc_holder:
+                raise self._exc_holder[0]
+
+    def __enter__(self) -> _CheckedStream:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
 
 
 class TarStreamProducer:
@@ -52,10 +98,12 @@ class TarStreamProducer:
     def stream(self) -> IO[bytes]:
         """Return a readable, uncompressed tar byte stream.
 
-        The stream is produced on a daemon background thread.  The caller is
-        responsible for closing the returned file object when done.
+        The stream is produced on a daemon background thread.  Closing the
+        returned stream joins the thread; any exception raised by the producer
+        (other than ``BrokenPipeError``) is re-raised at that point.
         """
         r_fd, w_fd = os.pipe()
+        exc_holder: list[BaseException] = []
 
         def _produce() -> None:
             try:
@@ -68,10 +116,15 @@ class TarStreamProducer:
                             self._reinject(out_tar, tag, vol_stream)
             except BrokenPipeError:
                 pass  # caller closed the read end early
+            except BaseException as exc:
+                exc_holder.append(exc)
 
         t = threading.Thread(target=_produce, daemon=True)
         t.start()
-        return os.fdopen(r_fd, "rb")
+        return cast(
+            IO[bytes],
+            _CheckedStream(os.fdopen(r_fd, "rb"), t, exc_holder),
+        )
 
     def _reinject(
         self,
@@ -88,3 +141,4 @@ class TarStreamProducer:
                 )
                 fobj = src_tar.extractfile(member) if member.isreg() else None
                 out_tar.addfile(member, fobj)
+        vol_stream.close()

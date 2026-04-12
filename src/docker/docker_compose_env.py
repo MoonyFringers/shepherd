@@ -27,6 +27,43 @@ from util.util import Util
 from .docker_compose_util import render_container, run_compose
 
 
+class _ProcStream:
+    """Wraps subprocess stdout; calls ``proc.wait()`` on close.
+
+    Using ``proc.stdout`` directly would leave the child process as a zombie
+    until it is garbage-collected.  This wrapper ensures the process is reaped
+    as soon as the caller is done reading.
+    """
+
+    def __init__(self, proc: subprocess.Popen[bytes]) -> None:
+        assert proc.stdout is not None
+        self._proc = proc
+        self._inner: IO[bytes] = proc.stdout
+        self._closed = False
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
+
+    def read(self, n: int = -1) -> bytes:
+        return self._inner.read(n)
+
+    def flush(self) -> None:
+        self._inner.flush()
+
+    def close(self) -> None:
+        if not self._closed:
+            self._closed = True
+            self._inner.close()
+            self._proc.wait()
+
+    def __enter__(self) -> _ProcStream:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        self.close()
+
+
 class DockerComposeEnv(Environment):
     _command_category_width = 16
 
@@ -102,8 +139,7 @@ class DockerComposeEnv(Environment):
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
         )
-        assert proc.stdout is not None
-        return proc.stdout
+        return cast(IO[bytes], _ProcStream(proc))
 
     def _docker_volume_tar_stream(self, vol_name: str) -> IO[bytes]:
         proc = subprocess.Popen(
@@ -122,8 +158,7 @@ class DockerComposeEnv(Environment):
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
-        assert proc.stdout is not None
-        return proc.stdout
+        return cast(IO[bytes], _ProcStream(proc))
 
     @override
     def clone_impl(self, dst_env_tag: str) -> DockerComposeEnv:
