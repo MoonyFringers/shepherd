@@ -4,3 +4,6 @@ distro
 pyyaml
 glom
 packaging
+fastcdc
+zstandard
+paramiko
