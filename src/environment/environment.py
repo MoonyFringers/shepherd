@@ -18,7 +18,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import IO, Any, Callable, Optional
 
 import yaml
 
@@ -342,6 +342,16 @@ class Environment(ABC):
     def get_path_for_tag(self, env_tag: str) -> str:
         """Return the directory for the environment with a given tag."""
         return os.path.join(self.configMng.config.envs_path, env_tag)
+
+    def get_volume_tar_streams(self) -> list[tuple[str, IO[bytes]]]:
+        """Return one ``(volume_tag, tar_stream)`` pair per environment volume.
+
+        Each stream is uncompressed, rooted at ``.`` (entries like
+        ``./subdir/file``).  The tag binds the stream to the volume for
+        identity-preserving restore.  The default returns an empty list;
+        backends override this.
+        """
+        return []
 
     def ensure_resources(self):
         """Ensure the environment resources are available."""

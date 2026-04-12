@@ -1783,3 +1783,143 @@ def test_check_probe_timeout(
 
     assert result.exit_code != 0
     mock_subproc.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# get_volume_tar_streams
+# ---------------------------------------------------------------------------
+
+
+def _make_env_cfg_with_volumes(volumes: list[object]) -> object:
+    return SimpleNamespace(
+        tag="test-env",
+        services=[],
+        volumes=volumes,
+        status=SimpleNamespace(rendered_config=None),
+    )
+
+
+def _bind_vol(tag: str, device: str) -> object:
+    return SimpleNamespace(
+        tag=tag,
+        driver="local",
+        driver_opts={"type": "none", "o": "bind", "device": device},
+        name=None,
+        external="false",
+        is_external=lambda: False,
+    )
+
+
+def _named_vol(tag: str) -> object:
+    return SimpleNamespace(
+        tag=tag,
+        driver=None,
+        driver_opts=None,
+        name=None,
+        external="false",
+        is_external=lambda: False,
+    )
+
+
+def _external_vol(tag: str, name: str) -> object:
+    return SimpleNamespace(
+        tag=tag,
+        driver=None,
+        driver_opts=None,
+        name=name,
+        external="true",
+        is_external=lambda: True,
+    )
+
+
+@pytest.mark.env
+def test_volume_streams_empty(mocker: MockerFixture) -> None:
+    """No volumes → empty list returned."""
+    env_cfg = _make_env_cfg_with_volumes([])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    assert env.get_volume_tar_streams() == []
+
+
+@pytest.mark.env
+def test_volume_streams_bind_mount_readable(mocker: MockerFixture) -> None:
+    """Bind-mount whose path is readable → ``tar -cC`` (no sudo)."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    mocker.patch.object(env, "_is_readable", return_value=True)
+    mock_popen = mocker.patch(
+        "docker.docker_compose_env.subprocess.Popen",
+        return_value=mocker.Mock(stdout=mocker.Mock()),
+    )
+
+    streams = env.get_volume_tar_streams()
+
+    assert len(streams) == 1
+    tag, _ = streams[0]
+    assert tag == "db_data"
+    cmd = mock_popen.call_args[0][0]
+    assert cmd == ["tar", "-cC", "/data/db", "."]
+
+
+@pytest.mark.env
+def test_volume_streams_bind_mount_sudo(mocker: MockerFixture) -> None:
+    """Bind-mount whose path is not readable → ``sudo tar -cC``."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    mocker.patch.object(env, "_is_readable", return_value=False)
+    mock_popen = mocker.patch(
+        "docker.docker_compose_env.subprocess.Popen",
+        return_value=mocker.Mock(stdout=mocker.Mock()),
+    )
+
+    streams = env.get_volume_tar_streams()
+
+    assert len(streams) == 1
+    tag, _ = streams[0]
+    assert tag == "db_data"
+    cmd = mock_popen.call_args[0][0]
+    assert cmd == ["sudo", "tar", "-cC", "/data/db", "."]
+
+
+@pytest.mark.env
+def test_volume_streams_named_volume(mocker: MockerFixture) -> None:
+    """Named volume → ``docker run --rm -v <tag>:/mnt``."""
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    mock_popen = mocker.patch(
+        "docker.docker_compose_env.subprocess.Popen",
+        return_value=mocker.Mock(stdout=mocker.Mock()),
+    )
+
+    streams = env.get_volume_tar_streams()
+
+    assert len(streams) == 1
+    tag, _ = streams[0]
+    assert tag == "uploads"
+    cmd = mock_popen.call_args[0][0]
+    assert "docker" in cmd
+    assert "uploads:/mnt" in cmd
+
+
+@pytest.mark.env
+def test_volume_streams_external_volume(mocker: MockerFixture) -> None:
+    """External volume uses ``vol.name`` (not tag) for the docker run volume arg."""
+    env_cfg = _make_env_cfg_with_volumes(
+        [_external_vol("ext_vol", "prod_db_backup")]
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    mock_popen = mocker.patch(
+        "docker.docker_compose_env.subprocess.Popen",
+        return_value=mocker.Mock(stdout=mocker.Mock()),
+    )
+
+    streams = env.get_volume_tar_streams()
+
+    assert len(streams) == 1
+    tag, _ = streams[0]
+    assert tag == "ext_vol"
+    cmd = mock_popen.call_args[0][0]
+    assert "prod_db_backup:/mnt" in cmd

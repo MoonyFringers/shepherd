@@ -10,6 +10,9 @@ including host-mounted volumes (with sudo escalation when required)."""
 
 from __future__ import annotations
 
+import os
+import tarfile
+import threading
 from typing import IO
 
 
@@ -17,17 +20,71 @@ class TarStreamProducer:
     """Produces an uncompressed tar stream for a Shepherd environment.
 
     The stream covers:
-    - The environment's data directory (``env.get_path()``).
-    - All host-mounted volume paths declared in ``env_cfg.volumes``.
+    - The environment's data directory under the ``env/`` arcname prefix.
+    - Each volume supplied as a ``(volume_tag, stream)`` pair, re-injected
+      under ``volumes/<tag>/``.
 
-    When a volume path is not readable by the current process (e.g. DBMS data
-    written under a non-root UID), the tar subprocess is spawned under ``sudo``,
-    mirroring the existing ``_delete_dir_with_sudo`` pattern.
+    Volume streams carry the ``volume_tag`` so that the resulting archive is
+    self-describing: a restore pass can match each ``volumes/<tag>/`` subtree
+    back to the correct ``VolumeCfg`` regardless of order or future additions.
+    Callers are responsible for producing the per-volume streams (e.g. via
+    ``Environment.get_volume_tar_streams()``).
+
+    Parameters
+    ----------
+    env_path:
+        Absolute path to the environment directory.  This path must be
+        readable by the current process.
+    volume_streams:
+        Ordered list of ``(volume_tag, uncompressed_tar_stream)`` pairs.
+        Each stream must be in tar streaming format (``r|``-readable, entries
+        rooted at ``.``).
     """
 
-    def stream(self) -> IO[bytes]:
-        """Return a readable, uncompressed tar byte stream for the environment.
+    def __init__(
+        self,
+        env_path: str,
+        volume_streams: list[tuple[str, IO[bytes]]],
+    ) -> None:
+        self._env_path = env_path
+        self._volume_streams = volume_streams
 
-        The caller is responsible for closing the stream when done.
+    def stream(self) -> IO[bytes]:
+        """Return a readable, uncompressed tar byte stream.
+
+        The stream is produced on a daemon background thread.  The caller is
+        responsible for closing the returned file object when done.
         """
-        raise NotImplementedError  # TODO: Issue 4
+        r_fd, w_fd = os.pipe()
+
+        def _produce() -> None:
+            try:
+                with os.fdopen(w_fd, "wb") as out_file:
+                    with tarfile.open(mode="w|", fileobj=out_file) as out_tar:
+                        out_tar.add(
+                            self._env_path, arcname="env", recursive=True
+                        )
+                        for tag, vol_stream in self._volume_streams:
+                            self._reinject(out_tar, tag, vol_stream)
+            except BrokenPipeError:
+                pass  # caller closed the read end early
+
+        t = threading.Thread(target=_produce, daemon=True)
+        t.start()
+        return os.fdopen(r_fd, "rb")
+
+    def _reinject(
+        self,
+        out_tar: tarfile.TarFile,
+        tag: str,
+        vol_stream: IO[bytes],
+    ) -> None:
+        """Copy entries from *vol_stream* into *out_tar* prefixed by tag."""
+        with tarfile.open(mode="r|", fileobj=vol_stream) as src_tar:
+            for member in src_tar:
+                rel = member.name.lstrip("./")
+                member.name = (
+                    f"volumes/{tag}/{rel}" if rel else f"volumes/{tag}"
+                )
+                fobj = src_tar.extractfile(member) if member.isreg() else None
+                out_tar.addfile(member, fobj)

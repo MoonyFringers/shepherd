@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
+import subprocess
 import time
-from typing import Any, Optional, cast, override
+from typing import IO, Any, Optional, cast, override
 
 import yaml
 
@@ -57,6 +59,71 @@ class DockerComposeEnv(Environment):
                         Util.ensure_dir(
                             Util.translate_host_path(device_path), vol.tag
                         )
+
+    @override
+    def get_volume_tar_streams(self) -> list[tuple[str, IO[bytes]]]:
+        """Return one ``(volume_tag, tar_stream)`` pair per volume.
+
+        Bind-mounts are streamed directly from the host path (sudo when the
+        path is not readable by the current process).  Named and external
+        volumes are streamed via a temporary ``docker run`` container so no
+        knowledge of Docker's internal volume storage layout is required.
+        """
+        if not self.envCfg.volumes:
+            return []
+        result: list[tuple[str, IO[bytes]]] = []
+        for vol in self.envCfg.volumes:
+            if (
+                vol.driver == "local"
+                and vol.driver_opts
+                and vol.driver_opts.get("type") == "none"
+                and vol.driver_opts.get("o") == "bind"
+            ):
+                device = vol.driver_opts.get("device", "")
+                result.append((vol.tag, self._path_tar_stream(device)))
+            else:
+                vol_name = (
+                    vol.name if vol.is_external() and vol.name else vol.tag
+                )
+                result.append(
+                    (vol.tag, self._docker_volume_tar_stream(vol_name))
+                )
+        return result
+
+    def _is_readable(self, path: str) -> bool:
+        return os.access(path, os.R_OK)
+
+    def _path_tar_stream(self, path: str) -> IO[bytes]:
+        cmd = (
+            ["tar", "-cC", path, "."]
+            if self._is_readable(path)
+            else ["sudo", "tar", "-cC", path, "."]
+        )
+        proc = subprocess.Popen(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        assert proc.stdout is not None
+        return proc.stdout
+
+    def _docker_volume_tar_stream(self, vol_name: str) -> IO[bytes]:
+        proc = subprocess.Popen(
+            [
+                "docker",
+                "run",
+                "--rm",
+                "-v",
+                f"{vol_name}:/mnt",
+                "busybox:stable-glibc",
+                "tar",
+                "-cC",
+                "/mnt",
+                ".",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+        assert proc.stdout is not None
+        return proc.stdout
 
     @override
     def clone_impl(self, dst_env_tag: str) -> DockerComposeEnv:
