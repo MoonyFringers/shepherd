@@ -10,8 +10,12 @@ compresses each with Zstd, and hashes with SHA-256."""
 
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import IO, Iterator
+
+import fastcdc
+import zstandard
 
 
 @dataclass
@@ -52,14 +56,62 @@ class Chunker:
         avg_size: int = 2 * 1024 * 1024,
         max_size: int = 8 * 1024 * 1024,
     ) -> None:
-        raise NotImplementedError  # TODO: Issue 5
+        self._min_size = min_size
+        self._avg_size = avg_size
+        self._max_size = max_size
+        self._cctx = zstandard.ZstdCompressor(level=3)
 
     def chunk_stream(self, stream: IO[bytes]) -> Iterator[ChunkResult]:
         """Yield ChunkResult objects for every chunk in *stream*.
+
+        Buffers ``4 × max_size`` bytes at a time and holds the last FastCDC
+        cut of each window as a carry (it may end at the buffer boundary
+        rather than a genuine content-defined cut-point).  The carry is
+        prepended to the next read.  At EOF the remaining buffer is flushed
+        through FastCDC to produce the final chunk(s).
 
         Parameters
         ----------
         stream:
             An uncompressed, readable byte stream (e.g. a tar stream).
         """
-        raise NotImplementedError  # TODO: Issue 5
+        read_size = self._max_size * 4
+        buf = b""
+
+        while True:
+            block = stream.read(read_size)
+            if not block:
+                break
+            buf += block
+            cuts = list(
+                fastcdc.fastcdc(  # type: ignore[reportUnknownMemberType]
+                    buf,
+                    min_size=self._min_size,
+                    avg_size=self._avg_size,
+                    max_size=self._max_size,
+                    fat=True,
+                )
+            )
+            # Emit all cuts except the last, which may end at the buffer
+            # boundary rather than a genuine content-defined cut-point.
+            for cut in cuts[:-1]:
+                yield self._to_result(cut.data)
+            # Carry the last cut's data into the next iteration.
+            if cuts:
+                buf = buf[cuts[-1].offset :]
+
+        # EOF: flush whatever remains in the buffer.
+        if buf:
+            for cut in fastcdc.fastcdc(  # type: ignore[reportUnknownMemberType]
+                buf,
+                min_size=self._min_size,
+                avg_size=self._avg_size,
+                max_size=self._max_size,
+                fat=True,
+            ):
+                yield self._to_result(cut.data)
+
+    def _to_result(self, raw: bytes) -> ChunkResult:
+        compressed = self._cctx.compress(raw)
+        digest = hashlib.sha256(compressed).hexdigest()
+        return ChunkResult(hash=digest, data=compressed, raw_size=len(raw))
