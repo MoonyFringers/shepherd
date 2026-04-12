@@ -1093,3 +1093,193 @@ def test_plugin_remote_backend_rejects_duplicate_type_id(
         ShepherdMng()
 
     assert excinfo.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# Capability enforcement tests
+# ---------------------------------------------------------------------------
+
+
+def _patch_capabilities(plugin_dir: Path, caps: dict[str, bool] | None) -> None:
+    """Overwrite (or remove) the capabilities block in plugin.yaml."""
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    if caps is None:
+        descriptor.pop("capabilities", None)
+    else:
+        descriptor["capabilities"] = caps
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+
+def _single_plugin_inventory(shpd_yaml: Path) -> None:
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": {"region": "eu-west-1"},
+            }
+        ],
+    )
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_commands(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'commands' capability is rejected at startup."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["commands"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_completion(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'completion' capability is rejected at startup."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["completion"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_templates(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'templates' capability is rejected at startup."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["templates"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_env_factories(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'env_factories' capability is rejected."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["env_factories"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_svc_factories(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'svc_factories' capability is rejected."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["svc_factories"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_rejects_undeclared_remote_backends(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """Plugin with undeclared 'remote_backends' capability is rejected."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor["capabilities"]["remote_backends"] = False
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_capabilities_allows_declared_area_with_no_contributions(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """A capability declared true but returning no contributions is allowed."""
+    shpd_path = shpd_conf[0]
+    # Override the plugin so all getters return () and no templates are declared.
+    plugin_dir = _install_fixture_plugin(
+        shpd_path,
+        main_content=(
+            "from plugin import ShepherdPlugin\n\n"
+            "class RuntimeFixturePlugin(ShepherdPlugin):\n"
+            "    pass\n"
+        ),
+    )
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    descriptor_path = plugin_dir / "plugin.yaml"
+    descriptor = yaml.safe_load(descriptor_path.read_text())
+    descriptor.pop("env_templates", None)
+    descriptor.pop("service_templates", None)
+    descriptor.pop("env_template_fragments", None)
+    descriptor["capabilities"] = {"commands": True}
+    descriptor_path.write_text(yaml.dump(descriptor, sort_keys=False))
+
+    # Must load without error (advertised != mandatory).
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+
+
+@pytest.mark.shpd
+def test_capabilities_absent_skips_enforcement(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+) -> None:
+    """A plugin without a capabilities block is loaded without enforcement."""
+    shpd_path = shpd_conf[0]
+    plugin_dir = _install_fixture_plugin(shpd_path)
+    _single_plugin_inventory(shpd_path / ".shpd.yaml")
+    _patch_capabilities(plugin_dir, None)  # remove capabilities entirely
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    assert "runtime-plugin" in shepherd.pluginRuntimeMng.registry.plugins
