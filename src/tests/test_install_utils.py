@@ -7,7 +7,6 @@
 
 import subprocess
 from pathlib import Path
-from typing import List
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -67,9 +66,9 @@ class TestInstallUtils:
             mock_result.stdout = "test output"
             mock_run.return_value = mock_result
 
-            result_capture: subprocess.CompletedProcess[str] = Util.run_command(
+            result_capture = Util.run_command(
                 ["echo", "test"], capture_output=True
-            )  # type: ignore[assignment]
+            )
             assert result_capture.stdout == "test output"
 
         # Test command failure
@@ -84,11 +83,7 @@ class TestInstallUtils:
         with patch("subprocess.run") as mock_run:
             error = subprocess.CalledProcessError(1, ["echo", "test"])
             mock_run.side_effect = error
-            result_noexit: (
-                subprocess.CompletedProcess[str] | subprocess.CalledProcessError
-            ) = Util.run_command(
-                ["echo", "test"], check=False
-            )  # type: ignore[type-arg]
+            result_noexit = Util.run_command(["echo", "test"], check=False)
             assert isinstance(result_noexit, subprocess.CalledProcessError)
 
     def test_get_current_user(self):
@@ -171,7 +166,7 @@ class TestInstallUtils:
 
         # Define a simplified version of the function for testing
         def simplified_install_packages(distro: str) -> None:
-            missing_pkgs: List[str] = ["pkg1"]  # Simulate a missing package
+            missing_pkgs = ["pkg1"]  # Simulate a missing package
             print("Simulated missing packages:", missing_pkgs)  # Debug print
             # Call install_missing_packages directly
             RepositoryManager.install_missing_packages(distro, missing_pkgs)
@@ -202,12 +197,8 @@ class TestInstallUtils:
         """Test that install_packages correctly identifies missing packages."""
 
         # Create a simplified version of the function for testing
-        def simplified_check_and_install(
-            distro: str,
-            pkgs: List[str],
-            check_results: List[bool],
-        ) -> None:
-            missing: List[str] = []
+        def simplified_check_and_install(distro, pkgs, check_results):
+            missing = []
             for i, pkg in enumerate(pkgs):
                 # Use the provided check results
                 # instead of calling check_package_installed
@@ -220,9 +211,9 @@ class TestInstallUtils:
                 RepositoryManager.install_missing_packages(distro, missing)
 
         # Set up our test packages and check results
-        test_pkgs: List[str] = ["pkg1", "pkg2", "pkg3"]
+        test_pkgs = ["pkg1", "pkg2", "pkg3"]
         # pkg1 and pkg3 are installed, pkg2 is missing
-        check_results: List[bool] = [True, False, True]
+        check_results = [True, False, True]
 
         with (
             patch(

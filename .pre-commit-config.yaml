@@ -50,9 +50,11 @@ repos:
     hooks:
       - id: flake8
         args: ["--config", "src/.flake8"]
+        exclude: ^src/tests/
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.408
     hooks:
       - id: pyright
         args: ["--project", "src/pyproject.toml"]
+        exclude: ^src/tests/

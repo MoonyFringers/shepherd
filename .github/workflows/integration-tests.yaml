@@ -1,0 +1,44 @@
+name: Integration Tests
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - v*
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Set up Git repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: "3.12"
+
+      - name: Create and activate virtual environment
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install --upgrade pip
+          pip install -r src/requirements.txt -r src/requirements-dev.txt
+          pip install pytest pytest-cov
+
+      - name: Run Integration Tests
+        run: |
+          source .venv/bin/activate
+          cd src && pytest -m integration
+
+      - name: Upload Coverage Report
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./src/coverage.xml
+          flags: integration
+          name: codecov-umbrella

@@ -26,7 +26,7 @@ extend_skip_glob = ["resources/*"]
 typeCheckingMode = "strict"
 venvPath = ".."
 venv = ".venv"
-exclude = ["../examples"]
+exclude = ["../examples", "tests"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
@@ -36,5 +36,6 @@ addopts = [
   "--cov-report=xml",
   "--cov-report=html",
   "--cov-config=.coveragerc",
+  "-m", "not integration",
 ]
-markers = ["env", "svc", "cfg", "shpd", "compl", "docker"]
+markers = ["env", "svc", "cfg", "shpd", "compl", "docker", "integration"]

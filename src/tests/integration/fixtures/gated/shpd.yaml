@@ -1,0 +1,99 @@
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+volumes_path: ${volumes_path}
+staging_area:
+  volumes_path: ${staging_area_volumes_path}
+  images_path: ${staging_area_images_path}
+env_templates: []
+service_templates: []
+envs:
+  - template: default
+    factory: docker-compose
+    tag: integ-gated
+    services:
+      - tag: web
+        factory: docker
+        template: default
+        service_class: null
+        labels: []
+        properties: {}
+        upstreams: []
+        containers:
+          - tag: nginx
+            image: nginx:1.27-alpine
+            hostname: web
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: []
+            ports: []
+            networks:
+              - default
+            extra_hosts: []
+            build: null
+            inits: null
+        start: null
+        status:
+          active: true
+          rendered_config: null
+      - tag: api
+        factory: docker
+        template: default
+        service_class: null
+        labels: []
+        properties: {}
+        upstreams: []
+        containers:
+          - tag: nginx
+            image: nginx:1.27-alpine
+            hostname: api
+            container_name: null
+            workdir: null
+            volumes: []
+            environment: []
+            ports: []
+            networks:
+              - default
+            extra_hosts: []
+            build: null
+            inits: null
+        start:
+          when_probes:
+            - warmup
+        status:
+          active: true
+          rendered_config: null
+    probes:
+      - tag: warmup
+        container:
+          tag: warmup
+          image: nginx:1.27-alpine
+          hostname: null
+          container_name: null
+          workdir: null
+          volumes: []
+          environment: []
+          ports: []
+          networks:
+            - default
+          extra_hosts: []
+          build: null
+          inits: null
+        script: "sh -lc 'true'"
+        script_path: null
+    networks:
+      - tag: default
+        name: null
+        external: false
+        driver: bridge
+        attachable: true
+        enable_ipv6: false
+        driver_opts: null
+        ipam: null
+    volumes: []
+    ready:
+      when_probes:
+        - warmup
+    status:
+      active: true
+      rendered_config: null
