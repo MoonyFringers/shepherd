@@ -39,4 +39,4 @@ addopts = [
   "--cov-config=.coveragerc",
   "-m", "not integration",
 ]
-markers = ["env", "svc", "cfg", "shpd", "compl", "docker", "integration", "storage"]
+markers = ["env", "svc", "cfg", "shpd", "compl", "docker", "integration", "storage", "remote"]
