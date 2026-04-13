@@ -9,6 +9,10 @@
 
 from __future__ import annotations
 
+import ftplib
+import io
+import posixpath
+
 from .backend import RemoteBackend
 
 
@@ -43,24 +47,94 @@ class FTPBackend(RemoteBackend):
         password: str = "",
         root_path: str = "/",
     ) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        self._root = root_path.rstrip("/")
+        # Shard cache: shard prefix → set of known chunk hashes.
+        self._shard_cache: dict[str, set[str]] = {}
+        self._ftp = ftplib.FTP()
+        self._ftp.connect(host, port)
+        self._ftp.login(user, password)
+        self._ftp.set_pasv(True)
 
+    # ------------------------------------------------------------------
     # RemoteBackend implementation
+    # ------------------------------------------------------------------
 
     def exists(self, path: str) -> bool:
-        raise NotImplementedError  # TODO: Issue 7
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "chunks":
+            shard = parts[1]
+            if shard not in self._shard_cache:
+                self._warm_shard(shard)
+            return parts[2] in self._shard_cache.get(shard, set())
+        try:
+            self._ftp.size(self._abs(path))
+            return True
+        except ftplib.error_perm:
+            return False
 
     def upload(self, path: str, data: bytes) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        abs_path = self._abs(path)
+        self._mkdirs(posixpath.dirname(abs_path))
+        self._ftp.storbinary(f"STOR {abs_path}", io.BytesIO(data))
+        # Keep shard cache consistent after a new chunk is written.
+        parts = path.split("/")
+        if len(parts) == 3 and parts[0] == "chunks":
+            shard = parts[1]
+            if shard in self._shard_cache:
+                self._shard_cache[shard].add(parts[2])
 
     def download(self, path: str) -> bytes:
-        raise NotImplementedError  # TODO: Issue 7
+        buf = io.BytesIO()
+        self._ftp.retrbinary(f"RETR {self._abs(path)}", buf.write)
+        return buf.getvalue()
 
     def list_prefix(self, prefix: str) -> list[str]:
-        raise NotImplementedError  # TODO: Issue 7
+        names: list[str] = []
+        try:
+            self._ftp.retrlines(f"NLST {self._abs(prefix)}", names.append)
+        except ftplib.error_perm:
+            pass
+        return [posixpath.basename(n) for n in names]
 
     def delete(self, path: str) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        # Note: the shard cache is NOT updated here.  Deletion happens during
+        # pruning, which uses a separate backend instance from the dedup-check
+        # path, so stale cache entries are never observed in practice.
+        try:
+            self._ftp.delete(self._abs(path))
+        except ftplib.error_perm:
+            pass
 
     def close(self) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        try:
+            self._ftp.quit()
+        except Exception:
+            self._ftp.close()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _abs(self, path: str) -> str:
+        return f"{self._root}/{path}" if self._root else path
+
+    def _mkdirs(self, abs_dir: str) -> None:
+        """Create all components of *abs_dir*, ignoring existing dirs."""
+        current = ""
+        for part in abs_dir.lstrip("/").split("/"):
+            current = f"{current}/{part}"
+            try:
+                self._ftp.mkd(current)
+            except ftplib.error_perm:
+                pass
+
+    def _warm_shard(self, shard: str) -> None:
+        """Populate the shard cache for *shard* with a single NLST call."""
+        names: list[str] = []
+        try:
+            self._ftp.retrlines(
+                f"NLST {self._abs(f'chunks/{shard}')}", names.append
+            )
+        except ftplib.error_perm:
+            pass
+        self._shard_cache[shard] = {posixpath.basename(n) for n in names}

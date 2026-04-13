@@ -9,7 +9,20 @@
 
 from __future__ import annotations
 
+import posixpath
+
+import paramiko
+
 from .backend import RemoteBackend
+
+
+def _load_pkey(path: str) -> paramiko.PKey:
+    """Load a private key from *path*, auto-detecting the key type.
+
+    Uses ``paramiko.PKey.from_path`` (available since paramiko 3.2), which
+    transparently handles Ed25519, ECDSA, and RSA keys.
+    """
+    return paramiko.PKey.from_path(path)  # type: ignore[return-value]
 
 
 class SFTPBackend(RemoteBackend):
@@ -45,24 +58,71 @@ class SFTPBackend(RemoteBackend):
         identity_file: str | None = None,
         root_path: str = "/",
     ) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        self._root = root_path.rstrip("/")
+        self._transport = paramiko.Transport((host, port))
+        if identity_file:
+            self._transport.connect(
+                username=user, pkey=_load_pkey(identity_file)
+            )
+        else:
+            self._transport.connect(username=user, password=password)
+        sftp = paramiko.SFTPClient.from_transport(self._transport)
+        if sftp is None:
+            raise RuntimeError("Failed to open SFTP channel")
+        self._sftp = sftp
 
+    # ------------------------------------------------------------------
     # RemoteBackend implementation
+    # ------------------------------------------------------------------
 
     def exists(self, path: str) -> bool:
-        raise NotImplementedError  # TODO: Issue 7
+        try:
+            self._sftp.stat(self._abs(path))
+            return True
+        except FileNotFoundError:
+            return False
 
     def upload(self, path: str, data: bytes) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        abs_path = self._abs(path)
+        self._mkdirs(posixpath.dirname(abs_path))
+        with self._sftp.open(abs_path, "wb") as f:
+            f.write(data)
 
     def download(self, path: str) -> bytes:
-        raise NotImplementedError  # TODO: Issue 7
+        with self._sftp.open(self._abs(path), "rb") as f:
+            return bytes(f.read())
 
     def list_prefix(self, prefix: str) -> list[str]:
-        raise NotImplementedError  # TODO: Issue 7
+        try:
+            return self._sftp.listdir(self._abs(prefix))
+        except FileNotFoundError:
+            return []
 
     def delete(self, path: str) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        try:
+            self._sftp.remove(self._abs(path))
+        except FileNotFoundError:
+            pass
 
     def close(self) -> None:
-        raise NotImplementedError  # TODO: Issue 7
+        try:
+            self._sftp.close()
+        finally:
+            self._transport.close()
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    def _abs(self, path: str) -> str:
+        return f"{self._root}/{path}" if self._root else path
+
+    def _mkdirs(self, abs_dir: str) -> None:
+        """Create all components of *abs_dir*, ignoring existing dirs."""
+        current = ""
+        for part in abs_dir.lstrip("/").split("/"):
+            current = f"{current}/{part}"
+            try:
+                self._sftp.mkdir(current)
+            except OSError:
+                pass
