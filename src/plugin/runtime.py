@@ -533,21 +533,77 @@ class PluginRuntimeMng:
         plugin_id = loaded.descriptor.id
         if plugin_id in self.registry.plugins:
             Util.print_error_and_die(f"Plugin '{plugin_id}' is already loaded.")
+
+        # Collect contributions once so they can be capability-checked and
+        # registered without calling each getter twice.
+        commands = loaded.instance.get_commands()
+        completions = loaded.instance.get_completion_providers()
+        env_factories = loaded.instance.get_env_factories()
+        svc_factories = loaded.instance.get_service_factories()
+        remote_backends = loaded.instance.get_remote_backends()
+
+        self._check_capabilities(
+            loaded,
+            commands,
+            completions,
+            env_factories,
+            svc_factories,
+            remote_backends,
+        )
+
         self.registry.plugins[plugin_id] = loaded
-        self._register_commands(plugin_id, loaded.instance.get_commands())
-        self._register_completion_providers(
-            plugin_id, loaded.instance.get_completion_providers()
-        )
+        self._register_commands(plugin_id, commands)
+        self._register_completion_providers(plugin_id, completions)
         self._register_descriptor_templates(loaded)
-        self._register_env_factories(
-            plugin_id, loaded.instance.get_env_factories()
-        )
-        self._register_svc_factories(
-            plugin_id, loaded.instance.get_service_factories()
-        )
-        self._register_remote_backends(
-            plugin_id, loaded.instance.get_remote_backends()
-        )
+        self._register_env_factories(plugin_id, env_factories)
+        self._register_svc_factories(plugin_id, svc_factories)
+        self._register_remote_backends(plugin_id, remote_backends)
+
+    def _check_capabilities(
+        self,
+        loaded: LoadedPlugin,
+        commands: Sequence[PluginCommandSpec],
+        completions: Sequence[PluginCompletionSpec],
+        env_factories: Sequence[PluginEnvFactorySpec],
+        svc_factories: Sequence[PluginSvcFactorySpec],
+        remote_backends: Sequence[PluginRemoteBackendSpec],
+    ) -> None:
+        """Reject plugins that contribute to undeclared capability areas.
+
+        If ``capabilities`` is absent or empty the check is skipped entirely
+        (backward-compatible with plugins that predate the field).  A declared
+        area that returns no contributions is allowed — advertised ≠ mandatory.
+        """
+        caps = loaded.descriptor.capabilities
+        if not caps:
+            return
+        plugin_id = loaded.descriptor.id
+        descriptor = loaded.descriptor
+        checks: list[tuple[str, bool]] = [
+            ("commands", bool(commands)),
+            ("completion", bool(completions)),
+            (
+                # Templates are declared statically in plugin.yaml, not
+                # returned by a getter — hence the descriptor field check
+                # rather than a get_*() call like the other areas.
+                "templates",
+                bool(
+                    descriptor.env_templates
+                    or descriptor.service_templates
+                    or descriptor.env_template_fragments
+                ),
+            ),
+            ("env_factories", bool(env_factories)),
+            ("svc_factories", bool(svc_factories)),
+            ("remote_backends", bool(remote_backends)),
+        ]
+        for area, has_contributions in checks:
+            if has_contributions and not caps.get(area, False):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}': contributions found for '{area}' "
+                    f"but 'capabilities.{area}' is not declared true in "
+                    f"plugin.yaml."
+                )
 
     def _register_commands(
         self,
