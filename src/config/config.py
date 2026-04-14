@@ -1828,11 +1828,11 @@ class ConfigMng:
 
         :raises ValueError: If a remote with the same name already exists.
         """
-        if any(r.name == remote.name for r in self.get_remotes()):
+        remotes = list(self.config.remotes or [])
+        if any(r.name == remote.name for r in remotes):
             raise ValueError(f"Remote '{remote.name}' already exists.")
-        if self.config.remotes is None:
-            self.config.remotes = []
-        self.config.remotes.append(remote)
+        remotes.append(remote)
+        self.config.remotes = remotes
         self.store()
 
     def remove_remote(self, name: str) -> None:

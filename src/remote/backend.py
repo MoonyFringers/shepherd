@@ -44,6 +44,14 @@ class RemoteBackend(ABC):
         return f"chunks/{chunk_hash[:2]}/{chunk_hash}"
 
     @staticmethod
+    def snapshots_prefix(env_name: str) -> str:
+        """Return the remote path prefix for all snapshots of *env_name*.
+
+        Example: ``"my-env"`` → ``"envs/my-env/snapshots"``
+        """
+        return f"envs/{env_name}/snapshots"
+
+    @staticmethod
     def snapshot_path(env_name: str, snapshot_id: str) -> str:
         """Return the remote path for a snapshot manifest."""
         return f"envs/{env_name}/snapshots/{snapshot_id}.json"
