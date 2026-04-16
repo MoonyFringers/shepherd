@@ -97,6 +97,7 @@ class ShepherdMng:
                 if self.pluginRuntimeMng is None
                 else self.pluginRuntimeMng.registry
             ),
+            self.remoteMng,
         )
 
 

@@ -77,6 +77,18 @@ service_templates:
       - com.example.label1=value1
       - com.example.label2=value2
     properties: {}
+remotes:
+  - name: ftp-prod
+    type: ftp
+    host: ftp.example.com
+    user: deploy
+    root_path: /shpd
+    default: "true"
+  - name: sftp-backup
+    type: sftp
+    host: sftp.example.com
+    user: backup
+    root_path: /shpd
 envs:
   - template: default
     factory: docker-compose

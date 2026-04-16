@@ -1272,3 +1272,244 @@ def test_completion_probe_check_shows_watch_flag(
     assert "-w" in completions
     assert "--watch" in completions
     assert "--show-commands-limit" in completions
+
+
+# =============================================================================
+# REMOTE completion
+# =============================================================================
+
+
+def _write_shpd_yaml(shpd_path: Path) -> None:
+    """Write the completion fixture yaml (includes two remotes) to *shpd_path*."""
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("completion", "shpd.yaml"))
+
+
+def _remote_sm(shpd_conf: tuple[Path, Path]) -> "ShepherdMng":
+    """Return a ShepherdMng with the completion fixture yaml loaded."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    _write_shpd_yaml(shpd_path)
+    return ShepherdMng(load_runtime_plugins=False)
+
+
+@pytest.mark.compl
+def test_completion_remote_scope_in_scopes(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote' scope is included in the top-level scope list."""
+    sm = ShepherdMng(load_runtime_plugins=False)
+    assert "remote" in sm.completionMng.get_completions([])
+
+
+@pytest.mark.compl
+def test_completion_remote_verbs(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """Completing 'remote' returns the expected verb list."""
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["remote"])
+    assert completions == ["add", "list", "delete", "envs", "get"]
+
+
+@pytest.mark.compl
+def test_completion_remote_delete_remote_names(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote delete' completes to all registered remote names."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(["remote", "delete"])
+    assert completions == ["ftp-prod", "sftp-backup"]
+
+
+@pytest.mark.compl
+def test_completion_remote_delete_prefix_filter(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote delete ftp' completes only names starting with 'ftp'."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(["remote", "delete", "ftp"])
+    assert completions == ["ftp-prod"]
+
+
+@pytest.mark.compl
+def test_completion_remote_delete_after_valid_name(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """No completions after a full remote name has been provided."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(
+        ["remote", "delete", "ftp-prod"]
+    )
+    assert completions == []
+
+
+@pytest.mark.compl
+def test_completion_remote_envs_no_extra_args(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote envs' with no positional args suggests the --remote option."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(["remote", "envs"])
+    assert completions == ["--remote"]
+
+
+@pytest.mark.compl
+def test_completion_remote_envs_remote_option_value(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote envs --remote' returns all registered remote names."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(
+        ["remote", "envs", "--remote"]
+    )
+    assert completions == ["ftp-prod", "sftp-backup"]
+
+
+@pytest.mark.compl
+def test_completion_remote_envs_remote_option_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote envs --remote ftp-' returns only names starting with 'ftp-'."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(
+        ["remote", "envs", "--remote", "ftp-"]
+    )
+    assert completions == ["ftp-prod"]
+
+
+@pytest.mark.compl
+def test_completion_remote_get_env_names(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote get' completes ENV_NAME from the default remote index."""
+    from config.config import RemoteCfg
+    from storage.snapshot import IndexCatalogue, IndexCatalogueEntry
+
+    sm = _remote_sm(shpd_conf)
+    fake_cfg = RemoteCfg(
+        name="ftp-prod", type="ftp", host="h", user="u", root_path="/"
+    )
+    fake_catalogue = IndexCatalogue(
+        updated_at="2026-01-01T00:00:00Z",
+        environments={
+            "my-env": IndexCatalogueEntry(
+                latest_snapshot="snap-1",
+                snapshot_count=1,
+                last_backup="2026-01-01T00:00:00Z",
+                labels=[],
+                total_size_bytes=0,
+                stored_size_bytes=0,
+            ),
+            "other-env": IndexCatalogueEntry(
+                latest_snapshot="snap-2",
+                snapshot_count=1,
+                last_backup="2026-01-01T00:00:00Z",
+                labels=[],
+                total_size_bytes=0,
+                stored_size_bytes=0,
+            ),
+        },
+    )
+    mocker.patch.object(
+        sm.remoteMng,
+        "list_envs",
+        return_value=(fake_cfg, fake_catalogue),
+    )
+
+    completions = sm.completionMng.get_completions(["remote", "get"])
+    assert sorted(completions) == ["my-env", "other-env"]
+
+
+@pytest.mark.compl
+def test_completion_remote_get_env_names_prefix(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote get my-' filters env names by the given prefix."""
+    from config.config import RemoteCfg
+    from storage.snapshot import IndexCatalogue, IndexCatalogueEntry
+
+    sm = _remote_sm(shpd_conf)
+    fake_cfg = RemoteCfg(
+        name="ftp-prod", type="ftp", host="h", user="u", root_path="/"
+    )
+    fake_catalogue = IndexCatalogue(
+        updated_at="2026-01-01T00:00:00Z",
+        environments={
+            "my-env": IndexCatalogueEntry(
+                latest_snapshot="snap-1",
+                snapshot_count=1,
+                last_backup="2026-01-01T00:00:00Z",
+                labels=[],
+                total_size_bytes=0,
+                stored_size_bytes=0,
+            ),
+            "other-env": IndexCatalogueEntry(
+                latest_snapshot="snap-2",
+                snapshot_count=1,
+                last_backup="2026-01-01T00:00:00Z",
+                labels=[],
+                total_size_bytes=0,
+                stored_size_bytes=0,
+            ),
+        },
+    )
+    mocker.patch.object(
+        sm.remoteMng,
+        "list_envs",
+        return_value=(fake_cfg, fake_catalogue),
+    )
+
+    completions = sm.completionMng.get_completions(["remote", "get", "my-"])
+    assert completions == ["my-env"]
+
+
+@pytest.mark.compl
+def test_completion_remote_get_remote_option_value(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote get <env> --remote' returns all registered remote names."""
+    sm = _remote_sm(shpd_conf)
+    completions = sm.completionMng.get_completions(
+        ["remote", "get", "my-env", "--remote"]
+    )
+    assert completions == ["ftp-prod", "sftp-backup"]
+
+
+@pytest.mark.compl
+def test_completion_remote_add_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote add -' suggests all add-command flags."""
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["remote", "add", "-"])
+    assert "--ftp" in completions
+    assert "--sftp" in completions
+    assert "--host" in completions
+    assert "--user" in completions
+    assert "--root-path" in completions
+    assert "--set-default" in completions
