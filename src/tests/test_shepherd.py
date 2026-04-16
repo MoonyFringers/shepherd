@@ -1360,3 +1360,411 @@ def test_cli_check_probe_watch_with_probe_tag(
     watch_probes.assert_called_once()
     _, probe_tag = watch_probes.call_args.args
     assert probe_tag == "db-ready"
+
+
+# =============================================================================
+# REMOTE commands
+# =============================================================================
+
+
+def _write_cli_config_with_remotes(config_path: Path) -> None:
+    """Write a shpd.yaml that already contains two registered remotes."""
+    shpd_config = yaml.safe_load(read_fixture("shpd", "shpd.yaml"))
+    shpd_config["remotes"] = [
+        {
+            "name": "ftp-prod",
+            "type": "ftp",
+            "host": "ftp.example.com",
+            "user": "deploy",
+            "root_path": "/shpd",
+            "default": "true",
+        },
+        {
+            "name": "sftp-backup",
+            "type": "sftp",
+            "host": "sftp.example.com",
+            "user": "backup",
+            "root_path": "/shpd",
+            "default": "false",
+        },
+    ]
+    config_path.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+
+def _setup_remote(shpd_conf: tuple[Path, Path]) -> Path:
+    """Create dir + write config with remotes; return shpd_yaml path."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _write_cli_config_with_remotes(shpd_yaml)
+    return shpd_yaml
+
+
+# ------------------------------------------------------------------
+# remote add
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add' with FTP transport registers the remote and persists it."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-ftp",
+            "--ftp",
+            "--host",
+            "ftp.example.com",
+            "--user",
+            "deploy",
+            "--password",
+            "secret",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Remote 'my-ftp' registered." in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remotes = stored.get("remotes", [])
+    assert any(r["name"] == "my-ftp" and r["type"] == "ftp" for r in remotes)
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_sftp(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add' with SFTP transport registers the remote."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-sftp",
+            "--sftp",
+            "--host",
+            "sftp.example.com",
+            "--user",
+            "backup",
+            "--identity-file",
+            "/home/backup/.ssh/id_ed25519",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Remote 'my-sftp' registered." in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remotes = stored.get("remotes", [])
+    assert any(r["name"] == "my-sftp" and r["type"] == "sftp" for r in remotes)
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_set_default(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add --set-default' marks the remote as the default."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-ftp",
+            "--ftp",
+            "--host",
+            "ftp.example.com",
+            "--user",
+            "u",
+            "--password",
+            "p",
+            "--root-path",
+            "/shpd",
+            "--set-default",
+        ],
+    )
+
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remote = next(r for r in stored["remotes"] if r["name"] == "my-ftp")
+    assert remote["default"] is True
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_missing_transport(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add' without --ftp/--sftp fails with a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-remote",
+            "--host",
+            "h",
+            "--user",
+            "u",
+            "--root-path",
+            "/",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "Specify a transport" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_duplicate_name(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add' with a name that already exists fails cleanly."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "ftp-prod",
+            "--ftp",
+            "--host",
+            "h",
+            "--user",
+            "u",
+            "--password",
+            "p",
+            "--root-path",
+            "/",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "already exists" in result.output
+
+
+# ------------------------------------------------------------------
+# remote list
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_list_empty(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote list' with no remotes configured prints a helpful message."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["remote", "list"])
+
+    assert result.exit_code == 0
+    assert "No remotes configured" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_list(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote list' shows all registered remotes."""
+    _setup_remote(shpd_conf)
+
+    result = runner.invoke(cli, ["remote", "list"])
+
+    assert result.exit_code == 0
+    assert "ftp-prod" in result.output
+    assert "sftp-backup" in result.output
+
+
+# ------------------------------------------------------------------
+# remote delete
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_delete(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote delete' removes the remote from the config."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(cli, ["remote", "delete", "sftp-backup"])
+
+    assert result.exit_code == 0
+    assert "Remote 'sftp-backup' removed." in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remotes = stored.get("remotes", [])
+    assert all(r["name"] != "sftp-backup" for r in remotes)
+
+
+@pytest.mark.shpd
+def test_cli_remote_delete_missing(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote delete' on an unknown name fails with a usage error."""
+    _setup_remote(shpd_conf)
+
+    result = runner.invoke(cli, ["remote", "delete", "does-not-exist"])
+
+    assert result.exit_code != 0
+    assert "not configured" in result.output
+
+
+# ------------------------------------------------------------------
+# remote envs
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_envs(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote envs' delegates to remoteMng.display_envs with no remote name."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_display = mocker.patch.object(RemoteMng, "display_envs")
+
+    result = runner.invoke(cli, ["remote", "envs"])
+
+    assert result.exit_code == 0
+    mock_display.assert_called_once_with(None)
+
+
+@pytest.mark.shpd
+def test_cli_remote_envs_with_remote(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote envs --remote=<name>' passes the name to display_envs."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_display = mocker.patch.object(RemoteMng, "display_envs")
+
+    result = runner.invoke(cli, ["remote", "envs", "--remote", "ftp-prod"])
+
+    assert result.exit_code == 0
+    mock_display.assert_called_once_with("ftp-prod")
+
+
+# ------------------------------------------------------------------
+# remote get
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_get(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote get <env>' delegates to remoteMng.display_snapshots."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_display = mocker.patch.object(RemoteMng, "display_snapshots")
+
+    result = runner.invoke(cli, ["remote", "get", "my-env"])
+
+    assert result.exit_code == 0
+    mock_display.assert_called_once_with("my-env", None)
+
+
+@pytest.mark.shpd
+def test_cli_remote_get_with_remote(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote get <env> --remote=<name>' passes both args to display_snapshots."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_display = mocker.patch.object(RemoteMng, "display_snapshots")
+
+    result = runner.invoke(
+        cli, ["remote", "get", "my-env", "--remote", "ftp-prod"]
+    )
+
+    assert result.exit_code == 0
+    mock_display.assert_called_once_with("my-env", "ftp-prod")
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp_missing_password(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add --ftp' without --password fails with a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-ftp",
+            "--ftp",
+            "--host",
+            "ftp.example.com",
+            "--user",
+            "u",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "FTP remotes require --password" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_sftp_missing_credentials(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add --sftp' without --password or --identity-file fails."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-sftp",
+            "--sftp",
+            "--host",
+            "sftp.example.com",
+            "--user",
+            "u",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "SFTP remotes require --password or --identity-file" in result.output

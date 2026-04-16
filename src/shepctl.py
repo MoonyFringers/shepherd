@@ -17,9 +17,11 @@ import click
 
 from completion import CompletionMng
 from config import ConfigMng, EnvironmentCfg
+from config.config import RemoteCfg
 from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from plugin import PluginMng, PluginRuntimeMng
+from remote import RemoteMng
 from service import ServiceMng
 from util import Util, setup_logging
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
@@ -74,16 +76,20 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
+        self.remoteMng = RemoteMng(self.configMng)
         self.pluginRuntimeMng = plugin_runtime_mng
         if self.pluginRuntimeMng is None and load_runtime_plugins:
             self.pluginRuntimeMng = PluginRuntimeMng(
-                self.configMng, self.environmentMng, self.serviceMng
+                self.configMng,
+                self.environmentMng,
+                self.serviceMng,
+                self.remoteMng,
             )
         elif self.pluginRuntimeMng is not None and load_runtime_plugins:
             # Pre-bootstrapped during Click resolution: inject managers now
             # that they are available.
             self.pluginRuntimeMng.attach_managers(
-                self.environmentMng, self.serviceMng
+                self.environmentMng, self.serviceMng, self.remoteMng
             )
         self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
         self.completionMng = CompletionMng(
@@ -94,6 +100,7 @@ class ShepherdMng:
                 if self.pluginRuntimeMng is None
                 else self.pluginRuntimeMng.registry
             ),
+            self.remoteMng,
         )
 
 
@@ -853,6 +860,137 @@ def disable_plugin(shepherd: ShepherdMng, plugin_id: str):
 def remove_plugin(shepherd: ShepherdMng, plugin_id: str):
     """Remove one installed plugin."""
     shepherd.pluginMng.remove_plugin(plugin_id)
+
+
+# =====================================================
+# REMOTE
+# =====================================================
+@cli.group(cls=PluginScopeGroup)
+def remote():
+    """Manage remote storage backends."""
+    pass
+
+
+@remote.command(name="add")
+@click.argument("name", required=True)
+@click.option("--ftp", "backend_type", flag_value="ftp", help="FTP transport.")
+@click.option(
+    "--sftp", "backend_type", flag_value="sftp", help="SFTP transport."
+)
+@click.option("--host", required=True, help="Remote server hostname.")
+@click.option("--user", required=True, help="Login username.")
+@click.option(
+    "--port",
+    type=int,
+    default=None,
+    help="Server port (default: 21 for FTP, 22 for SFTP).",
+)
+@click.option(
+    "--password",
+    default=None,
+    help="Login password. Supports ${VAR} placeholders.",
+)
+@click.option(
+    "--identity-file",
+    default=None,
+    help="Path to SSH private key (SFTP only). Supports ${VAR} placeholders.",
+)
+@click.option(
+    "--root-path",
+    required=True,
+    help="Root directory on the remote for the chunk store.",
+)
+@click.option(
+    "--set-default",
+    is_flag=True,
+    default=False,
+    help="Mark this remote as the default.",
+)
+@click.pass_obj
+def add_remote(
+    shepherd: ShepherdMng,
+    name: str,
+    backend_type: Optional[str],
+    host: str,
+    user: str,
+    port: Optional[int],
+    password: Optional[str],
+    identity_file: Optional[str],
+    root_path: str,
+    set_default: bool,
+) -> None:
+    """Register a new remote storage backend."""
+    if not backend_type:
+        raise click.UsageError("Specify a transport with --ftp or --sftp.")
+    if backend_type == "ftp" and not password:
+        raise click.UsageError("FTP remotes require --password.")
+    if backend_type == "sftp" and not password and not identity_file:
+        raise click.UsageError(
+            "SFTP remotes require --password or --identity-file."
+        )
+    remote_cfg = RemoteCfg(
+        name=name,
+        type=backend_type,
+        host=host,
+        port=port,
+        user=user,
+        password=password,
+        root_path=root_path,
+        identity_file=identity_file,
+        default="true" if set_default else "false",
+    )
+    try:
+        shepherd.configMng.add_remote(remote_cfg)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
+    Util.print(f"Remote '{name}' registered.")
+
+
+@remote.command(name="list")
+@click.pass_obj
+def list_remotes(shepherd: ShepherdMng) -> None:
+    """List registered remote storage backends."""
+    shepherd.remoteMng.display_registered()
+
+
+@remote.command(name="delete")
+@click.argument("name", required=True)
+@click.pass_obj
+def delete_remote(shepherd: ShepherdMng, name: str) -> None:
+    """Unregister a remote (does not delete remote data)."""
+    if shepherd.configMng.get_remote(name) is None:
+        raise click.UsageError(f"Remote '{name}' is not configured.")
+    shepherd.configMng.remove_remote(name)
+    Util.print(f"Remote '{name}' removed.")
+
+
+@remote.command(name="envs")
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Remote name (uses default if omitted).",
+)
+@click.pass_obj
+def list_remote_envs(shepherd: ShepherdMng, remote_name: Optional[str]) -> None:
+    """List environments available on a remote."""
+    shepherd.remoteMng.display_envs(remote_name)
+
+
+@remote.command(name="get")
+@click.argument("env_name", required=True)
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Remote name (uses default if omitted).",
+)
+@click.pass_obj
+def get_remote_env(
+    shepherd: ShepherdMng, env_name: str, remote_name: Optional[str]
+) -> None:
+    """List snapshots for ENV_NAME on a remote."""
+    shepherd.remoteMng.display_snapshots(env_name, remote_name)
 
 
 if __name__ == "__main__":

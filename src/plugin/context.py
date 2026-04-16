@@ -27,8 +27,10 @@ from config import (
     PluginCfg,
     ServiceTemplateCfg,
 )
+from config.config import RemoteCfg
 from environment import Environment
 from service import Service
+from storage.snapshot import IndexCatalogue, SnapshotManifest
 
 
 @runtime_checkable
@@ -206,6 +208,30 @@ class PluginServiceView(Protocol):
         ...
 
 
+@runtime_checkable
+class PluginRemoteView(Protocol):
+    """Remote storage data access exposed to plugins.
+
+    Provides programmatic access to configured remotes and their
+    environment/snapshot indices.  Terminal-rendering helpers
+    (``display_*``) and internal transport helpers (``_resolve_remote``,
+    ``_build_backend``) are intentionally excluded — plugins that need to
+    present remote data should format the returned objects themselves.
+    """
+
+    def list_envs(
+        self, remote_name: Optional[str] = None
+    ) -> tuple[RemoteCfg, IndexCatalogue]:
+        """Return the index catalogue from *remote_name* (or the default)."""
+        ...
+
+    def list_snapshots(
+        self, env_name: str, remote_name: Optional[str] = None
+    ) -> tuple[RemoteCfg, list[SnapshotManifest]]:
+        """Return all snapshot manifests for *env_name* from *remote_name*."""
+        ...
+
+
 @dataclass
 class PluginContext:
     """Core manager access injected into every plugin at startup.
@@ -216,13 +242,14 @@ class PluginContext:
 
     ``config`` is always populated.
 
-    ``environment`` and ``service`` are ``None`` during the Click command
-    resolution phase (tab completion) and are set to the live managers once
-    the full CLI bootstrap completes.  Plugin command handlers run after
-    the full bootstrap, so by the time any handler executes, both fields
+    ``environment``, ``service``, and ``remote`` are ``None`` during the Click
+    command resolution phase (tab completion) and are set to the live managers
+    once the full CLI bootstrap completes.  Plugin command handlers run after
+    the full bootstrap, so by the time any handler executes, all three fields
     are available.
     """
 
     config: PluginConfigView
     environment: Optional[PluginEnvironmentView] = None
     service: Optional[PluginServiceView] = None
+    remote: Optional[PluginRemoteView] = None

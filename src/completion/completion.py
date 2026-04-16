@@ -13,11 +13,13 @@ from completion.completion_env import CompletionEnvMng
 from completion.completion_mng import AbstractCompletionMng
 from completion.completion_plugin import CompletionPluginMng
 from completion.completion_probe import CompletionProbeMng
+from completion.completion_remote import CompletionRemoteMng
 from completion.completion_svc import CompletionSvcMng
 from config import ConfigMng
 
 if TYPE_CHECKING:
     from plugin import PluginRegistry
+    from remote import RemoteMng
 
 
 class CompletionMng(AbstractCompletionMng):
@@ -52,6 +54,7 @@ class CompletionMng(AbstractCompletionMng):
         ],
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
+        "remote": ["add", "list", "delete", "envs", "get"],
     }
     SCOPE_VERBS = CORE_SCOPE_VERBS
 
@@ -123,6 +126,23 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
         ),
         ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
+        ("remote", "add"): (
+            OptionSpec(tokens=("--ftp",)),
+            OptionSpec(tokens=("--sftp",)),
+            OptionSpec(tokens=("--host",), takes_value=True),
+            OptionSpec(tokens=("--user",), takes_value=True),
+            OptionSpec(tokens=("--port",), takes_value=True),
+            OptionSpec(tokens=("--password",), takes_value=True),
+            OptionSpec(tokens=("--root-path",), takes_value=True),
+            OptionSpec(tokens=("--identity-file",), takes_value=True),
+            OptionSpec(tokens=("--set-default",)),
+        ),
+        ("remote", "envs"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+        ),
+        ("remote", "get"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+        ),
     }
 
     def __init__(
@@ -130,6 +150,7 @@ class CompletionMng(AbstractCompletionMng):
         cli_flags: dict[str, Any],
         configMng: ConfigMng,
         plugin_registry: "PluginRegistry | None" = None,
+        remoteMng: "RemoteMng | None" = None,
     ):
         self.cli_flags = cli_flags
         self.configMng = configMng
@@ -138,6 +159,9 @@ class CompletionMng(AbstractCompletionMng):
         self.completionPluginMng = CompletionPluginMng(cli_flags, configMng)
         self.completionSvcMng = CompletionSvcMng(cli_flags, configMng)
         self.completionProbeMng = CompletionProbeMng(cli_flags, configMng)
+        self.completionRemoteMng = CompletionRemoteMng(
+            cli_flags, configMng, remoteMng
+        )
         self._option_by_token: dict[str, CompletionMng.OptionSpec] = {}
         for spec in self.GLOBAL_OPTIONS:
             for token in spec.tokens:
@@ -186,6 +210,8 @@ class CompletionMng(AbstractCompletionMng):
             return self.completionSvcMng
         if scope == "probe":
             return self.completionProbeMng
+        if scope == "remote":
+            return self.completionRemoteMng
         return None
 
     def _match_option(self, token: str) -> Optional[OptionSpec]:
@@ -326,13 +352,36 @@ class CompletionMng(AbstractCompletionMng):
 
         if expect_value_for is not None:
             if last_token in expect_value_for.tokens:
-                return list(expect_value_for.choices)
+                if expect_value_for.choices:
+                    return list(expect_value_for.choices)
+                # Dynamic option value — option token is the current word.
+                # Inject it into sanitized_args so the scope manager can see
+                # which option's value is being completed.
+                dynamic_args = sanitized_args + [last_token]
+                completion_manager = self.get_completion_manager(scope)
+                if completion_manager:
+                    return self._unique(
+                        completion_manager.get_completions(dynamic_args)
+                    )
+                return []
             if not last_token.startswith("-"):
-                return [
-                    choice
-                    for choice in expect_value_for.choices
-                    if not last_token or choice.startswith(last_token)
-                ]
+                if expect_value_for.choices:
+                    return [
+                        choice
+                        for choice in expect_value_for.choices
+                        if not last_token or choice.startswith(last_token)
+                    ]
+                # Dynamic option value with partial prefix: inject the option
+                # token (and the prefix) so the scope manager can filter.
+                dynamic_args = sanitized_args + [expect_value_for.tokens[0]]
+                if last_token:
+                    dynamic_args = dynamic_args + [last_token]
+                completion_manager = self.get_completion_manager(scope)
+                if completion_manager:
+                    return self._unique(
+                        completion_manager.get_completions(dynamic_args)
+                    )
+                return []
 
         if not scope:
             if option_prefix is not None:
