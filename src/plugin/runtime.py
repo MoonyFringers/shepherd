@@ -44,9 +44,10 @@ from plugin.api import (
 from plugin.context import (
     PluginContext,
     PluginEnvironmentView,
+    PluginRemoteView,
     PluginServiceView,
 )
-from remote import RemoteBackend
+from remote import RemoteBackend, RemoteMng
 from service import ServiceFactory, ServiceMng
 from util import Constants, Util
 
@@ -175,10 +176,12 @@ class PluginRuntimeMng:
         configMng: ConfigMng,
         environmentMng: EnvironmentMng | None = None,
         serviceMng: ServiceMng | None = None,
+        remoteMng: RemoteMng | None = None,
     ):
         self.configMng = configMng
         self._environmentMng: PluginEnvironmentView | None = environmentMng
         self._serviceMng: PluginServiceView | None = serviceMng
+        self._remoteMng: PluginRemoteView | None = remoteMng
         self.registry = PluginRegistry()
         self.load_enabled_plugins()
 
@@ -186,6 +189,7 @@ class PluginRuntimeMng:
         self,
         environmentMng: EnvironmentMng,
         serviceMng: ServiceMng,
+        remoteMng: RemoteMng | None = None,
     ) -> None:
         """Inject managers into already-loaded plugin contexts.
 
@@ -195,9 +199,13 @@ class PluginRuntimeMng:
         """
         self._environmentMng = environmentMng
         self._serviceMng = serviceMng
+        if remoteMng is not None:
+            self._remoteMng = remoteMng
         for loaded in self.registry.plugins.values():
             loaded.instance.context.environment = environmentMng
             loaded.instance.context.service = serviceMng
+            if remoteMng is not None:
+                loaded.instance.context.remote = remoteMng
 
     def load_enabled_plugins(self) -> PluginRegistry:
         """
@@ -460,6 +468,7 @@ class PluginRuntimeMng:
             config=self.configMng,
             environment=self._environmentMng,
             service=self._serviceMng,
+            remote=self._remoteMng,
         )
         try:
             plugin = plugin_class(ctx)

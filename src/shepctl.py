@@ -76,19 +76,22 @@ class ShepherdMng:
         self.serviceMng = ServiceMng(
             self.cli_flags, self.configMng, self.svcFactory
         )
+        self.remoteMng = RemoteMng(self.configMng)
         self.pluginRuntimeMng = plugin_runtime_mng
         if self.pluginRuntimeMng is None and load_runtime_plugins:
             self.pluginRuntimeMng = PluginRuntimeMng(
-                self.configMng, self.environmentMng, self.serviceMng
+                self.configMng,
+                self.environmentMng,
+                self.serviceMng,
+                self.remoteMng,
             )
         elif self.pluginRuntimeMng is not None and load_runtime_plugins:
             # Pre-bootstrapped during Click resolution: inject managers now
             # that they are available.
             self.pluginRuntimeMng.attach_managers(
-                self.environmentMng, self.serviceMng
+                self.environmentMng, self.serviceMng, self.remoteMng
             )
         self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
-        self.remoteMng = RemoteMng(self.configMng)
         self.completionMng = CompletionMng(
             self.cli_flags,
             self.configMng,
