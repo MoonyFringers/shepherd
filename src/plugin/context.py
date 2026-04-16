@@ -210,11 +210,13 @@ class PluginServiceView(Protocol):
 
 @runtime_checkable
 class PluginRemoteView(Protocol):
-    """Remote storage operations exposed to plugins.
+    """Remote storage data access exposed to plugins.
 
-    Provides access to the configured remotes and their environment/snapshot
-    indices.  Internal transport helpers (``_resolve_remote``,
-    ``_build_backend``) are intentionally excluded.
+    Provides programmatic access to configured remotes and their
+    environment/snapshot indices.  Terminal-rendering helpers
+    (``display_*``) and internal transport helpers (``_resolve_remote``,
+    ``_build_backend``) are intentionally excluded — plugins that need to
+    present remote data should format the returned objects themselves.
     """
 
     def list_envs(
@@ -227,20 +229,6 @@ class PluginRemoteView(Protocol):
         self, env_name: str, remote_name: Optional[str] = None
     ) -> tuple[RemoteCfg, list[SnapshotManifest]]:
         """Return all snapshot manifests for *env_name* from *remote_name*."""
-        ...
-
-    def display_registered(self) -> None:
-        """Render a table of registered remotes from the local config."""
-        ...
-
-    def display_envs(self, remote_name: Optional[str] = None) -> None:
-        """Render a table of environments available on *remote_name*."""
-        ...
-
-    def display_snapshots(
-        self, env_name: str, remote_name: Optional[str] = None
-    ) -> None:
-        """Render a table of snapshots for *env_name* on *remote_name*."""
         ...
 
 

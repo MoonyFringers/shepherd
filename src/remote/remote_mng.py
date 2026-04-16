@@ -27,18 +27,6 @@ from .ftp_backend import FTPBackend
 from .sftp_backend import SFTPBackend
 
 
-def _fmt_bytes(n: int) -> str:
-    """Return a human-readable byte count (e.g. ``1.2 MiB``)."""
-    for unit, threshold in (
-        ("GiB", 1 << 30),
-        ("MiB", 1 << 20),
-        ("KiB", 1 << 10),
-    ):
-        if n >= threshold:
-            return f"{n / threshold:.1f} {unit}"
-    return f"{n} B"
-
-
 class RemoteMng:
     """Coordinates the full remote backup and restore workflow.
 
@@ -225,8 +213,8 @@ class RemoteMng:
                 entry.latest_snapshot,
                 str(entry.snapshot_count),
                 entry.last_backup,
-                _fmt_bytes(entry.total_size_bytes),
-                _fmt_bytes(entry.stored_size_bytes),
+                Util.fmt_bytes(entry.total_size_bytes),
+                Util.fmt_bytes(entry.stored_size_bytes),
             ]
             for env_name, entry in sorted(catalogue.environments.items())
         ]
@@ -259,8 +247,8 @@ class RemoteMng:
                 m.snapshot_id,
                 m.created_at,
                 str(m.chunk_count),
-                _fmt_bytes(m.total_size_bytes),
-                _fmt_bytes(m.stored_size_bytes),
+                Util.fmt_bytes(m.total_size_bytes),
+                Util.fmt_bytes(m.stored_size_bytes),
                 ", ".join(m.labels) if m.labels else "",
             ]
             for m in manifests

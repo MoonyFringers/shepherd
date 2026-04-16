@@ -617,3 +617,15 @@ class Util:
             f"Package extracted to {extract_to}",
             style="green",
         )
+
+    @staticmethod
+    def fmt_bytes(n: int) -> str:
+        """Return a human-readable byte count (e.g. ``1.2 MiB``)."""
+        for unit, threshold in (
+            ("GiB", 1 << 30),
+            ("MiB", 1 << 20),
+            ("KiB", 1 << 10),
+        ):
+            if n >= threshold:
+                return f"{n / threshold:.1f} {unit}"
+        return f"{n} B"

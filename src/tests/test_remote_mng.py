@@ -169,6 +169,31 @@ def test_list_envs_no_index() -> None:
 
 
 @pytest.mark.remote
+def test_list_envs_via_default_remote() -> None:
+    """list_envs(None) resolves and uses the configured default remote."""
+    fake = FakeRemoteBackend()
+    entry = IndexCatalogueEntry(
+        latest_snapshot="2026-01-01T00:00:00Z-abc123",
+        snapshot_count=1,
+        last_backup="2026-01-01T00:00:00Z",
+        labels=[],
+        total_size_bytes=512,
+        stored_size_bytes=256,
+    )
+    catalogue = IndexCatalogue(
+        updated_at="2026-01-01T00:00:00Z",
+        environments={"default-env": entry},
+    )
+    fake.seed("index/index.json", json.dumps(catalogue.to_dict()).encode())
+
+    mng = _make_mng([_REMOTE_DEFAULT], fake)
+    cfg, result = mng.list_envs(None)
+
+    assert cfg.name == "default-remote"
+    assert "default-env" in result.environments
+
+
+@pytest.mark.remote
 def test_list_envs_with_index() -> None:
     """A seeded index.json is parsed and returned correctly."""
     fake = FakeRemoteBackend()
@@ -390,6 +415,29 @@ def test_build_backend_sftp_with_identity_file() -> None:
         user="u",
         password=None,
         identity_file="/home/u/.ssh/id_ed25519",
+        root_path="/shpd",
+    )
+
+
+@pytest.mark.remote
+def test_build_backend_sftp_empty_identity_file_treated_as_none() -> None:
+    """An empty-string identity_file is normalised to None (not forwarded)."""
+    cfg = RemoteCfg(
+        name="r",
+        type="sftp",
+        host="sftp.example.com",
+        user="u",
+        identity_file="",
+        root_path="/shpd",
+    )
+    with patch("remote.remote_mng.SFTPBackend") as MockSFTP:
+        _mng()._build_backend(cfg)
+    MockSFTP.assert_called_once_with(
+        host="sftp.example.com",
+        port=22,
+        user="u",
+        password=None,
+        identity_file=None,
         root_path="/shpd",
     )
 

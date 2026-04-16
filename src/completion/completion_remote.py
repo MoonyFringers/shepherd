@@ -5,6 +5,7 @@
 # Open-source: see LICENSE (AGPL-3.0-only).
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
+import logging
 from typing import TYPE_CHECKING, Any, Optional, override
 
 from completion.completion_mng import AbstractCompletionMng
@@ -46,6 +47,9 @@ class CompletionRemoteMng(AbstractCompletionMng):
             case "get":
                 return self._complete_get(args[2:])
             case _:
+                # "add" and "list" have no dynamic positional completions —
+                # their flags are served entirely by the static CONTEXT_OPTIONS
+                # table in CompletionMng.
                 return []
 
     # ------------------------------------------------------------------
@@ -128,5 +132,6 @@ class CompletionRemoteMng(AbstractCompletionMng):
             if prefix:
                 return [n for n in names if n.startswith(prefix)]
             return names
-        except Exception:
+        except Exception as exc:
+            logging.debug("remote completion: env-name lookup failed: %s", exc)
             return []

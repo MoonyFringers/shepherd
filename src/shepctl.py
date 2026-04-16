@@ -922,6 +922,12 @@ def add_remote(
     """Register a new remote storage backend."""
     if not backend_type:
         raise click.UsageError("Specify a transport with --ftp or --sftp.")
+    if backend_type == "ftp" and not password:
+        raise click.UsageError("FTP remotes require --password.")
+    if backend_type == "sftp" and not password and not identity_file:
+        raise click.UsageError(
+            "SFTP remotes require --password or --identity-file."
+        )
     remote_cfg = RemoteCfg(
         name=name,
         type=backend_type,

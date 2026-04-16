@@ -1426,6 +1426,8 @@ def test_cli_remote_add_ftp(
             "ftp.example.com",
             "--user",
             "deploy",
+            "--password",
+            "secret",
             "--root-path",
             "/shpd",
         ],
@@ -1459,6 +1461,8 @@ def test_cli_remote_add_sftp(
             "sftp.example.com",
             "--user",
             "backup",
+            "--identity-file",
+            "/home/backup/.ssh/id_ed25519",
             "--root-path",
             "/shpd",
         ],
@@ -1492,6 +1496,8 @@ def test_cli_remote_add_set_default(
             "ftp.example.com",
             "--user",
             "u",
+            "--password",
+            "p",
             "--root-path",
             "/shpd",
             "--set-default",
@@ -1550,6 +1556,8 @@ def test_cli_remote_add_duplicate_name(
             "h",
             "--user",
             "u",
+            "--password",
+            "p",
             "--root-path",
             "/",
         ],
@@ -1702,3 +1710,61 @@ def test_cli_remote_get_with_remote(
 
     assert result.exit_code == 0
     mock_display.assert_called_once_with("my-env", "ftp-prod")
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp_missing_password(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add --ftp' without --password fails with a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-ftp",
+            "--ftp",
+            "--host",
+            "ftp.example.com",
+            "--user",
+            "u",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "FTP remotes require --password" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_sftp_missing_credentials(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote add --sftp' without --password or --identity-file fails."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "my-sftp",
+            "--sftp",
+            "--host",
+            "sftp.example.com",
+            "--user",
+            "u",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "SFTP remotes require --password or --identity-file" in result.output
