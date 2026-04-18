@@ -802,7 +802,7 @@ class EnvironmentMng:
     def reload_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )
@@ -872,7 +872,7 @@ class EnvironmentMng:
         """Check probes."""
         env = self.get_environment_from_cfg(envCfg)
 
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )
@@ -934,7 +934,7 @@ class EnvironmentMng:
     ) -> None:
         """Continuously run probes and render results until interrupted."""
         env = self.get_environment_from_cfg(envCfg)
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )

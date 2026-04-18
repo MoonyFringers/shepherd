@@ -65,6 +65,39 @@ def mock_subprocess_with_running_ps(mocker: MockerFixture):
     )
 
 
+def mock_subprocess_running_ps_and(
+    mocker: MockerFixture, action_stdout: str
+) -> MagicMock:
+    """Patch subprocess so that ``ps`` returns running-service JSON and all
+    other commands return *action_stdout*.
+
+    Used when a second CLI action is invoked after ``env up``:
+    :func:`is_running` calls ``docker compose ps`` under the hood, so the mock
+    must handle both the ps probe and the action's own subprocess call.
+    """
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        cmd = args[0] if args else []
+        if "ps" in cmd:
+            return subprocess.CompletedProcess(
+                args=cmd,
+                returncode=0,
+                stdout=test_env_running_ps_output,
+                stderr="",
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout=action_stdout,
+            stderr="",
+        )
+
+    return mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        side_effect=fake_run,
+    )
+
+
 @pytest.fixture
 def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     """Fixture to create a temporary home directory and .shpd.conf file."""
@@ -1378,19 +1411,13 @@ def test_reload_env(
 
     result = runner.invoke(cli, ["env", "up"])
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "restart"],
-            returncode=0,
-            stdout="mocked docker compose output",
-            stderr="",
-        ),
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "mocked docker compose output"
     )
 
     result = runner.invoke(cli, ["env", "reload"])
     assert result.exit_code == 0
-    mock_subproc.assert_called_once()
+    mock_subproc.assert_called()
 
     sm = ShepherdMng()
     env = sm.configMng.get_environment("test-1")
@@ -1411,7 +1438,7 @@ def test_reload_env_env_not_started(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
+    mocker.patch(
         "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose", "restart"],
@@ -1423,7 +1450,6 @@ def test_reload_env_env_not_started(
 
     result = runner.invoke(cli, ["env", "reload"])
     assert result.exit_code != 0
-    mock_subproc.assert_not_called()
 
 
 @pytest.mark.docker
@@ -1618,14 +1644,8 @@ def test_check_probe(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose"],
-            returncode=0,
-            stdout="db:5432 - accepting connections",
-            stderr="",
-        ),
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "db:5432 - accepting connections"
     )
 
     result = runner.invoke(cli, ["probe", "check"])
@@ -1645,7 +1665,7 @@ def test_check_prob_env_not_started(
     shpd_config = read_fixture("env_docker", "shpd.yaml")
     shpd_yaml.write_text(shpd_config)
 
-    mock_subproc = mocker.patch(
+    mocker.patch(
         "docker.docker_compose_util.subprocess.run",
         return_value=subprocess.CompletedProcess(
             args=["docker", "compose"],
@@ -1657,7 +1677,6 @@ def test_check_prob_env_not_started(
 
     result = runner.invoke(cli, ["probe", "check"])
     assert result.exit_code != 0
-    mock_subproc.assert_not_called()
 
 
 @pytest.mark.docker
@@ -1677,14 +1696,8 @@ def test_check_probe_flag_verbose(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose"],
-            returncode=0,
-            stdout="db:5432 - accepting connections",
-            stderr="",
-        ),
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "db:5432 - accepting connections"
     )
 
     result = runner.invoke(cli, ["-v", "probe", "check"])
@@ -1709,19 +1722,13 @@ def test_check_probe_with_probe_tag(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose"],
-            returncode=0,
-            stdout="db:5432 - accepting connections",
-            stderr="",
-        ),
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "db:5432 - accepting connections"
     )
 
     result = runner.invoke(cli, ["probe", "check", "db-ready"])
     assert result.exit_code == 0
-    mock_subproc.assert_called_once()
+    mock_subproc.assert_called()
 
 
 @pytest.mark.docker
@@ -1741,20 +1748,11 @@ def test_check_probe_with_missing_probe_tag(
     result = runner.invoke(cli, ["env", "up"])
     assert result.exit_code == 0
 
-    mock_subproc = mocker.patch(
-        "docker.docker_compose_util.subprocess.run",
-        return_value=subprocess.CompletedProcess(
-            args=["docker", "compose"],
-            returncode=0,
-            stdout="db:5432 - accepting connections",
-            stderr="",
-        ),
-    )
+    mock_subprocess_running_ps_and(mocker, "db:5432 - accepting connections")
 
     result = runner.invoke(cli, ["probe", "check", "no-such-probe"])
     assert result.exit_code == 1
     assert "Probe 'no-such-probe' not found" in result.output
-    mock_subproc.assert_not_called()
 
 
 @pytest.mark.docker
