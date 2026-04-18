@@ -42,6 +42,7 @@ from .sftp_backend import SFTPBackend
 
 if TYPE_CHECKING:
     from environment.environment import Environment, EnvironmentMng
+    from plugin.runtime import PluginRuntimeMng
 
 
 def _utcnow() -> str:
@@ -71,6 +72,12 @@ class RemoteMng:
 
     def __init__(self, configMng: ConfigMng) -> None:
         self.configMng = configMng
+        self._plugin_runtime: Optional[PluginRuntimeMng] = None
+
+    def attach_plugin_runtime(
+        self, plugin_runtime: Optional[PluginRuntimeMng]
+    ) -> None:
+        self._plugin_runtime = plugin_runtime
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -106,11 +113,13 @@ class RemoteMng:
         """Instantiate the transport backend described by *cfg*.
 
         Resolves ``${VAR}`` placeholders in connection fields before passing
-        them to the backend constructor.
+        them to the backend constructor.  After the built-in ``ftp`` /
+        ``sftp`` checks the method falls through to the plugin registry;
+        plugins receive the resolved ``cfg`` and may read type-specific
+        parameters from ``cfg.properties``.
 
-        :raises NotImplementedError: For plugin-registered backend types
-            (not yet supported in this release).
-        :raises click.UsageError: For unknown built-in type strings.
+        :raises click.UsageError: For unknown type strings with no matching
+            plugin backend.
         """
         cfg = deepcopy(cfg)
         cfg.set_resolved()
@@ -138,10 +147,14 @@ class RemoteMng:
                 root_path=root_path,
             )
 
+        if self._plugin_runtime is not None:
+            backend = self._plugin_runtime.build_remote_backend(cfg.type, cfg)
+            if backend is not None:
+                return backend
         raise click.UsageError(
             f"Unknown remote type '{cfg.type}'. "
             "Built-in types are 'ftp' and 'sftp'. "
-            "Plugin-registered backends are not yet supported."
+            "Use a plugin to add additional transport backends."
         )
 
     def _update_index(

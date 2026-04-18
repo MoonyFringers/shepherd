@@ -7,6 +7,7 @@ from config import (
     EnvironmentTemplateCfg,
     ServiceCfg,
 )
+from config.config import RemoteCfg
 from docker import DockerComposeEnv, DockerComposeSvc
 from environment import Environment, EnvironmentFactory
 from plugin import (
@@ -23,6 +24,9 @@ from service import Service, ServiceFactory
 
 class FakeRemoteBackend(RemoteBackend):
     """Minimal no-op backend for plugin registry tests."""
+
+    def __init__(self, cfg: RemoteCfg) -> None:
+        pass
 
     def exists(self, path: str) -> bool:
         return False
