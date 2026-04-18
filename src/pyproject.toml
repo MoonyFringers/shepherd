@@ -30,7 +30,7 @@ exclude = ["../examples", "tests"]
 reportMissingTypeStubs = "none"
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "tests"]
 addopts = [
   "--cov",
   "--cov-report=term",
