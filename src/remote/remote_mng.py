@@ -12,19 +12,41 @@ from __future__ import annotations
 
 import datetime
 import json
+import os
+import shutil
+import subprocess
 from copy import deepcopy
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import click
 
 from config import ConfigMng
 from config.config import RemoteCfg
-from storage.snapshot import IndexCatalogue, SnapshotManifest
+from storage.chunker import Chunker
+from storage.snapshot import (
+    IndexCatalogue,
+    IndexCatalogueEntry,
+    LatestPointer,
+    SnapshotManifest,
+)
+from storage.tar_stream import TarStreamProducer
 from util import Util
 
 from .backend import RemoteBackend
 from .ftp_backend import FTPBackend
 from .sftp_backend import SFTPBackend
+
+if TYPE_CHECKING:
+    from environment.environment import Environment, EnvironmentMng
+
+
+def _utcnow() -> str:
+    """Return the current UTC time as an ISO-8601 string ending in ``Z``."""
+    return (
+        datetime.datetime.now(datetime.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
 
 
 class RemoteMng:
@@ -33,8 +55,9 @@ class RemoteMng:
     Responsibilities:
     - Build the appropriate :class:`~remote.backend.RemoteBackend` (core
       built-in FTP, or a plugin-registered backend) from a ``RemoteCfg``.
-    - Drive the push algorithm: tar stream → chunk → dedup check → upload
-      missing chunks → write manifest → update ``latest.json`` / ``index.json``.
+    - Drive the push algorithm: tar stream → chunk → dedup check →
+      upload missing chunks → write manifest → update ``latest.json``
+      / ``index.json``.
     - Drive pull (first-time download, creates local env entry) and hydrate
       (restore data for an already-registered dehydrated env).
     - Dehydrate: strip local data while keeping the env registered in config.
@@ -117,6 +140,40 @@ class RemoteMng:
             "Plugin-registered backends are not yet supported."
         )
 
+    def _update_index(
+        self,
+        backend: RemoteBackend,
+        env_name: str,
+        snapshot_id: str,
+        now: str,
+        labels: list[str],
+        total_size_bytes: int,
+        stored_size_bytes: int,
+    ) -> None:
+        """Fetch, update, and re-upload ``index/index.json``."""
+        index_path = RemoteBackend.index_path()
+        if backend.exists(index_path):
+            catalogue = IndexCatalogue.from_dict(
+                json.loads(backend.download(index_path))
+            )
+        else:
+            catalogue = IndexCatalogue(updated_at=now)
+
+        existing = catalogue.environments.get(env_name)
+        catalogue.environments[env_name] = IndexCatalogueEntry(
+            latest_snapshot=snapshot_id,
+            snapshot_count=(existing.snapshot_count + 1 if existing else 1),
+            last_backup=now,
+            labels=labels,
+            total_size_bytes=total_size_bytes,
+            stored_size_bytes=stored_size_bytes,
+        )
+        catalogue.updated_at = now
+        backend.upload(
+            index_path,
+            json.dumps(catalogue.to_dict(), indent=2).encode(),
+        )
+
     # ------------------------------------------------------------------
     # Data-returning methods (used by display_* and tests)
     # ------------------------------------------------------------------
@@ -137,12 +194,7 @@ class RemoteMng:
         with self._build_backend(remote_cfg) as backend:
             index_path = backend.index_path()
             if not backend.exists(index_path):
-                now = (
-                    datetime.datetime.now(datetime.timezone.utc)
-                    .isoformat(timespec="seconds")
-                    .replace("+00:00", "Z")
-                )
-                return remote_cfg, IndexCatalogue(updated_at=now)
+                return remote_cfg, IndexCatalogue(updated_at=_utcnow())
             raw = backend.download(index_path)
             catalogue = IndexCatalogue.from_dict(json.loads(raw))
         return remote_cfg, catalogue
@@ -170,6 +222,215 @@ class RemoteMng:
                 manifests.append(SnapshotManifest.from_dict(json.loads(raw)))
         manifests.sort(key=lambda m: m.created_at, reverse=True)
         return remote_cfg, manifests
+
+    # ------------------------------------------------------------------
+    # Push / dehydrate
+    # ------------------------------------------------------------------
+
+    def _stop_if_running(
+        self, env: Environment, environment_mng: EnvironmentMng
+    ) -> None:
+        """Prompt the user to stop *env* if any of its services are running.
+
+        Uses :meth:`~environment.environment.Environment.is_running` (which
+        queries the concrete backend) rather than the config's
+        ``rendered_config`` field, so stale state is never a false positive.
+
+        :raises click.Abort: If the user declines to stop.
+        """
+        if not env.is_running():
+            return
+        if not Util.confirm(
+            f"Environment '{env.envCfg.tag}' has running services. "
+            "Stop it now to proceed?"
+        ):
+            raise click.Abort()
+        environment_mng.stop_env(env.envCfg)
+
+    def push(
+        self,
+        env_name: str,
+        environment_mng: EnvironmentMng,
+        remote_name: Optional[str] = None,
+        set_tracking: bool = False,
+        labels: Optional[list[str]] = None,
+    ) -> None:
+        """Create a new remote snapshot for *env_name*.
+
+        Streams the environment directory and all host-mounted volumes through
+        the FastCDC chunker, uploads only the chunks that are not already
+        present on the remote, then writes the snapshot manifest, updates
+        ``latest.json``, and refreshes ``index/index.json``.
+
+        :param env_name: Tag of the local environment to push.
+        :param environment_mng: Provides access to the concrete
+            :class:`~environment.environment.Environment` for streaming and
+            for stopping the env if it is currently running.
+        :param remote_name: Remote to push to, or ``None`` for the default.
+        :param set_tracking: When ``True``, persist *remote_name* as the
+            env's ``tracking_remote`` in the local config.
+        :param labels: Optional list of ``key=value`` label strings to attach
+            to the snapshot manifest.
+        :raises click.UsageError: If the env is unknown or dehydrated.
+        :raises click.Abort: If the env is running and the user declines to
+            stop it.
+        """
+        env_cfg = self.configMng.get_environment(env_name)
+        if env_cfg is None:
+            raise click.UsageError(
+                f"Environment '{env_name}' not found in local config."
+            )
+        if env_cfg.dehydrated:
+            raise click.UsageError(
+                f"Environment '{env_name}' is dehydrated; "
+                "restore local data with 'env hydrate' before pushing."
+            )
+
+        remote_cfg = self._resolve_remote(remote_name)
+        env: Environment = environment_mng.get_environment_from_cfg(env_cfg)
+        self._stop_if_running(env, environment_mng)
+
+        producer = TarStreamProducer(
+            env_path=env.get_path(),
+            volume_streams=env.get_volume_tar_streams(),
+        )
+        chunker = Chunker(
+            min_size=remote_cfg.chunk.min_size_kb * 1024,
+            avg_size=remote_cfg.chunk.avg_size_kb * 1024,
+            max_size=remote_cfg.chunk.max_size_kb * 1024,
+        )
+
+        chunk_hashes: list[str] = []
+        total_raw = 0
+        total_stored = 0
+        uploaded = 0
+
+        with self._build_backend(remote_cfg) as backend:
+            with producer.stream() as stream:
+                for chunk in chunker.chunk_stream(stream):
+                    path = RemoteBackend.chunk_path(chunk.hash)
+                    chunk_hashes.append(chunk.hash)
+                    total_raw += chunk.raw_size
+                    total_stored += len(chunk.data)
+                    if not backend.exists(path):
+                        backend.upload(path, chunk.data)
+                        uploaded += 1
+
+            now = _utcnow()
+
+            # Build manifest (two-pass: need bytes to derive the snapshot id).
+            manifest = SnapshotManifest(
+                snapshot_id="",  # filled in below
+                environment=env_name,
+                shepherd_version=self.configMng.constants.APP_VERSION,
+                created_at=now,
+                chunks=chunk_hashes,
+                chunk_count=len(chunk_hashes),
+                total_size_bytes=total_raw,
+                stored_size_bytes=total_stored,
+                labels=list(labels or []),
+            )
+            manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+            snapshot_id = SnapshotManifest.build_id(now, manifest_bytes)
+            manifest.snapshot_id = snapshot_id
+            manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+
+            backend.upload(
+                RemoteBackend.snapshot_path(env_name, snapshot_id),
+                manifest_bytes,
+            )
+
+            pointer = LatestPointer(snapshot_id=snapshot_id, updated_at=now)
+            backend.upload(
+                RemoteBackend.latest_path(env_name),
+                json.dumps(pointer.to_dict()).encode(),
+            )
+
+            self._update_index(
+                backend,
+                env_name,
+                snapshot_id,
+                now,
+                list(labels or []),
+                total_raw,
+                total_stored,
+            )
+
+        if set_tracking:
+            env_cfg.tracking_remote = remote_cfg.name
+            self.configMng.add_or_set_environment(env_name, env_cfg)
+
+        skipped = len(chunk_hashes) - uploaded
+        Util.print(
+            f"Pushed '{env_name}' → '{remote_cfg.name}' "
+            f"[{snapshot_id}]: "
+            f"{uploaded} chunk(s) uploaded, "
+            f"{skipped} already present, "
+            f"{Util.fmt_bytes(total_stored)} stored."
+        )
+
+    def dehydrate(self, env_name: str, environment_mng: EnvironmentMng) -> None:
+        """Strip local data for *env_name* while preserving its config entry.
+
+        Removes the environment directory and any bind-mount volume device
+        paths declared in the config.  Named Docker volumes are not removed
+        (they are managed by the Docker daemon).  After deletion the env's
+        ``dehydrated`` flag is set to ``True`` and the config is persisted.
+
+        :param env_name: Tag of the local environment to dehydrate.
+        :param environment_mng: Used to check and stop the env if running.
+        :raises click.UsageError: If the env is unknown or already dehydrated.
+        :raises click.Abort: If the env is running and the user declines to
+            stop it.
+        """
+        env_cfg = self.configMng.get_environment(env_name)
+        if env_cfg is None:
+            raise click.UsageError(
+                f"Environment '{env_name}' not found in local config."
+            )
+        if env_cfg.dehydrated:
+            raise click.UsageError(
+                f"Environment '{env_name}' is already dehydrated."
+            )
+
+        env: Environment = environment_mng.get_environment_from_cfg(env_cfg)
+        self._stop_if_running(env, environment_mng)
+
+        env_dir = os.path.join(self.configMng.config.envs_path, env_name)
+        self._delete_dir(env_dir)
+
+        # Also delete bind-mount device paths declared in VolumeCfg.
+        for vol in env_cfg.volumes or []:
+            if (
+                vol.driver == "local"
+                and vol.driver_opts
+                and vol.driver_opts.get("type") == "none"
+                and vol.driver_opts.get("o") == "bind"
+            ):
+                device = vol.driver_opts.get("device", "")
+                if device:
+                    self._delete_dir(device)
+
+        env_cfg.dehydrated = True
+        self.configMng.add_or_set_environment(env_name, env_cfg)
+        Util.print(f"Dehydrated '{env_name}': local data removed.")
+
+    def _delete_dir(self, path: str) -> None:
+        """Delete *path* recursively; retry under sudo on PermissionError."""
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            pass  # already absent — treat as success
+        except PermissionError:
+            if os.name != "posix" or not shutil.which("sudo"):
+                raise
+            uid = os.getuid()
+            gid = os.getgid()
+            subprocess.run(
+                ["sudo", "chown", "-R", f"{uid}:{gid}", path],
+                check=True,
+            )
+            shutil.rmtree(path)
 
     # ------------------------------------------------------------------
     # Display methods (called by CLI commands)

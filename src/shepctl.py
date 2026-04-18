@@ -547,6 +547,53 @@ def status_env(
     shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
+@env.command(name="push")
+@click.argument("env_tag")
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Name of the remote to push to (defaults to the configured default).",
+)
+@click.option(
+    "--set-tracking-remote",
+    "set_tracking",
+    is_flag=True,
+    default=False,
+    help="Persist this remote as the env's tracking remote.",
+)
+@click.option(
+    "--labels",
+    default=None,
+    help="Comma-separated key=value labels to attach to the snapshot.",
+)
+@click.pass_obj
+def push_env(
+    shepherd: ShepherdMng,
+    env_tag: str,
+    remote_name: Optional[str],
+    set_tracking: bool,
+    labels: Optional[str],
+) -> None:
+    """Push a new snapshot of ENV_TAG to a remote."""
+    label_list = [lbl.strip() for lbl in labels.split(",")] if labels else []
+    shepherd.remoteMng.push(
+        env_name=env_tag,
+        environment_mng=shepherd.environmentMng,
+        remote_name=remote_name,
+        set_tracking=set_tracking,
+        labels=label_list,
+    )
+
+
+@env.command(name="dehydrate")
+@click.argument("env_tag")
+@click.pass_obj
+def dehydrate_env(shepherd: ShepherdMng, env_tag: str) -> None:
+    """Strip local data for ENV_TAG while preserving its config entry."""
+    shepherd.remoteMng.dehydrate(env_tag, shepherd.environmentMng)
+
+
 # =====================================================
 # SVC
 # =====================================================

@@ -689,6 +689,7 @@ class EnvironmentCfg(Resolvable):
     volumes: Optional[list[VolumeCfg]]
     ready: Optional[ReadyCfg] = None
     tracking_remote: Optional[str] = None
+    dehydrated: Optional[bool] = None
     status: EntityStatus = field(default_factory=EntityStatus)
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
@@ -1237,6 +1238,7 @@ def _parse_environment(item: Any) -> EnvironmentCfg:
         networks=[_parse_network(network) for network in networks_data],
         volumes=[_parse_volume(volume) for volume in volumes_data],
         tracking_remote=item.get("tracking_remote"),
+        dehydrated=item.get("dehydrated"),
         status=_parse_status(item["status"]),
     )
 
@@ -2141,6 +2143,7 @@ class ConfigMng:
             networks=deepcopy(other.networks),
             volumes=deepcopy(other.volumes),
             tracking_remote=other.tracking_remote,
+            dehydrated=other.dehydrated,
         )
 
     def svc_tmpl_cfg_from_other(self, other: ServiceTemplateCfg):

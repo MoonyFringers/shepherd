@@ -231,6 +231,7 @@ status:
     expected_obj = yaml.safe_load(expected)
     expected_obj.setdefault("ready", None)
     expected_obj.setdefault("tracking_remote", None)
+    expected_obj.setdefault("dehydrated", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
@@ -382,6 +383,7 @@ status:
     expected_obj = yaml.safe_load(expected)
     expected_obj.setdefault("ready", None)
     expected_obj.setdefault("tracking_remote", None)
+    expected_obj.setdefault("dehydrated", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 

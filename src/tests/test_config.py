@@ -349,6 +349,7 @@ def test_store_config_with_real_files():
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
+                item.setdefault("dehydrated", None)
             for remote in expected.get("remotes") or []:
                 remote.setdefault("host", None)
                 remote.setdefault("port", None)
@@ -687,6 +688,7 @@ def test_store_config_with_refs_with_real_files():
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
+                item.setdefault("dehydrated", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
