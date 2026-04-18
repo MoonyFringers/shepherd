@@ -611,6 +611,70 @@ class RemoteMng:
             f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
         )
 
+    # ------------------------------------------------------------------
+    # Prune
+    # ------------------------------------------------------------------
+
+    def prune(
+        self,
+        remote_name: Optional[str] = None,
+        dry_run: bool = False,
+    ) -> None:
+        """Delete orphan chunks on *remote_name*.
+
+        A chunk is considered orphaned when no snapshot manifest for any
+        environment references it.  Env names are discovered from
+        ``index/index.json``; chunks are enumerated by iterating all 256
+        two-character hex shards under ``chunks/``.
+
+        :param remote_name: Remote to prune, or ``None`` for the default.
+        :param dry_run: When ``True``, report orphans but do not delete them.
+        """
+        remote_cfg = self._resolve_remote(remote_name)
+
+        with self._build_backend(remote_cfg) as backend:
+            # Collect env names from the global index.
+            index_path = RemoteBackend.index_path()
+            if backend.exists(index_path):
+                catalogue = IndexCatalogue.from_dict(
+                    json.loads(backend.download(index_path))
+                )
+                env_names = list(catalogue.environments.keys())
+            else:
+                env_names = []
+
+            # Collect all chunk hashes referenced by any snapshot.
+            referenced: set[str] = set()
+            for env_name in env_names:
+                prefix = RemoteBackend.snapshots_prefix(env_name)
+                for name in backend.list_prefix(prefix):
+                    if not name.endswith(".json"):
+                        continue
+                    raw = backend.download(f"{prefix}/{name}")
+                    manifest = SnapshotManifest.from_dict(json.loads(raw))
+                    referenced.update(manifest.chunks)
+
+            # Enumerate every stored chunk across all 256 hex shards.
+            orphans: list[str] = []
+            total = 0
+            for shard in (f"{i:02x}" for i in range(256)):
+                for chunk_hash in backend.list_prefix(f"chunks/{shard}"):
+                    total += 1
+                    if chunk_hash not in referenced:
+                        orphans.append(chunk_hash)
+
+            # Delete (or dry-run report) orphaned chunks.
+            if not dry_run:
+                for chunk_hash in orphans:
+                    backend.delete(RemoteBackend.chunk_path(chunk_hash))
+
+        action = "would be deleted" if dry_run else "deleted"
+        Util.print(
+            f"Prune '{remote_cfg.name}': "
+            f"{total} chunk(s) scanned, "
+            f"{len(orphans)} orphan(s) {action}."
+        )
+
     def _delete_dir(self, path: str) -> None:
         """Delete *path* recursively; retry under sudo on PermissionError."""
         try:

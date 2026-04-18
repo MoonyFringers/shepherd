@@ -1713,6 +1713,40 @@ def test_cli_remote_get_with_remote(
 
 
 @pytest.mark.shpd
+def test_cli_remote_prune(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote prune' delegates to remoteMng.prune with correct arguments."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_prune = mocker.patch.object(RemoteMng, "prune")
+
+    result = runner.invoke(cli, ["remote", "prune"])
+
+    assert result.exit_code == 0
+    mock_prune.assert_called_once_with(None, dry_run=False)
+
+
+@pytest.mark.shpd
+def test_cli_remote_prune_dry_run(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'remote prune --dry-run --remote=<name>' passes both flags."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_prune = mocker.patch.object(RemoteMng, "prune")
+
+    result = runner.invoke(
+        cli, ["remote", "prune", "--remote", "ftp-prod", "--dry-run"]
+    )
+
+    assert result.exit_code == 0
+    mock_prune.assert_called_once_with("ftp-prod", dry_run=True)
+
+
+@pytest.mark.shpd
 def test_cli_remote_add_ftp_missing_password(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ) -> None:

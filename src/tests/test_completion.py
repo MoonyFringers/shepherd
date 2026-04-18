@@ -1480,7 +1480,7 @@ def test_completion_remote_verbs(
     """Completing 'remote' returns the expected verb list."""
     sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["remote"])
-    assert completions == ["add", "list", "delete", "envs", "get"]
+    assert completions == ["add", "list", "delete", "envs", "get", "prune"]
 
 
 @pytest.mark.compl
@@ -1680,3 +1680,16 @@ def test_completion_remote_add_flags(
     assert "--user" in completions
     assert "--root-path" in completions
     assert "--set-default" in completions
+
+
+@pytest.mark.compl
+def test_completion_remote_prune_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+) -> None:
+    """'remote prune -' suggests --remote and --dry-run."""
+    sm = ShepherdMng(load_runtime_plugins=False)
+    completions = sm.completionMng.get_completions(["remote", "prune", "-"])
+    assert "--remote" in completions
+    assert "--dry-run" in completions

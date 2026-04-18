@@ -1246,3 +1246,160 @@ def test_cli_env_hydrate(
         )
 
     assert result.exit_code in (0, 1)
+
+
+# ---------------------------------------------------------------------------
+# prune helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_prune_mng(fake_backend: FakeRemoteBackend) -> RemoteMng:
+    """Return a RemoteMng wired to *fake_backend* for prune tests."""
+    configMng = MagicMock()
+    configMng.get_remotes.return_value = [_REMOTE_FTP]
+    configMng.get_remote.return_value = _REMOTE_FTP
+    configMng.get_default_remote.return_value = None
+
+    mng = RemoteMng(configMng)
+    mng._build_backend = MagicMock(return_value=fake_backend)  # type: ignore[method-assign]
+    return mng
+
+
+def _seed_prune_backend(
+    fake: FakeRemoteBackend,
+    env_name: str,
+    referenced_hashes: list[str],
+    orphan_hashes: list[str],
+) -> None:
+    """Seed *fake* with an index, a snapshot manifest, and raw chunk entries.
+
+    *referenced_hashes* are included in the manifest (and therefore safe).
+    *orphan_hashes* are stored as raw chunks but not referenced by any manifest.
+    """
+    import datetime as _dt
+
+    now = (
+        _dt.datetime.now(_dt.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+
+    # Store all chunks (referenced + orphans) as raw bytes.
+    all_hashes = referenced_hashes + orphan_hashes
+    for h in all_hashes:
+        fake._store[RemoteBackend.chunk_path(h)] = b"x"
+
+    # Build and store snapshot manifest referencing only *referenced_hashes*.
+    from storage.snapshot import (
+        IndexCatalogue,
+        IndexCatalogueEntry,
+        LatestPointer,
+    )
+
+    manifest = SnapshotManifest(
+        snapshot_id="",
+        environment=env_name,
+        shepherd_version="0.0.0-test",
+        created_at=now,
+        chunks=referenced_hashes,
+        chunk_count=len(referenced_hashes),
+        total_size_bytes=len(referenced_hashes) * 1024,
+        stored_size_bytes=len(referenced_hashes) * 512,
+    )
+    manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+    snapshot_id = SnapshotManifest.build_id(now, manifest_bytes)
+    manifest.snapshot_id = snapshot_id
+    manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+
+    fake._store[RemoteBackend.snapshot_path(env_name, snapshot_id)] = (
+        manifest_bytes
+    )
+    pointer = LatestPointer(snapshot_id=snapshot_id, updated_at=now)
+    fake._store[RemoteBackend.latest_path(env_name)] = json.dumps(
+        pointer.to_dict()
+    ).encode()
+
+    # Seed the global index.
+    catalogue = IndexCatalogue(updated_at=now)
+    catalogue.environments[env_name] = IndexCatalogueEntry(
+        latest_snapshot=snapshot_id,
+        snapshot_count=1,
+        last_backup=now,
+        labels=[],
+        total_size_bytes=len(referenced_hashes) * 1024,
+        stored_size_bytes=len(referenced_hashes) * 512,
+    )
+    fake._store[RemoteBackend.index_path()] = json.dumps(
+        catalogue.to_dict(), indent=2
+    ).encode()
+
+
+# ---------------------------------------------------------------------------
+# prune
+# ---------------------------------------------------------------------------
+
+# 64-char hex strings that look like real SHA-256 hashes.
+_HASH_A = "aa" * 32  # referenced
+_HASH_B = "bb" * 32  # orphan
+
+
+@pytest.mark.remote
+def test_prune_no_orphans() -> None:
+    """prune with all chunks referenced deletes nothing."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [])
+    mng = _make_prune_mng(fake)
+
+    mng.prune(remote_name="test-ftp")
+
+    assert RemoteBackend.chunk_path(_HASH_A) in fake._store
+
+
+@pytest.mark.remote
+def test_prune_deletes_orphan_chunks() -> None:
+    """prune removes chunks not referenced by any manifest."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [_HASH_B])
+    mng = _make_prune_mng(fake)
+
+    mng.prune(remote_name="test-ftp")
+
+    assert RemoteBackend.chunk_path(_HASH_A) in fake._store
+    assert RemoteBackend.chunk_path(_HASH_B) not in fake._store
+
+
+@pytest.mark.remote
+def test_prune_dry_run_does_not_delete() -> None:
+    """prune --dry-run reports orphans without deleting them."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [_HASH_B])
+    mng = _make_prune_mng(fake)
+
+    mng.prune(remote_name="test-ftp", dry_run=True)
+
+    # Both chunks must still be present.
+    assert RemoteBackend.chunk_path(_HASH_A) in fake._store
+    assert RemoteBackend.chunk_path(_HASH_B) in fake._store
+
+
+@pytest.mark.remote
+def test_prune_empty_remote() -> None:
+    """prune on a remote with no index and no chunks completes without error."""
+    fake = FakeRemoteBackend()
+    mng = _make_prune_mng(fake)
+
+    mng.prune(remote_name="test-ftp")  # must not raise
+
+
+@pytest.mark.remote
+def test_prune_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:
+    """prune prints a summary line with scanned and orphaned counts."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [_HASH_B])
+    mng = _make_prune_mng(fake)
+
+    mng.prune(remote_name="test-ftp")
+
+    out = capsys.readouterr().out
+    assert "2 chunk(s) scanned" in out
+    assert "1 orphan(s) deleted" in out
