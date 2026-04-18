@@ -11,18 +11,22 @@ prune, and remote/env listing."""
 from __future__ import annotations
 
 import datetime
+import io
 import json
 import os
 import shutil
 import subprocess
+import tarfile
 from copy import deepcopy
 from typing import TYPE_CHECKING, Optional
 
 import click
+import zstandard
 
 from config import ConfigMng
-from config.config import RemoteCfg
+from config.config import EnvironmentCfg, RemoteCfg
 from storage.chunker import Chunker
+from storage.local_cache import LocalChunkCache, NullLocalChunkCache
 from storage.snapshot import (
     IndexCatalogue,
     IndexCatalogueEntry,
@@ -414,6 +418,198 @@ class RemoteMng:
         env_cfg.dehydrated = True
         self.configMng.add_or_set_environment(env_name, env_cfg)
         Util.print(f"Dehydrated '{env_name}': local data removed.")
+
+    # ------------------------------------------------------------------
+    # Pull / hydrate
+    # ------------------------------------------------------------------
+
+    def _build_cache(
+        self, cfg: RemoteCfg
+    ) -> LocalChunkCache | NullLocalChunkCache:
+        """Return the configured local chunk cache, or a no-op cache."""
+        if cfg.local_cache and cfg.local_cache.path:
+            return LocalChunkCache(
+                cache_path=cfg.local_cache.path,
+                max_bytes=cfg.local_cache.max_size_gb * (1 << 30),
+            )
+        return NullLocalChunkCache()
+
+    def _resolve_manifest(
+        self,
+        backend: RemoteBackend,
+        env_name: str,
+        snapshot_id: Optional[str],
+    ) -> SnapshotManifest:
+        """Download and return the snapshot manifest for *env_name*.
+
+        If *snapshot_id* is ``None``, the manifest is resolved via
+        ``latest.json``.
+
+        :raises click.UsageError: If ``latest.json`` or the manifest file is
+            absent on the remote.
+        """
+        if snapshot_id is None:
+            latest_path = RemoteBackend.latest_path(env_name)
+            if not backend.exists(latest_path):
+                raise click.UsageError(
+                    f"No snapshots found for '{env_name}' on the remote."
+                )
+            pointer = LatestPointer.from_dict(
+                json.loads(backend.download(latest_path))
+            )
+            snapshot_id = pointer.snapshot_id
+
+        manifest_path = RemoteBackend.snapshot_path(env_name, snapshot_id)
+        if not backend.exists(manifest_path):
+            raise click.UsageError(
+                f"Snapshot '{snapshot_id}' not found for '{env_name}'."
+            )
+        return SnapshotManifest.from_dict(
+            json.loads(backend.download(manifest_path))
+        )
+
+    def _restore_chunks(
+        self,
+        backend: RemoteBackend,
+        manifest: SnapshotManifest,
+        dest_dir: str,
+        cache: LocalChunkCache | NullLocalChunkCache,
+    ) -> tuple[int, int]:
+        """Download, decompress, and untar all chunks into *dest_dir*.
+
+        :returns: A ``(downloaded, from_cache)`` tuple counting chunks.
+        """
+        dctx = zstandard.ZstdDecompressor()
+        downloaded = 0
+        from_cache = 0
+
+        # Concatenate all decompressed chunks into one in-memory buffer,
+        # then extract as a streaming tar archive.
+        buf = io.BytesIO()
+        for chunk_hash in manifest.chunks:
+            cached = cache.get(chunk_hash)
+            if cached is not None:
+                compressed = cached
+                from_cache += 1
+            else:
+                compressed = backend.download(
+                    RemoteBackend.chunk_path(chunk_hash)
+                )
+                cache.put(chunk_hash, compressed)
+                downloaded += 1
+            buf.write(dctx.decompress(compressed))
+
+        buf.seek(0)
+        os.makedirs(dest_dir, exist_ok=True)
+        with tarfile.open(fileobj=buf, mode="r:") as tf:
+            tf.extractall(path=dest_dir, filter="data")
+
+        return downloaded, from_cache
+
+    def pull(
+        self,
+        env_name: str,
+        remote_name: Optional[str] = None,
+        snapshot_id: Optional[str] = None,
+    ) -> None:
+        """Create a local environment entry from a remote snapshot.
+
+        Downloads all chunks for *env_name* (or the specific *snapshot_id*),
+        reconstructs the tar stream, and untars into the local envs directory.
+        A new :class:`~config.config.EnvironmentCfg` entry is created in the
+        local config with ``tracking_remote`` set and ``dehydrated = False``.
+
+        :param env_name: Tag of the environment to restore.
+        :param remote_name: Remote to pull from, or ``None`` for the default.
+        :param snapshot_id: Specific snapshot to restore, or ``None`` for the
+            latest.
+        :raises click.UsageError: If the env is already registered locally.
+        """
+        if self.configMng.get_environment(env_name) is not None:
+            raise click.UsageError(
+                f"Environment '{env_name}' is already registered locally. "
+                "Use 'env hydrate' to restore its data."
+            )
+
+        remote_cfg = self._resolve_remote(remote_name)
+        cache = self._build_cache(remote_cfg)
+        dest_dir = os.path.join(self.configMng.config.envs_path, env_name)
+
+        with self._build_backend(remote_cfg) as backend:
+            manifest = self._resolve_manifest(backend, env_name, snapshot_id)
+            downloaded, from_cache = self._restore_chunks(
+                backend, manifest, dest_dir, cache
+            )
+
+        env_cfg = EnvironmentCfg(
+            tag=env_name,
+            template="",
+            factory="",
+            services=None,
+            probes=None,
+            networks=None,
+            volumes=None,
+            tracking_remote=remote_cfg.name,
+            dehydrated=False,
+        )
+        self.configMng.add_or_set_environment(env_name, env_cfg)
+
+        Util.print(
+            f"Pulled '{env_name}' ← '{remote_cfg.name}' "
+            f"[{manifest.snapshot_id}]: "
+            f"{downloaded} chunk(s) downloaded, "
+            f"{from_cache} from cache, "
+            f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
+        )
+
+    def hydrate(
+        self,
+        env_name: str,
+        remote_name: Optional[str] = None,
+        snapshot_id: Optional[str] = None,
+    ) -> None:
+        """Restore local data for a dehydrated environment.
+
+        Same chunk-download and untar logic as :meth:`pull`, but the env must
+        already exist in config with ``dehydrated = True``.  After restoration,
+        ``dehydrated`` is cleared to ``False`` and the config is persisted.
+
+        :param env_name: Tag of the dehydrated environment to restore.
+        :param remote_name: Remote to pull from, or ``None`` for the default.
+        :param snapshot_id: Specific snapshot to restore, or ``None`` for the
+            latest.
+        :raises click.UsageError: If the env is unknown or not dehydrated.
+        """
+        env_cfg = self.configMng.get_environment(env_name)
+        if env_cfg is None:
+            raise click.UsageError(
+                f"Environment '{env_name}' not found in local config."
+            )
+        if not env_cfg.dehydrated:
+            raise click.UsageError(
+                f"Environment '{env_name}' is not dehydrated."
+            )
+
+        remote_cfg = self._resolve_remote(remote_name)
+        cache = self._build_cache(remote_cfg)
+        dest_dir = os.path.join(self.configMng.config.envs_path, env_name)
+
+        with self._build_backend(remote_cfg) as backend:
+            manifest = self._resolve_manifest(backend, env_name, snapshot_id)
+            downloaded, from_cache = self._restore_chunks(
+                backend, manifest, dest_dir, cache
+            )
+
+        env_cfg.dehydrated = False
+        self.configMng.add_or_set_environment(env_name, env_cfg)
+
+        Util.print(
+            f"Hydrated '{env_name}' ← '{remote_cfg.name}' "
+            f"[{manifest.snapshot_id}]: "
+            f"{downloaded} chunk(s) downloaded, "
+            f"{from_cache} from cache, "
+            f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
+        )
 
     def _delete_dir(self, path: str) -> None:
         """Delete *path* recursively; retry under sudo on PermissionError."""

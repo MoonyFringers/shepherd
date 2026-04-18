@@ -594,6 +594,62 @@ def dehydrate_env(shepherd: ShepherdMng, env_tag: str) -> None:
     shepherd.remoteMng.dehydrate(env_tag, shepherd.environmentMng)
 
 
+@env.command(name="pull")
+@click.argument("env_tag")
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Remote to pull from (defaults to the configured default).",
+)
+@click.option(
+    "--snapshot-id",
+    default=None,
+    help="Snapshot ID to restore (defaults to the latest).",
+)
+@click.pass_obj
+def pull_env(
+    shepherd: ShepherdMng,
+    env_tag: str,
+    remote_name: Optional[str],
+    snapshot_id: Optional[str],
+) -> None:
+    """Download ENV_TAG from a remote snapshot and register it locally."""
+    shepherd.remoteMng.pull(
+        env_name=env_tag,
+        remote_name=remote_name,
+        snapshot_id=snapshot_id,
+    )
+
+
+@env.command(name="hydrate")
+@click.argument("env_tag")
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Remote to pull from (defaults to the configured default).",
+)
+@click.option(
+    "--snapshot-id",
+    default=None,
+    help="Snapshot ID to restore (defaults to the latest).",
+)
+@click.pass_obj
+def hydrate_env(
+    shepherd: ShepherdMng,
+    env_tag: str,
+    remote_name: Optional[str],
+    snapshot_id: Optional[str],
+) -> None:
+    """Restore local data for the dehydrated ENV_TAG from a remote snapshot."""
+    shepherd.remoteMng.hydrate(
+        env_name=env_tag,
+        remote_name=remote_name,
+        snapshot_id=snapshot_id,
+    )
+
+
 # =====================================================
 # SVC
 # =====================================================
