@@ -1096,5 +1096,26 @@ def get_remote_env(
     shepherd.remoteMng.display_snapshots(env_name, remote_name)
 
 
+@remote.command(name="prune")
+@click.option(
+    "--remote",
+    "remote_name",
+    default=None,
+    help="Remote name (uses default if omitted).",
+)
+@click.option(
+    "--dry-run",
+    is_flag=True,
+    default=False,
+    help="Report orphan chunks without deleting them.",
+)
+@click.pass_obj
+def prune_remote(
+    shepherd: ShepherdMng, remote_name: Optional[str], dry_run: bool
+) -> None:
+    """Delete orphan chunks on a remote."""
+    shepherd.remoteMng.prune(remote_name, dry_run=dry_run)
+
+
 if __name__ == "__main__":
     cli(obj=None)

@@ -46,6 +46,10 @@ class CompletionRemoteMng(AbstractCompletionMng):
                 return self._complete_remote_option(args[2:])
             case "get":
                 return self._complete_get(args[2:])
+            case "prune":
+                # No positional arguments; --remote and --dry-run are served
+                # by the static CONTEXT_OPTIONS table in CompletionMng.
+                return []
             case _:
                 # "add" and "list" have no dynamic positional completions —
                 # their flags are served entirely by the static CONTEXT_OPTIONS

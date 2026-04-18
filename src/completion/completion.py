@@ -58,7 +58,7 @@ class CompletionMng(AbstractCompletionMng):
         ],
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
-        "remote": ["add", "list", "delete", "envs", "get"],
+        "remote": ["add", "list", "delete", "envs", "get", "prune"],
     }
     SCOPE_VERBS = CORE_SCOPE_VERBS
 
@@ -159,6 +159,10 @@ class CompletionMng(AbstractCompletionMng):
         ),
         ("remote", "get"): (
             OptionSpec(tokens=("--remote",), takes_value=True),
+        ),
+        ("remote", "prune"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+            OptionSpec(tokens=("--dry-run",)),
         ),
     }
 
