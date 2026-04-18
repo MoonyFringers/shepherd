@@ -32,6 +32,7 @@ from config import (
     ServiceTemplateRefCfg,
     parse_plugin_descriptor,
 )
+from config.config import RemoteCfg
 from environment import EnvironmentFactory, EnvironmentMng
 from plugin.api import (
     PluginCommandSpec,
@@ -1016,7 +1017,9 @@ class PluginRuntimeMng:
         """Return whether the remote backend provider can be materialized."""
         return isinstance(provider, RemoteBackend) or callable(provider)
 
-    def build_remote_backend(self, type_id: str) -> RemoteBackend | None:
+    def build_remote_backend(
+        self, type_id: str, cfg: RemoteCfg
+    ) -> RemoteBackend | None:
         """Return a plugin-owned RemoteBackend for *type_id*, or None."""
         spec = self.registry.remote_backends.get(type_id)
         if spec is None:
@@ -1025,7 +1028,15 @@ class PluginRuntimeMng:
         if isinstance(provider, RemoteBackend):
             return provider
         if callable(provider):
-            return provider()
+            try:
+                return provider(cfg)
+            except TypeError as exc:
+                raise ValueError(
+                    f"Plugin remote backend '{type_id}' provider raised "
+                    f"TypeError when called with RemoteCfg. "
+                    f"Ensure the provider accepts a single RemoteCfg "
+                    f"argument: {exc}"
+                ) from exc
         raise ValueError(
             f"Plugin remote backend '{type_id}' provider is invalid."
         )

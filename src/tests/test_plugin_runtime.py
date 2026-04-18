@@ -18,6 +18,7 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
+from config.config import RemoteCfg
 from plugin import PluginRuntimeMng
 from shepctl import ShepherdMng, cli
 
@@ -1030,10 +1031,16 @@ def test_plugin_remote_backend_lands_in_registry(
     registry = shepherd.pluginRuntimeMng.registry
     assert "fake-store" in registry.remote_backends
 
-    backend = shepherd.pluginRuntimeMng.build_remote_backend("fake-store")
+    fake_cfg = RemoteCfg(name="fake-store", type="fake-store")
+    backend = shepherd.pluginRuntimeMng.build_remote_backend(
+        "fake-store", fake_cfg
+    )
     assert isinstance(backend, RemoteBackend)
 
-    assert shepherd.pluginRuntimeMng.build_remote_backend("unknown") is None
+    assert (
+        shepherd.pluginRuntimeMng.build_remote_backend("unknown", fake_cfg)
+        is None
+    )
 
 
 @pytest.mark.shpd
@@ -1046,9 +1053,11 @@ def test_plugin_remote_backend_rejects_core_type_id(
     _install_fixture_plugin(
         shpd_path,
         main_content=(
+            "from config.config import RemoteCfg\n"
             "from remote import RemoteBackend\n"
             "from plugin import PluginRemoteBackendSpec, ShepherdPlugin\n\n"
             "class FakeBackend(RemoteBackend):\n"
+            "    def __init__(self, cfg: RemoteCfg) -> None: pass\n"
             "    def exists(self, p): return False\n"
             "    def upload(self, p, d): pass\n"
             "    def download(self, p): return b''\n"

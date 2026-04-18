@@ -91,6 +91,7 @@ class ShepherdMng:
             self.pluginRuntimeMng.attach_managers(
                 self.environmentMng, self.serviceMng, self.remoteMng
             )
+        self.remoteMng.attach_plugin_runtime(self.pluginRuntimeMng)
         self.configMng.set_plugin_runtime_mng(self.pluginRuntimeMng)
         self.completionMng = CompletionMng(
             self.cli_flags,

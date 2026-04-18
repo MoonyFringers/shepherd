@@ -21,6 +21,7 @@ from typing import (
 import click
 
 from config import ConfigMng
+from config.config import RemoteCfg
 from environment import EnvironmentFactory
 from plugin.context import PluginContext
 from remote import RemoteBackend
@@ -85,13 +86,17 @@ instance.  A pre-built instance or a builder callable with the same
 signature are also accepted.
 """
 
-RemoteBackendProvider: TypeAlias = RemoteBackend | Callable[[], RemoteBackend]
+RemoteBackendProvider: TypeAlias = (
+    RemoteBackend | Callable[[RemoteCfg], RemoteBackend]
+)
 """
 Accepted value for :attr:`PluginRemoteBackendSpec.provider`.
 
 Pass the **class** of your ``RemoteBackend`` subclass — the runtime calls
-it with no arguments to produce the instance.  A pre-built instance is
-also accepted.
+it with the resolved :class:`~config.config.RemoteCfg` to produce the
+instance.  Read plugin-specific connection parameters from
+``cfg.properties``.  A pre-built ``RemoteBackend`` instance is also
+accepted (no factory call is made in that case).
 """
 
 
@@ -163,10 +168,10 @@ class PluginRemoteBackendSpec:
     transport (e.g. ``"s3"`` or ``"azure-blob"``).  It must not collide
     with the core built-ins ``"ftp"`` and ``"sftp"``.
 
-    ``provider`` must satisfy :data:`RemoteBackendProvider` — either a
-    pre-built ``RemoteBackend`` instance or the **class** (zero-argument
-    factory callable) of your ``RemoteBackend`` subclass.  The runtime
-    calls it with no arguments to produce the instance on demand.
+    ``provider`` must satisfy :data:`RemoteBackendProvider` — either the
+    **class** of your ``RemoteBackend`` subclass (called with the resolved
+    ``RemoteCfg``) or a pre-built instance.  Read plugin-specific
+    connection parameters from ``cfg.properties``.
     """
 
     type_id: str

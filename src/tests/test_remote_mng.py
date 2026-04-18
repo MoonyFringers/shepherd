@@ -1403,3 +1403,51 @@ def test_prune_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:
     out = capsys.readouterr().out
     assert "2 chunk(s) scanned" in out
     assert "1 orphan(s) deleted" in out
+
+
+# ---------------------------------------------------------------------------
+# Plugin backend dispatch
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_build_backend_dispatches_plugin_registered_type() -> None:
+    """_build_backend returns the backend produced by a plugin factory."""
+    fake = FakeRemoteBackend()
+    plugin_runtime = MagicMock()
+    plugin_runtime.build_remote_backend.return_value = fake
+
+    cfg = RemoteCfg(
+        name="plugin-remote",
+        type="fake-store",
+        host="h",
+        user="u",
+        root_path="/r",
+    )
+    mng = RemoteMng(MagicMock())
+    mng.attach_plugin_runtime(plugin_runtime)
+
+    assert mng._build_backend(cfg) is fake
+    plugin_runtime.build_remote_backend.assert_called_once_with(
+        "fake-store", cfg
+    )
+
+
+@pytest.mark.shpd
+def test_build_backend_unknown_type_raises() -> None:
+    """_build_backend raises UsageError when no plugin matches the type."""
+    plugin_runtime = MagicMock()
+    plugin_runtime.build_remote_backend.return_value = None
+
+    cfg = RemoteCfg(
+        name="bad-remote",
+        type="no-such-type",
+        host="h",
+        user="u",
+        root_path="/r",
+    )
+    mng = RemoteMng(MagicMock())
+    mng.attach_plugin_runtime(plugin_runtime)
+
+    with pytest.raises(click.UsageError):
+        mng._build_backend(cfg)
