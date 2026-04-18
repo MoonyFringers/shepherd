@@ -1058,6 +1058,48 @@ def test_completion_push_env_flags(
 
 
 @pytest.mark.compl
+def test_completion_pull_env_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """'env pull <tag>' completes available option flags."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["env", "pull", "test-1", "-"]
+    )
+    assert "--remote" in completions
+    assert "--snapshot-id" in completions
+
+
+@pytest.mark.compl
+def test_completion_hydrate_env_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """'env hydrate <tag>' completes available option flags."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["env", "hydrate", "test-3", "-"]
+    )
+    assert "--remote" in completions
+    assert "--snapshot-id" in completions
+
+
+@pytest.mark.compl
 def test_completion_dehydrate_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -1092,8 +1134,11 @@ def test_completion_pull_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "pull"])
-    # pull has no local-env completion (env does not exist locally yet).
-    assert completions == [], "Expected pull completion to be empty"
+    # pull has no local-env completion (env does not exist locally yet),
+    # only option flags are suggested as fallback.
+    assert "test-1" not in completions
+    assert "test-2" not in completions
+    assert "test-3" not in completions
 
 
 @pytest.mark.compl

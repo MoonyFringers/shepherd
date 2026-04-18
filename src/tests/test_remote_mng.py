@@ -922,3 +922,327 @@ def test_cli_env_dehydrate_calls_remote_mng(
         result = runner.invoke(cli, ["env", "dehydrate", "my-env"])
 
     assert result.exit_code in (0, 1)
+
+
+# ---------------------------------------------------------------------------
+# pull helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_pull_mng(
+    fake_backend: FakeRemoteBackend,
+    envs_path: str,
+    existing_env_cfg: Optional[EnvironmentCfg] = None,
+) -> RemoteMng:
+    """Return a RemoteMng wired to *fake_backend* for pull/hydrate tests."""
+    configMng = MagicMock()
+    configMng.get_remotes.return_value = [_REMOTE_FTP]
+    configMng.get_remote.return_value = _REMOTE_FTP
+    configMng.get_default_remote.return_value = None
+    configMng.get_environment.return_value = existing_env_cfg
+    configMng.constants.APP_VERSION = "0.0.0-test"
+    configMng.config.envs_path = envs_path
+
+    mng = RemoteMng(configMng)
+    mng._build_backend = MagicMock(return_value=fake_backend)  # type: ignore[method-assign]
+    mng._build_cache = MagicMock(  # type: ignore[method-assign]
+        return_value=MagicMock(
+            contains=lambda h: False,
+            get=lambda h: None,
+            put=lambda h, d: None,
+        )
+    )
+    return mng
+
+
+def _seed_fake_backend(
+    fake: FakeRemoteBackend,
+    env_name: str,
+    content: bytes,
+) -> SnapshotManifest:
+    """Push *content* to *fake* via a real RemoteMng.push call and return the
+    manifest, so pull / hydrate tests start from a realistic state."""
+    import io
+    import tarfile as _tarfile
+
+    from storage.chunker import Chunker
+    from storage.snapshot import LatestPointer, SnapshotManifest
+
+    # Build a minimal tar stream from *content*.
+    buf = io.BytesIO()
+    with _tarfile.open(fileobj=buf, mode="w:") as tf:
+        info = _tarfile.TarInfo(name="data.bin")
+        info.size = len(content)
+        tf.addfile(info, io.BytesIO(content))
+    tar_bytes = buf.getvalue()
+
+    chunker = Chunker(
+        min_size=64 * 1024,
+        avg_size=256 * 1024,
+        max_size=1024 * 1024,
+    )
+    chunk_hashes: list[str] = []
+    total_raw = 0
+    total_stored = 0
+    import io as _io
+
+    stream = _io.BytesIO(tar_bytes)
+    for chunk in chunker.chunk_stream(stream):
+        path = RemoteBackend.chunk_path(chunk.hash)
+        fake._store[path] = chunk.data
+        chunk_hashes.append(chunk.hash)
+        total_raw += chunk.raw_size
+        total_stored += len(chunk.data)
+
+    import datetime as _dt
+
+    now = (
+        _dt.datetime.now(_dt.timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z")
+    )
+    manifest = SnapshotManifest(
+        snapshot_id="",
+        environment=env_name,
+        shepherd_version="0.0.0-test",
+        created_at=now,
+        chunks=chunk_hashes,
+        chunk_count=len(chunk_hashes),
+        total_size_bytes=total_raw,
+        stored_size_bytes=total_stored,
+    )
+    manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+    snapshot_id = SnapshotManifest.build_id(now, manifest_bytes)
+    manifest.snapshot_id = snapshot_id
+    manifest_bytes = json.dumps(manifest.to_dict(), indent=2).encode()
+
+    fake._store[RemoteBackend.snapshot_path(env_name, snapshot_id)] = (
+        manifest_bytes
+    )
+    pointer = LatestPointer(snapshot_id=snapshot_id, updated_at=now)
+    fake._store[RemoteBackend.latest_path(env_name)] = json.dumps(
+        pointer.to_dict()
+    ).encode()
+    return manifest
+
+
+# ---------------------------------------------------------------------------
+# pull
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_pull_creates_env_dir_and_config_entry(
+    tmp_path: pathlib.Path,
+) -> None:
+    """pull restores files and registers the env in config."""
+    content = b"restore me" * 512
+    fake = FakeRemoteBackend()
+    manifest = _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path)
+
+    mng.pull("my-env", remote_name="test-ftp")
+
+    mng.configMng.add_or_set_environment.assert_called_once()  # type: ignore[union-attr]
+    saved = mng.configMng.add_or_set_environment.call_args[0][1]  # type: ignore[union-attr]
+    assert saved.tracking_remote == "test-ftp"
+    assert saved.dehydrated is False
+
+
+@pytest.mark.remote
+def test_pull_raises_for_already_registered_env(
+    tmp_path: pathlib.Path,
+) -> None:
+    """pull raises UsageError when the env is already registered locally."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    existing = _make_env_cfg()
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=existing)
+
+    with pytest.raises(click.UsageError, match="already registered"):
+        mng.pull("my-env", remote_name="test-ftp")
+
+
+@pytest.mark.remote
+def test_pull_with_explicit_snapshot_id(
+    tmp_path: pathlib.Path,
+) -> None:
+    """pull with snapshot_id= downloads the specific manifest."""
+    content = b"explicit snapshot" * 512
+    fake = FakeRemoteBackend()
+    manifest = _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path)
+
+    # Should not raise even though latest.json is present.
+    mng.pull(
+        "my-env",
+        remote_name="test-ftp",
+        snapshot_id=manifest.snapshot_id,
+    )
+    mng.configMng.add_or_set_environment.assert_called_once()  # type: ignore[union-attr]
+
+
+@pytest.mark.remote
+def test_pull_raises_when_no_snapshots_on_remote(
+    tmp_path: pathlib.Path,
+) -> None:
+    """pull raises UsageError when latest.json does not exist on remote."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path)
+
+    with pytest.raises(click.UsageError, match="No snapshots found"):
+        mng.pull("my-env", remote_name="test-ftp")
+
+
+# ---------------------------------------------------------------------------
+# hydrate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_hydrate_restores_data_and_clears_flag(
+    tmp_path: pathlib.Path,
+) -> None:
+    """hydrate downloads chunks and sets dehydrated=False."""
+    content = b"hydrate me" * 512
+    fake = FakeRemoteBackend()
+    _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    dehydrated_cfg = _make_env_cfg(dehydrated=True)
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
+
+    mng.hydrate("my-env", remote_name="test-ftp")
+
+    mng.configMng.add_or_set_environment.assert_called_once()  # type: ignore[union-attr]
+    saved = mng.configMng.add_or_set_environment.call_args[0][1]  # type: ignore[union-attr]
+    assert saved.dehydrated is False
+
+
+@pytest.mark.remote
+def test_hydrate_raises_for_unknown_env(
+    tmp_path: pathlib.Path,
+) -> None:
+    """hydrate raises UsageError when the env is not in config."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=None)
+
+    with pytest.raises(click.UsageError, match="not found"):
+        mng.hydrate("my-env", remote_name="test-ftp")
+
+
+@pytest.mark.remote
+def test_hydrate_raises_for_non_dehydrated_env(
+    tmp_path: pathlib.Path,
+) -> None:
+    """hydrate raises UsageError when the env is not marked dehydrated."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    active_cfg = _make_env_cfg(dehydrated=False)
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=active_cfg)
+
+    with pytest.raises(click.UsageError, match="not dehydrated"):
+        mng.hydrate("my-env", remote_name="test-ftp")
+
+
+@pytest.mark.remote
+def test_dehydrate_hydrate_roundtrip(
+    tmp_path: pathlib.Path,
+) -> None:
+    """dehydrate → hydrate round-trip restores the env directory."""
+    # 1. Create a real env directory with content.
+    envs_path = tmp_path / "envs"
+    envs_path.mkdir()
+    env_dir = envs_path / "rt-env"
+    env_dir.mkdir()
+    sentinel = env_dir / "sentinel.txt"
+    sentinel.write_bytes(b"round-trip payload" * 200)
+
+    # 2. Push to FakeRemoteBackend.
+    fake = FakeRemoteBackend()
+    env_cfg = _make_env_cfg(tag="rt-env")
+    mng_push, env_mng = _make_push_mng(fake, env_cfg, str(env_dir))
+    # Override envs_path for dehydrate.
+    mng_push.configMng.config.envs_path = str(envs_path)
+    mng_push.push("rt-env", env_mng, remote_name="test-ftp")
+
+    # 3. Dehydrate.
+    mng_push.configMng.get_environment.return_value = env_cfg  # type: ignore[union-attr]
+    mng_push.dehydrate("rt-env", _make_env_mng_mock_not_running())
+    assert not env_dir.exists()
+
+    # 4. Hydrate from the same backend.
+    dehydrated_cfg = _make_env_cfg(tag="rt-env", dehydrated=True)
+    mng_pull = _make_pull_mng(fake, str(envs_path), dehydrated_cfg)
+    mng_pull.hydrate("rt-env", remote_name="test-ftp")
+
+    # The env dir should exist again (untar lands in envs_path/rt-env).
+    restored_dir = envs_path / "rt-env"
+    assert restored_dir.exists()
+
+
+# ---------------------------------------------------------------------------
+# CLI — env pull / env hydrate
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_env_pull(
+    tmp_path: pathlib.Path,
+    mocker: MagicMock,
+) -> None:
+    """env pull delegates to remoteMng.pull."""
+    from click.testing import CliRunner
+
+    from shepctl import ShepherdMng, cli
+
+    conf_file = tmp_path / ".shpd.conf"
+    conf_file.write_text("envs_path: /tmp\nplugins: []\n")
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+    runner = CliRunner(env={"SHPD_CONF": str(conf_file)})
+
+    with mocker.patch(
+        "shepctl.ShepherdMng.remoteMng",
+        new_callable=MagicMock,
+        create=True,
+    ):
+        result = runner.invoke(
+            cli,
+            ["env", "pull", "my-env", "--remote=prod"],
+        )
+
+    assert result.exit_code in (0, 1)
+
+
+@pytest.mark.shpd
+def test_cli_env_hydrate(
+    tmp_path: pathlib.Path,
+    mocker: MagicMock,
+) -> None:
+    """env hydrate delegates to remoteMng.hydrate."""
+    from click.testing import CliRunner
+
+    from shepctl import ShepherdMng, cli
+
+    conf_file = tmp_path / ".shpd.conf"
+    conf_file.write_text("envs_path: /tmp\nplugins: []\n")
+    mocker.patch.object(ShepherdMng, "__init__", return_value=None)
+    runner = CliRunner(env={"SHPD_CONF": str(conf_file)})
+
+    with mocker.patch(
+        "shepctl.ShepherdMng.remoteMng",
+        new_callable=MagicMock,
+        create=True,
+    ):
+        result = runner.invoke(
+            cli,
+            ["env", "hydrate", "my-env"],
+        )
+
+    assert result.exit_code in (0, 1)

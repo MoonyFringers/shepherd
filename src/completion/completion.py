@@ -134,6 +134,14 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--set-tracking-remote",)),
             OptionSpec(tokens=("--labels",), takes_value=True),
         ),
+        ("env", "pull"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+            OptionSpec(tokens=("--snapshot-id",), takes_value=True),
+        ),
+        ("env", "hydrate"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+            OptionSpec(tokens=("--snapshot-id",), takes_value=True),
+        ),
         ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
         ("remote", "add"): (
             OptionSpec(tokens=("--ftp",)),
