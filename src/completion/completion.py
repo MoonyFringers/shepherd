@@ -51,6 +51,10 @@ class CompletionMng(AbstractCompletionMng):
             "halt",
             "reload",
             "status",
+            "push",
+            "dehydrate",
+            "pull",
+            "hydrate",
         ],
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
@@ -124,6 +128,11 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("-w", "--watch")),
             OptionSpec(tokens=("--show-commands",)),
             OptionSpec(tokens=("--show-commands-limit",), takes_value=True),
+        ),
+        ("env", "push"): (
+            OptionSpec(tokens=("--remote",), takes_value=True),
+            OptionSpec(tokens=("--set-tracking-remote",)),
+            OptionSpec(tokens=("--labels",), takes_value=True),
         ),
         ("plugin", "install"): (OptionSpec(tokens=("--force",)),),
         ("remote", "add"): (

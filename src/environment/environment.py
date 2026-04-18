@@ -318,6 +318,21 @@ class Environment(ABC):
         """Get environment status."""
         return self.status_impl()
 
+    def is_running(self) -> bool:
+        """Return ``True`` if any service in this environment is running.
+
+        Delegates to :meth:`status_impl` so that the check goes through the
+        concrete backend (e.g. ``docker compose ps``) rather than relying on
+        the potentially-stale ``rendered_config`` field in the config.
+        """
+        try:
+            services = self.status_impl()
+        except Exception:
+            return False
+        return any(
+            str(svc.get("State", "")).lower() == "running" for svc in services
+        )
+
     def on_start_cycle_begin(self) -> None:
         """Hook called once at the beginning of environment start."""
         return None
@@ -787,7 +802,7 @@ class EnvironmentMng:
     def reload_env(self, envCfg: EnvironmentCfg, watch: bool = False):
         """Reload an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )
@@ -857,7 +872,7 @@ class EnvironmentMng:
         """Check probes."""
         env = self.get_environment_from_cfg(envCfg)
 
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )
@@ -919,7 +934,7 @@ class EnvironmentMng:
     ) -> None:
         """Continuously run probes and render results until interrupted."""
         env = self.get_environment_from_cfg(envCfg)
-        if not env.envCfg.status.rendered_config:
+        if not env.is_running():
             Util.print_error_and_die(
                 f"Environment '{env.envCfg.tag}' is not started."
             )

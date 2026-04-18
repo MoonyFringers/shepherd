@@ -401,7 +401,11 @@ def test_completion_clone_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "clone"])
-    assert completions == ["test-1", "test-2"], "Expected env clone completion"
+    assert completions == [
+        "test-1",
+        "test-2",
+        "test-3",
+    ], "Expected env clone completion"
 
 
 @pytest.mark.compl
@@ -437,7 +441,11 @@ def test_completion_rename_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "rename"])
-    assert completions == ["test-1", "test-2"], "Expected env rename completion"
+    assert completions == [
+        "test-1",
+        "test-2",
+        "test-3",
+    ], "Expected env rename completion"
 
 
 @pytest.mark.compl
@@ -456,6 +464,7 @@ def test_completion_checkout_env(
     completions = sm.completionMng.get_completions(["env", "checkout"])
     assert completions == [
         "test-2",
+        "test-3",
     ], "Expected env checkout completion"
 
 
@@ -495,6 +504,7 @@ def test_completion_delete_env(
     assert completions == [
         "test-1",
         "test-2",
+        "test-3",
     ], "Expected env delete completion"
 
 
@@ -829,6 +839,7 @@ def test_completion_get_env_oyaml(
     assert completions == [
         "test-1",
         "test-2",
+        "test-3",
     ], "Expected get env -oyaml completion"
 
 
@@ -846,7 +857,11 @@ def test_completion_get_env(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "get"])
-    assert completions == ["test-1", "test-2"], "Expected get env completion"
+    assert completions == [
+        "test-1",
+        "test-2",
+        "test-3",
+    ], "Expected get env completion"
 
 
 @pytest.mark.compl
@@ -1000,6 +1015,108 @@ def test_completion_status_env(
 
 
 @pytest.mark.compl
+def test_completion_push_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["env", "push"])
+    # Only non-dehydrated envs (test-1, test-2); test-3 is dehydrated.
+    assert completions == [
+        "test-1",
+        "test-2",
+    ], "Expected push completion to exclude dehydrated envs"
+
+
+@pytest.mark.compl
+def test_completion_push_env_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """'env push <tag>' completes available option flags."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(
+        ["env", "push", "test-1", "-"]
+    )
+    assert "--remote" in completions
+    assert "--set-tracking-remote" in completions
+    assert "--labels" in completions
+
+
+@pytest.mark.compl
+def test_completion_dehydrate_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["env", "dehydrate"])
+    # Only non-dehydrated envs; test-3 is already dehydrated.
+    assert completions == [
+        "test-1",
+        "test-2",
+    ], "Expected dehydrate completion to exclude dehydrated envs"
+
+
+@pytest.mark.compl
+def test_completion_pull_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["env", "pull"])
+    # pull has no local-env completion (env does not exist locally yet).
+    assert completions == [], "Expected pull completion to be empty"
+
+
+@pytest.mark.compl
+def test_completion_hydrate_env(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("completion", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    sm = ShepherdMng()
+    completions = sm.completionMng.get_completions(["env", "hydrate"])
+    # Only dehydrated envs; test-3 is the only one.
+    assert completions == [
+        "test-3",
+    ], "Expected hydrate completion to include only dehydrated envs"
+
+
+@pytest.mark.compl
 def test_completion_get_env_shows_tags_only(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -1013,7 +1130,11 @@ def test_completion_get_env_shows_tags_only(
 
     sm = ShepherdMng()
     completions = sm.completionMng.get_completions(["env", "get"])
-    assert completions == ["test-1", "test-2"], "Expected get env tags only"
+    assert completions == [
+        "test-1",
+        "test-2",
+        "test-3",
+    ], "Expected get env tags only"
 
 
 @pytest.mark.compl
@@ -1035,6 +1156,7 @@ def test_completion_get_env_after_output_value_keeps_env_tags(
     assert completions == [
         "test-1",
         "test-2",
+        "test-3",
     ], "Expected get env tags after output value"
 
 

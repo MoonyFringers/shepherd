@@ -53,6 +53,14 @@ class CompletionEnvMng(AbstractCompletionMng):
                 return self.get_reload_completions(args[2:])
             case "status":
                 return self.get_status_completions(args[2:])
+            case "push":
+                return self.get_push_completions(args[2:])
+            case "dehydrate":
+                return self.get_dehydrate_completions(args[2:])
+            case "pull":
+                return self.get_pull_completions(args[2:])
+            case "hydrate":
+                return self.get_hydrate_completions(args[2:])
             case _:
                 return []
 
@@ -117,4 +125,34 @@ class CompletionEnvMng(AbstractCompletionMng):
         return []
 
     def get_status_completions(self, args: list[str]) -> list[str]:
+        return []
+
+    def get_push_completions(self, args: list[str]) -> list[str]:
+        if not self.is_src_env_tag_chosen(args):
+            return [
+                env.tag
+                for env in self.configMng.get_environments()
+                if not env.dehydrated
+            ]
+        return []
+
+    def get_dehydrate_completions(self, args: list[str]) -> list[str]:
+        if not self.is_src_env_tag_chosen(args):
+            return [
+                env.tag
+                for env in self.configMng.get_environments()
+                if not env.dehydrated
+            ]
+        return []
+
+    def get_pull_completions(self, args: list[str]) -> list[str]:
+        return []
+
+    def get_hydrate_completions(self, args: list[str]) -> list[str]:
+        if not self.is_src_env_tag_chosen(args):
+            return [
+                env.tag
+                for env in self.configMng.get_environments()
+                if env.dehydrated
+            ]
         return []

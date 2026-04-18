@@ -229,3 +229,14 @@ envs:
     status:
       active: false
       rendered_config: null
+  - template: default
+    factory: docker-compose
+    tag: test-3
+    services: []
+    probes: []
+    networks: []
+    volumes: []
+    dehydrated: true
+    status:
+      active: false
+      rendered_config: null
