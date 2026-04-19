@@ -238,14 +238,14 @@ class PluginContext:
 
     Shepherd creates one ``PluginContext`` per plugin and passes it to
     :meth:`ShepherdPlugin.__init__`.  Plugin code stores it and accesses
-    managers through the three typed view properties.
+    managers through the four typed view properties.
 
     ``config`` is always populated.
 
     ``environment``, ``service``, and ``remote`` are ``None`` during the Click
     command resolution phase (tab completion) and are set to the live managers
     once the full CLI bootstrap completes.  Plugin command handlers run after
-    the full bootstrap, so by the time any handler executes, all three fields
+    the full bootstrap, so by the time any handler executes, all four fields
     are available.
     """
 

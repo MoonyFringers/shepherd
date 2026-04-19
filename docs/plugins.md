@@ -108,6 +108,7 @@ capabilities:
   completion: true
   env_factories: true
   svc_factories: true
+  remote_backends: true
 default_config:
   region: eu-west-1
 depends_on:
@@ -374,6 +375,7 @@ The loader builds in-memory registries for:
 - environment factories
 - service factories
 - environment template fragments
+- remote backend transports
 
 Template, factory, and fragment ids are canonicalized under the plugin
 namespace at registration time:
@@ -451,7 +453,7 @@ class MyPlugin(ShepherdPlugin):
         # and in any Click command handler that closes over it.
 ```
 
-`PluginContext` has three fields:
+`PluginContext` has four fields:
 
 - `config: PluginConfigView` — always set; provides read access to
   environments, templates, and plugin metadata.
@@ -459,9 +461,11 @@ class MyPlugin(ShepherdPlugin):
   bootstrap; exposes environment lifecycle operations.
 - `service: PluginServiceView | None` — set after the full CLI bootstrap;
   exposes service operations.
+- `remote: PluginRemoteView | None` — set after the full CLI bootstrap;
+  exposes lightweight index queries for configured remotes.
 
-`environment` and `service` are `None` only during the Click command
-resolution phase (tab completion).  By the time any command handler
+`environment`, `service`, and `remote` are `None` only during the Click
+command resolution phase (tab completion).  By the time any command handler
 executes they are always populated.
 
 ### Available operations
@@ -478,7 +482,9 @@ executes they are always populated.
 `start_svc`, `stop_svc`, `reload_svc`, `logs_svc`, `shell_svc`,
 `render_svc`.
 
-All three are `@runtime_checkable` Protocols satisfied structurally by the
+`PluginRemoteView` exposes: `list_envs`, `list_snapshots`.
+
+All four are `@runtime_checkable` Protocols satisfied structurally by the
 concrete managers — plugin authors can mock them in unit tests without
 any Shepherd-specific fixtures.
 
@@ -489,12 +495,13 @@ below are importable from the `plugin` package.
 
 ### Spec types
 
-| Class                  | Purpose                                         |
-|------------------------|-------------------------------------------------|
-| `PluginCommandSpec`    | Declares a scope + verb + Click command         |
-| `PluginCompletionSpec` | Declares a completion provider for a scope      |
+| Class | Purpose |
+| --- | --- |
+| `PluginCommandSpec` | Declares a scope + verb + Click command |
+| `PluginCompletionSpec` | Declares a completion provider for a scope |
 | `PluginEnvFactorySpec` | Declares an environment factory with a local id |
-| `PluginSvcFactorySpec` | Declares a service factory with a local id      |
+| `PluginSvcFactorySpec` | Declares a service factory with a local id |
+| `PluginRemoteBackendSpec` | Declares a remote transport with a `type_id` |
 
 ### Provider type aliases
 
@@ -512,6 +519,11 @@ below are importable from the `plugin` package.
   **or**
   `Callable[[ConfigMng, ServiceFactory, dict | None],
             EnvironmentFactory]`
+
+`RemoteBackendProvider`
+: `RemoteBackend` instance
+  **or**
+  `Callable[[RemoteCfg], RemoteBackend]`
 
 The most common pattern is to pass the **class** of your factory as the
 provider.  Shepherd instantiates it at runtime with the correct arguments:
@@ -539,11 +551,180 @@ from plugin import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginEnvFactorySpec,
+    PluginRemoteBackendSpec,
+    PluginRemoteView,
     PluginSvcFactorySpec,
+    RemoteBackendProvider,
     ShepherdPlugin,
     SvcFactoryProvider,
 )
 ```
+
+## Plugin-Contributed Remote Backends
+
+Plugins can register new remote storage transports — S3, Azure Blob, GCS,
+or any object store with read/write/list semantics — without modifying core
+Shepherd code. For the built-in FTP and SFTP transports, their configuration
+reference and the remote storage layout are documented in
+[docs/remote.md](remote.md).
+
+`RemoteMng._build_backend()` checks the built-in FTP and SFTP transports
+first, then delegates to the plugin registry.  The dispatch pattern is
+identical to the one used for environment and service factories.
+
+### Descriptor capability flag
+
+Declare `remote_backends: true` under `capabilities` in your `plugin.yaml`:
+
+```yaml
+capabilities:
+  remote_backends: true
+```
+
+### Implementing `RemoteBackend`
+
+Subclass `RemoteBackend` (importable from `remote`) and implement its six
+abstract methods:
+
+- **`exists(path: str) -> bool`** — check whether *path* exists.
+- **`upload(path: str, data: bytes) -> None`** — write *data* to *path*,
+  creating parents as needed.
+- **`download(path: str) -> bytes`** — return the full contents of *path*.
+- **`list_prefix(prefix: str) -> list[str]`** — return the leaf names of
+  all objects whose key starts with *prefix/*.
+  Example: `list_prefix("chunks/ab")` → `["ab3f1c9d...", "ab7e2a11..."]`.
+- **`delete(path: str) -> None`** — delete *path* from the remote.
+- **`close() -> None`** — release connections or resources.
+
+`RemoteBackend` provides `__enter__` / `__exit__` so instances can be used
+as context managers — the runtime always opens the backend inside a `with`
+block, so `close()` is guaranteed to be called.
+
+Plugin-specific connection parameters (bucket name, region, access keys,
+etc.) live in the `properties` mapping of `RemoteCfg`.  Core Shepherd does
+not validate this mapping, leaving it entirely to the plugin.
+
+### Registering with `PluginRemoteBackendSpec`
+
+Override `get_remote_backends()` in your plugin class and return one spec
+per transport type:
+
+```python
+from plugin import ShepherdPlugin, PluginRemoteBackendSpec
+from remote import RemoteBackend
+from config.config import RemoteCfg
+
+
+class MyS3Backend(RemoteBackend):
+    def __init__(self, cfg: RemoteCfg) -> None:
+        import boto3  # type: ignore[import]
+        self._client = boto3.client(
+            "s3",
+            region_name=cfg.properties.get("region", "us-east-1"),
+        )
+        self._bucket = cfg.properties["bucket"]
+        self._root = cfg.root_path.rstrip("/")
+
+    def _key(self, path: str) -> str:
+        return f"{self._root}/{path}"
+
+    def exists(self, path: str) -> bool:
+        try:
+            self._client.head_object(Bucket=self._bucket, Key=self._key(path))
+            return True
+        except self._client.exceptions.ClientError:
+            return False
+
+    def upload(self, path: str, data: bytes) -> None:
+        self._client.put_object(
+            Bucket=self._bucket, Key=self._key(path), Body=data
+        )
+
+    def download(self, path: str) -> bytes:
+        resp = self._client.get_object(
+            Bucket=self._bucket, Key=self._key(path)
+        )
+        return resp["Body"].read()
+
+    def list_prefix(self, prefix: str) -> list[str]:
+        paginator = self._client.get_paginator("list_objects_v2")
+        key_prefix = f"{self._root}/{prefix.rstrip('/')}/"
+        results: list[str] = []
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=key_prefix):
+            for obj in page.get("Contents", []):
+                leaf = obj["Key"][len(key_prefix):]
+                if "/" not in leaf and leaf:
+                    results.append(leaf)
+        return results
+
+    def delete(self, path: str) -> None:
+        self._client.delete_object(Bucket=self._bucket, Key=self._key(path))
+
+    def close(self) -> None:
+        pass  # boto3 sessions are stateless
+
+
+class MyS3Plugin(ShepherdPlugin):
+    def get_remote_backends(self):
+        return [PluginRemoteBackendSpec(type_id="s3", provider=MyS3Backend)]
+```
+
+`type_id` is matched against the `type` field of each `remote` entry in
+`~/.shpd.conf`.  It must not collide with the built-in identifiers `"ftp"`
+and `"sftp"` — Shepherd rejects any plugin that tries to claim them.
+
+### Remote config entry for a plugin transport
+
+Once the plugin is installed and enabled, add a remote entry that sets
+`type` to your `type_id` and places plugin-specific parameters in the
+`properties` mapping:
+
+```yaml
+remotes:
+  - name: prod-s3
+    type: s3
+    host: s3.amazonaws.com
+    root_path: /shepherd
+    properties:
+      bucket: my-shepherd-bucket
+      region: eu-west-1
+```
+
+Standard remote fields (`host`, `root_path`, `user`, `password`,
+`identity_file`, chunk tuning, local cache settings) work exactly as they
+do for FTP and SFTP entries.  `${VAR}` placeholders in any field are
+resolved at runtime via the existing `Resolvable` mechanism, so credentials
+do not need to be hard-coded.
+
+### Accessing remote data from a plugin command
+
+`PluginContext.remote` is a `PluginRemoteView` that exposes lightweight
+index queries.  Use it in command handlers to report snapshot state or
+drive cross-remote operations:
+
+```python
+class MyPlugin(ShepherdPlugin):
+    def get_commands(self):
+        import click
+        from plugin import PluginCommandSpec
+
+        @click.command("remote-summary")
+        def remote_summary():
+            """Print a quick summary of the default remote."""
+            remote_cfg, catalogue = self.context.remote.list_envs()
+            for env_name, entry in catalogue.environments.items():
+                click.echo(
+                    f"{env_name}: {entry.snapshot_count} snapshot(s) "
+                    f"on {remote_cfg.name}"
+                )
+
+        return [PluginCommandSpec(scope="remote", verb="remote-summary",
+                                  command=remote_summary)]
+```
+
+`list_envs(remote_name=None)` returns `(RemoteCfg, IndexCatalogue)`.
+`list_snapshots(env_name, remote_name=None)` returns
+`(RemoteCfg, list[SnapshotManifest])`.
 
 ## Example Plugins
 

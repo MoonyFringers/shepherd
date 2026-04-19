@@ -24,6 +24,7 @@ from .context import (
     PluginConfigView,
     PluginContext,
     PluginEnvironmentView,
+    PluginRemoteView,
     PluginServiceView,
 )
 from .plugin import PluginMng
@@ -47,6 +48,7 @@ __all__ = [
     "PluginMng",
     "PluginRegistry",
     "PluginRemoteBackendSpec",
+    "PluginRemoteView",
     "PluginRuntimeMng",
     "PluginServiceView",
     "PluginSvcFactorySpec",

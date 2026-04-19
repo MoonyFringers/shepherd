@@ -30,6 +30,7 @@ Plugins can:
 - Provide dynamic command completions
 - Contribute reusable environment templates
 - Define custom service and environment factories
+- Register custom remote storage backends (S3, Azure Blob, and other transports)
 - Extend provisioning logic without modifying core code
 
 This design allows Shepherd to evolve alongside the systems it manages,
@@ -74,6 +75,13 @@ at a specific point in time.
 Once an environment image is pulled and imported into Shepherd, that
 local environment evolves independently for each developer.
 
+### Remote Storage
+
+Environment images can be pushed to and pulled from remote storage using a
+content-deduplicated chunk store — only data that changed since the last push
+is transferred. See [ADR-0006](docs/decisions/0006-remote-storage-deduplication.md)
+for the design rationale and the full list of remote operations.
+
 ## Requirements
 
 ### OS & System Services
@@ -86,6 +94,7 @@ local environment evolves independently for each developer.
 - [Installation guide][install]
 - [Consuming Environment Images][Consuming Environment Images]
 - [Authoring Environment Images][Authoring Environment Images]
+- [Remote storage guide][remote]
 - [shepctl command reference][shepctl]
 - [Development guide][development]
 
@@ -111,6 +120,7 @@ All contributions require signing the [Contributor License Agreement](CLA.md).
 [issues]: https://github.com/MoonyFringers/shepherd/issues
 [Consuming Environment Images]: docs/env-consume.md
 [Authoring Environment Images]: docs/env-auth.md
+[remote]: docs/remote.md
 [shepctl]: docs/shepctl.md
 [development]: docs/development.md
 [install]: docs/install.md
