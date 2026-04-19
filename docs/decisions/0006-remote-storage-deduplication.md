@@ -150,8 +150,14 @@ delegates to the plugin registry — the same dispatch pattern used by env/svc
 factories.
 
 S3, Azure Blob, and other transports follow as standalone plugin packages.
+See [Plugin-Contributed Remote Backends](../plugins.md#plugin-contributed-remote-backends)
+for the full authoring guide including the `RemoteBackend` contract, a
+worked S3 example, and remote config YAML conventions.
 
 ### Remote Configuration and CLI
+
+See [docs/remote.md](../remote.md) for the full configuration reference,
+built-in transport details, and worked CLI examples.
 
 Remotes are persisted in the main Shepherd config (`~/.shpd.conf`) under a
 top-level `remotes` list. Each entry has a `name`, a `type` (`ftp` or `sftp`
