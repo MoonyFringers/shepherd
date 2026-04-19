@@ -11,12 +11,12 @@ prune, and remote/env listing."""
 from __future__ import annotations
 
 import datetime
-import io
 import json
 import os
 import shutil
 import subprocess
 import tarfile
+import threading
 from copy import deepcopy
 from typing import TYPE_CHECKING, Optional
 
@@ -25,7 +25,7 @@ import zstandard
 
 from config import ConfigMng
 from config.config import EnvironmentCfg, RemoteCfg
-from storage.chunker import Chunker, ChunkResult
+from storage.chunker import Chunker
 from storage.local_cache import LocalChunkCache, NullLocalChunkCache
 from storage.snapshot import (
     IndexCatalogue,
@@ -323,30 +323,36 @@ class RemoteMng:
         uploaded = 0
 
         with self._build_backend(remote_cfg) as backend:
-            # Phase 1 — buffer all chunks from the streaming tar.
-            buffered: list[ChunkResult] = []
+            # Stream the tar through the chunker in a single pass.
+            #
+            # Shard listings are fetched lazily the first time a chunk whose
+            # shard has not been seen yet arrives.  This preserves the same
+            # O(unique_shards) list_prefix RPC count as the previous
+            # batch-then-upload approach while eliminating the need to hold
+            # every ChunkResult (and its compressed data bytes) in memory
+            # simultaneously.  ChunkResult.data is uploaded — or discarded —
+            # immediately and never accumulated in a list.
+            #
+            # list_prefix calls are interleaved with chunk production: if a
+            # call blocks, the TarStreamProducer background thread fills the
+            # OS pipe buffer and then blocks on write — natural backpressure
+            # with no deadlock risk.
+            shard_cache: dict[str, set[str]] = {}
             with producer.stream() as stream:
                 for chunk in chunker.chunk_stream(stream):
-                    buffered.append(chunk)
-
-            # Phase 2 — one list_prefix per unique shard (O(shards) RPCs).
-            shards = {c.hash[:2] for c in buffered}
-            existing: dict[str, set[str]] = {
-                shard: set(backend.list_prefix(f"chunks/{shard}"))
-                for shard in shards
-            }
-
-            # Phase 3 — upload only the delta.
-            for chunk in buffered:
-                shard = chunk.hash[:2]
-                chunk_hashes.append(chunk.hash)
-                total_raw += chunk.raw_size
-                total_stored += len(chunk.data)
-                if chunk.hash not in existing[shard]:
-                    backend.upload(
-                        RemoteBackend.chunk_path(chunk.hash), chunk.data
-                    )
-                    uploaded += 1
+                    shard = chunk.hash[:2]
+                    if shard not in shard_cache:
+                        shard_cache[shard] = set(
+                            backend.list_prefix(f"chunks/{shard}")
+                        )
+                    chunk_hashes.append(chunk.hash)
+                    total_raw += chunk.raw_size
+                    total_stored += len(chunk.data)
+                    if chunk.hash not in shard_cache[shard]:
+                        backend.upload(
+                            RemoteBackend.chunk_path(chunk.hash), chunk.data
+                        )
+                        uploaded += 1
 
             now = _utcnow()
 
@@ -505,34 +511,60 @@ class RemoteMng:
     ) -> tuple[int, int]:
         """Download, decompress, and untar all chunks into *dest_dir*.
 
+        Uses an OS pipe to connect a producer thread (download → decompress →
+        write) to the tarfile reader on the main thread.  This keeps peak RSS
+        bounded to roughly one decompressed chunk at a time (~1 MB avg) instead
+        of materialising the entire uncompressed archive in an ``io.BytesIO``
+        buffer.  ``tarfile.open`` must use streaming mode (``"r|"``) because
+        the read end of a pipe does not support seeking.
+
+        Thread-safety note: ``counters`` and ``exc_holder`` are written
+        exclusively by ``_feed()`` and read by the main thread only after
+        ``t.join()``, so no lock is required — the join provides the
+        necessary happens-before guarantee.
+
         :returns: A ``(downloaded, from_cache)`` tuple counting chunks.
         """
-        dctx = zstandard.ZstdDecompressor()
-        downloaded = 0
-        from_cache = 0
+        r_fd, w_fd = os.pipe()
+        exc_holder: list[BaseException] = []
+        counters = [0, 0]  # [downloaded, from_cache]
 
-        # Concatenate all decompressed chunks into one in-memory buffer,
-        # then extract as a streaming tar archive.
-        buf = io.BytesIO()
-        for chunk_hash in manifest.chunks:
-            cached = cache.get(chunk_hash)
-            if cached is not None:
-                compressed = cached
-                from_cache += 1
-            else:
-                compressed = backend.download(
-                    RemoteBackend.chunk_path(chunk_hash)
-                )
-                cache.put(chunk_hash, compressed)
-                downloaded += 1
-            buf.write(dctx.decompress(compressed))
+        def _feed() -> None:
+            dctx = zstandard.ZstdDecompressor()
+            try:
+                with os.fdopen(w_fd, "wb") as wf:
+                    for chunk_hash in manifest.chunks:
+                        if (cached := cache.get(chunk_hash)) is not None:
+                            compressed = cached
+                            counters[1] += 1
+                        else:
+                            compressed = backend.download(
+                                RemoteBackend.chunk_path(chunk_hash)
+                            )
+                            cache.put(chunk_hash, compressed)
+                            counters[0] += 1
+                        wf.write(dctx.decompress(compressed))
+            except BrokenPipeError:
+                # The read end was closed early (e.g. tarfile raised an error
+                # on the main thread).  The exception will surface via
+                # exc_holder on the main thread instead.
+                pass
+            except BaseException as exc:
+                exc_holder.append(exc)
 
-        buf.seek(0)
+        t = threading.Thread(target=_feed, daemon=True)
+        t.start()
         os.makedirs(dest_dir, exist_ok=True)
-        with tarfile.open(fileobj=buf, mode="r:") as tf:
-            tf.extractall(path=dest_dir, filter="data")
+        try:
+            with os.fdopen(r_fd, "rb") as rf:
+                with tarfile.open(fileobj=rf, mode="r|") as tf:
+                    tf.extractall(path=dest_dir, filter="data")
+        finally:
+            t.join()
+            if exc_holder:
+                raise exc_holder[0]
 
-        return downloaded, from_cache
+        return counters[0], counters[1]
 
     def pull(
         self,
