@@ -1,0 +1,17 @@
+services:
+  ftp:
+    image: delfer/alpine-ftp-server
+    environment:
+      USERS: "ftpuser|ftppass"
+      ADDRESS: 127.0.0.1
+      MIN_PORT: "21000"
+      MAX_PORT: "21100"
+    ports:
+      - "2121:21"
+      - "21000-21100:21000-21100"
+
+  sftp:
+    image: atmoz/sftp
+    command: "sftpuser:sftppass:1001::upload"
+    ports:
+      - "2222:22"

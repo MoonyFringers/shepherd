@@ -26,7 +26,14 @@ extend_skip_glob = ["resources/*"]
 typeCheckingMode = "strict"
 venvPath = ".."
 venv = ".venv"
-exclude = ["../examples", "tests"]
+exclude = [
+  "../examples",
+  "tests",
+  "**/node_modules",
+  "**/__pycache__",
+  "**/.*",
+  ".venv",
+]
 reportMissingTypeStubs = "none"
 
 [tool.pytest.ini_options]
@@ -37,6 +44,17 @@ addopts = [
   "--cov-report=xml",
   "--cov-report=html",
   "--cov-config=.coveragerc",
-  "-m", "not integration",
+  "-m",
+  "not integration",
 ]
-markers = ["env", "svc", "cfg", "shpd", "compl", "docker", "integration", "storage", "remote"]
+markers = [
+  "env",
+  "svc",
+  "cfg",
+  "shpd",
+  "compl",
+  "docker",
+  "integration",
+  "storage",
+  "remote",
+]
