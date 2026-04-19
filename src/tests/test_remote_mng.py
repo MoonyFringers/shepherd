@@ -559,8 +559,15 @@ def test_push_second_time_uploads_zero_new_chunks(
 
 
 @pytest.mark.remote
-def test_push_batch_shard_check(tmp_path: pathlib.Path) -> None:
-    """push() uses list_prefix per shard, not per-chunk exists(), for dedup."""
+def test_push_lazy_shard_check(tmp_path: pathlib.Path) -> None:
+    """push() fetches list_prefix lazily per shard, never per-chunk exists().
+
+    The lazy shard cache fetches each shard's listing the first time a chunk
+    from that shard is encountered during streaming.  This yields the same
+    O(unique_shards) RPC count as the old batch-then-upload approach while
+    keeping ChunkResult.data out of any accumulated list.  The assertions
+    below confirm both properties still hold.
+    """
     env_dir = tmp_path / "my-env"
     env_dir.mkdir()
     (env_dir / "data.txt").write_bytes(b"hello" * 1024)
@@ -1176,6 +1183,42 @@ def test_dehydrate_hydrate_roundtrip(
     # The env dir should exist again (untar lands in envs_path/rt-env).
     restored_dir = envs_path / "rt-env"
     assert restored_dir.exists()
+
+
+@pytest.mark.remote
+def test_restore_chunks_propagates_download_error(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A download failure inside _feed() must surface on the main thread.
+
+    The producer thread catches all non-BrokenPipeError exceptions and stores
+    them in exc_holder; the main thread re-raises the first entry after
+    joining.  This test verifies that contract so a network error is never
+    silently swallowed.
+    """
+    from storage.local_cache import NullLocalChunkCache
+
+    fake = FakeRemoteBackend()  # empty store — download() will raise
+    mng = _make_pull_mng(fake, str(tmp_path))
+
+    manifest = SnapshotManifest(
+        snapshot_id="test-snap",
+        environment="my-env",
+        shepherd_version="0.0.0-test",
+        created_at="2025-01-01T00:00:00Z",
+        chunks=["ab" * 32],  # hash not present in fake backend
+        chunk_count=1,
+        total_size_bytes=0,
+        stored_size_bytes=0,
+    )
+
+    with pytest.raises(FileNotFoundError):
+        mng._restore_chunks(
+            fake,
+            manifest,
+            str(tmp_path / "dest"),
+            NullLocalChunkCache(),
+        )
 
 
 # ---------------------------------------------------------------------------
