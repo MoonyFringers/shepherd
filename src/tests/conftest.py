@@ -12,6 +12,8 @@ from __future__ import annotations
 import pytest
 from rich.console import Console
 
+pytest_plugins = ["fixtures.fake_remote"]
+
 
 @pytest.fixture(autouse=True)
 def _no_rich_color(monkeypatch: pytest.MonkeyPatch) -> None:
