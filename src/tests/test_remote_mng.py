@@ -1097,6 +1097,19 @@ def test_pull_raises_when_no_snapshots_on_remote(
         mng.pull("my-env", remote_name="test-ftp")
 
 
+@pytest.mark.remote
+def test_pull_raises_for_nonexistent_snapshot_id(
+    tmp_path: pathlib.Path,
+) -> None:
+    """pull raises UsageError when an explicit snapshot_id is not on remote."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path)
+
+    with pytest.raises(click.UsageError, match="not found"):
+        mng.pull("my-env", remote_name="test-ftp", snapshot_id="deadbeef")
+
+
 # ---------------------------------------------------------------------------
 # hydrate
 # ---------------------------------------------------------------------------
@@ -1147,6 +1160,20 @@ def test_hydrate_raises_for_non_dehydrated_env(
 
     with pytest.raises(click.UsageError, match="not dehydrated"):
         mng.hydrate("my-env", remote_name="test-ftp")
+
+
+@pytest.mark.remote
+def test_hydrate_raises_for_nonexistent_snapshot_id(
+    tmp_path: pathlib.Path,
+) -> None:
+    """hydrate raises UsageError when an explicit snapshot_id is not on remote."""
+    fake = FakeRemoteBackend()
+    envs_path = str(tmp_path / "envs")
+    dehydrated_cfg = _make_env_cfg(dehydrated=True)
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
+
+    with pytest.raises(click.UsageError, match="not found"):
+        mng.hydrate("my-env", remote_name="test-ftp", snapshot_id="deadbeef")
 
 
 @pytest.mark.remote
