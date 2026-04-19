@@ -559,6 +559,47 @@ def test_push_second_time_uploads_zero_new_chunks(
 
 
 @pytest.mark.remote
+def test_push_batch_shard_check(tmp_path: pathlib.Path) -> None:
+    """push() uses list_prefix per shard, not per-chunk exists(), for dedup."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"hello" * 1024)
+
+    fake = FakeRemoteBackend()
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+    mng.push("my-env", env_mng, remote_name="test-ftp")
+
+    # Instrument the second push to capture list_prefix and exists calls.
+    original_list_prefix = fake.list_prefix
+    list_prefix_calls: list[str] = []
+
+    def _list_prefix_spy(prefix: str) -> list[str]:
+        list_prefix_calls.append(prefix)
+        return original_list_prefix(prefix)
+
+    original_exists = fake.exists
+    chunk_exists_calls: list[str] = []
+
+    def _exists_spy(path: str) -> bool:
+        if path.startswith("chunks/"):
+            chunk_exists_calls.append(path)
+        return original_exists(path)
+
+    fake.list_prefix = _list_prefix_spy  # type: ignore[method-assign]
+    fake.exists = _exists_spy  # type: ignore[method-assign]
+
+    mng.push("my-env", env_mng, remote_name="test-ftp")
+
+    # At least one shard was batch-listed.
+    chunk_shard_calls = [
+        p for p in list_prefix_calls if p.startswith("chunks/")
+    ]
+    assert len(chunk_shard_calls) >= 1
+    # No per-chunk exists() round-trips.
+    assert chunk_exists_calls == []
+
+
+@pytest.mark.remote
 def test_push_increments_snapshot_count(tmp_path: pathlib.Path) -> None:
     """index snapshot_count is incremented on each successive push."""
     env_dir = tmp_path / "my-env"
