@@ -25,7 +25,7 @@ import zstandard
 
 from config import ConfigMng
 from config.config import EnvironmentCfg, RemoteCfg
-from storage.chunker import Chunker
+from storage.chunker import Chunker, ChunkResult
 from storage.local_cache import LocalChunkCache, NullLocalChunkCache
 from storage.snapshot import (
     IndexCatalogue,
@@ -323,15 +323,30 @@ class RemoteMng:
         uploaded = 0
 
         with self._build_backend(remote_cfg) as backend:
+            # Phase 1 — buffer all chunks from the streaming tar.
+            buffered: list[ChunkResult] = []
             with producer.stream() as stream:
                 for chunk in chunker.chunk_stream(stream):
-                    path = RemoteBackend.chunk_path(chunk.hash)
-                    chunk_hashes.append(chunk.hash)
-                    total_raw += chunk.raw_size
-                    total_stored += len(chunk.data)
-                    if not backend.exists(path):
-                        backend.upload(path, chunk.data)
-                        uploaded += 1
+                    buffered.append(chunk)
+
+            # Phase 2 — one list_prefix per unique shard (O(shards) RPCs).
+            shards = {c.hash[:2] for c in buffered}
+            existing: dict[str, set[str]] = {
+                shard: set(backend.list_prefix(f"chunks/{shard}"))
+                for shard in shards
+            }
+
+            # Phase 3 — upload only the delta.
+            for chunk in buffered:
+                shard = chunk.hash[:2]
+                chunk_hashes.append(chunk.hash)
+                total_raw += chunk.raw_size
+                total_stored += len(chunk.data)
+                if chunk.hash not in existing[shard]:
+                    backend.upload(
+                        RemoteBackend.chunk_path(chunk.hash), chunk.data
+                    )
+                    uploaded += 1
 
             now = _utcnow()
 
