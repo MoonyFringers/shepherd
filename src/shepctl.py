@@ -982,7 +982,13 @@ def remote():
     "--sftp", "backend_type", flag_value="sftp", help="SFTP transport."
 )
 @click.option("--host", required=True, help="Remote server hostname.")
-@click.option("--user", required=True, help="Login username.")
+@click.option("--user", default=None, help="Login username.")
+@click.option(
+    "--anon",
+    is_flag=True,
+    default=False,
+    help="Use anonymous FTP login (FTP only).",
+)
 @click.option(
     "--port",
     type=int,
@@ -1016,7 +1022,8 @@ def add_remote(
     name: str,
     backend_type: Optional[str],
     host: str,
-    user: str,
+    user: Optional[str],
+    anon: bool,
     port: Optional[int],
     password: Optional[str],
     identity_file: Optional[str],
@@ -1026,8 +1033,20 @@ def add_remote(
     """Register a new remote storage backend."""
     if not backend_type:
         raise click.UsageError("Specify a transport with --ftp or --sftp.")
-    if backend_type == "ftp" and not password:
-        raise click.UsageError("FTP remotes require --password.")
+    if anon and backend_type != "ftp":
+        raise click.UsageError("--anon is only valid for FTP remotes.")
+    if backend_type == "ftp":
+        if anon and (user or password):
+            raise click.UsageError(
+                "--anon cannot be combined with --user or --password."
+            )
+        if not anon and not (user and password):
+            raise click.UsageError(
+                "FTP remotes require --user and --password, or --anon."
+            )
+        if anon:
+            user = "anonymous"
+            password = ""
     if backend_type == "sftp" and not password and not identity_file:
         raise click.UsageError(
             "SFTP remotes require --password or --identity-file."

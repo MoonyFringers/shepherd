@@ -148,6 +148,7 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--sftp",)),
             OptionSpec(tokens=("--host",), takes_value=True),
             OptionSpec(tokens=("--user",), takes_value=True),
+            OptionSpec(tokens=("--anon",)),
             OptionSpec(tokens=("--port",), takes_value=True),
             OptionSpec(tokens=("--password",), takes_value=True),
             OptionSpec(tokens=("--root-path",), takes_value=True),
