@@ -1837,6 +1837,27 @@ class ConfigMng:
         self.config.remotes = remotes
         self.store()
 
+    def update_remote(self, name: str, **updates: Any) -> None:
+        """Update fields of an existing remote and persist the config.
+
+        :raises ValueError: If no remote with the given name exists.
+        """
+        remotes = list(self.config.remotes or [])
+        target = next((r for r in remotes if r.name == name), None)
+        if target is None:
+            raise ValueError(f"Remote '{name}' does not exist.")
+        if updates.get("default") == "true":
+            for r in remotes:
+                r.default = "false"
+        valid_keys = {f.name for f in fields(target)}
+        for key, val in updates.items():
+            if key not in valid_keys:
+                raise ValueError(f"Unknown field '{key}' for RemoteCfg.")
+            if val is not None:
+                setattr(target, key, val)
+        self.config.remotes = remotes
+        self.store()
+
     def remove_remote(self, name: str) -> None:
         """Remove a remote entry by name and persist the config."""
         if self.config.remotes:

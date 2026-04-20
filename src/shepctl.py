@@ -1102,6 +1102,76 @@ def delete_remote(shepherd: ShepherdMng, name: str) -> None:
     Util.print(f"Remote '{name}' removed.")
 
 
+@remote.command(name="modify")
+@click.argument("name", required=True)
+@click.option("--host", default=None, help="New hostname or IP address.")
+@click.option("--port", type=int, default=None, help="New port number.")
+@click.option("--user", default=None, help="New username.")
+@click.option("--password", default=None, help="New password.")
+@click.option(
+    "--anon",
+    is_flag=True,
+    default=False,
+    help="Switch FTP remote to anonymous login.",
+)
+@click.option(
+    "--identity-file",
+    default=None,
+    help="New path to SSH identity file (SFTP only).",
+)
+@click.option("--root-path", default=None, help="New root path on remote.")
+@click.option(
+    "--set-default",
+    is_flag=True,
+    default=False,
+    help="Mark this remote as the default.",
+)
+@click.pass_obj
+def modify_remote(
+    shepherd: ShepherdMng,
+    name: str,
+    host: Optional[str],
+    port: Optional[int],
+    user: Optional[str],
+    password: Optional[str],
+    anon: bool,
+    identity_file: Optional[str],
+    root_path: Optional[str],
+    set_default: bool,
+) -> None:
+    """Modify an existing remote storage backend."""
+    if anon and (user or password):
+        raise click.UsageError(
+            "--anon cannot be combined with --user or --password."
+        )
+    updates: dict[str, Any] = {}
+    if host:
+        updates["host"] = host
+    if port is not None:
+        updates["port"] = port
+    if anon:
+        updates["user"] = "anonymous"
+        updates["password"] = ""
+    else:
+        if user:
+            updates["user"] = user
+        if password:
+            updates["password"] = password
+    if identity_file:
+        updates["identity_file"] = identity_file
+    if root_path:
+        updates["root_path"] = root_path
+    if set_default:
+        updates["default"] = "true"
+    if not updates:
+        raise click.UsageError("No modifications specified.")
+    try:
+        shepherd.configMng.update_remote(name, **updates)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+    Util.print(f"Remote '{name}' updated.")
+
+
 @remote.command(name="envs")
 @click.option(
     "--remote",

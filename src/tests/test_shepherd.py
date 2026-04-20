@@ -1788,6 +1788,126 @@ def test_cli_remote_delete_missing(
 
 
 # ------------------------------------------------------------------
+# remote modify
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_host(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify --host' updates the host field and leaves others."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli, ["remote", "modify", "sftp-backup", "--host", "new.host.com"]
+    )
+
+    assert result.exit_code == 0
+    assert "Remote 'sftp-backup' updated." in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remote = next(r for r in stored["remotes"] if r["name"] == "sftp-backup")
+    assert remote["host"] == "new.host.com"
+    ftp = next(r for r in stored["remotes"] if r["name"] == "ftp-prod")
+    assert ftp["host"] == "ftp.example.com"
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_set_default(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify --set-default' promotes a remote and demotes the old one."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli, ["remote", "modify", "sftp-backup", "--set-default"]
+    )
+
+    assert result.exit_code == 0
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    sftp = next(r for r in stored["remotes"] if r["name"] == "sftp-backup")
+    ftp = next(r for r in stored["remotes"] if r["name"] == "ftp-prod")
+    assert sftp["default"] is True
+    assert ftp["default"] is False
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_set_default_already_default(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify --set-default' on an already-default remote is a no-op."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli, ["remote", "modify", "ftp-prod", "--set-default"]
+    )
+
+    assert result.exit_code == 0
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    ftp = next(r for r in stored["remotes"] if r["name"] == "ftp-prod")
+    assert ftp["default"] is True
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_no_flags(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify' with no modifying flags is rejected as a usage error."""
+    _setup_remote(shpd_conf)
+
+    result = runner.invoke(cli, ["remote", "modify", "ftp-prod"])
+
+    assert result.exit_code != 0
+    assert "No modifications specified" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_unknown_name(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify' on an unknown remote name fails with a usage error."""
+    _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli, ["remote", "modify", "does-not-exist", "--host", "h"]
+    )
+
+    assert result.exit_code != 0
+    assert "does not exist" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_anon_switches_ftp_to_anonymous(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify --anon' sets user=anonymous and clears password."""
+    shpd_yaml = _setup_remote(shpd_conf)
+
+    result = runner.invoke(cli, ["remote", "modify", "ftp-prod", "--anon"])
+
+    assert result.exit_code == 0, result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    ftp = next(r for r in stored["remotes"] if r["name"] == "ftp-prod")
+    assert ftp["user"] == "anonymous"
+    assert not ftp.get("password")
+
+
+@pytest.mark.shpd
+def test_cli_remote_modify_anon_rejects_user(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote modify --anon --user' is rejected as a usage error."""
+    _setup_remote(shpd_conf)
+
+    result = runner.invoke(
+        cli, ["remote", "modify", "ftp-prod", "--anon", "--user", "alice"]
+    )
+
+    assert result.exit_code != 0
+    assert "--anon" in result.output
+
+
+# ------------------------------------------------------------------
 # remote envs
 # ------------------------------------------------------------------
 

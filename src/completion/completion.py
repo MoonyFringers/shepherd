@@ -58,7 +58,7 @@ class CompletionMng(AbstractCompletionMng):
         ],
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
-        "remote": ["add", "list", "delete", "envs", "get", "prune"],
+        "remote": ["add", "list", "delete", "modify", "envs", "get", "prune"],
     }
     SCOPE_VERBS = CORE_SCOPE_VERBS
 
@@ -153,6 +153,16 @@ class CompletionMng(AbstractCompletionMng):
             OptionSpec(tokens=("--password",), takes_value=True),
             OptionSpec(tokens=("--root-path",), takes_value=True),
             OptionSpec(tokens=("--identity-file",), takes_value=True),
+            OptionSpec(tokens=("--set-default",)),
+        ),
+        ("remote", "modify"): (
+            OptionSpec(tokens=("--host",), takes_value=True),
+            OptionSpec(tokens=("--port",), takes_value=True),
+            OptionSpec(tokens=("--user",), takes_value=True),
+            OptionSpec(tokens=("--password",), takes_value=True),
+            OptionSpec(tokens=("--anon",)),
+            OptionSpec(tokens=("--identity-file",), takes_value=True),
+            OptionSpec(tokens=("--root-path",), takes_value=True),
             OptionSpec(tokens=("--set-default",)),
         ),
         ("remote", "envs"): (
