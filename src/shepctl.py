@@ -697,6 +697,7 @@ def hydrate_env(
     env_tag = _resolve_env_tag(shepherd, env_tag)
     shepherd.remoteMng.hydrate(
         env_name=env_tag,
+        environment_mng=shepherd.environmentMng,
         remote_name=remote_name,
         snapshot_id=snapshot_id,
     )

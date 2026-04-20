@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import subprocess
 from pathlib import Path
@@ -1945,3 +1946,129 @@ def test_volume_streams_external_volume(mocker: MockerFixture) -> None:
     assert tag == "ext_vol"
     cmd = mock_popen.call_args[0][0]
     assert "prod_db_backup:/mnt" in cmd
+
+
+# ---------------------------------------------------------------------------
+# remove_local_volumes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.env
+def test_remove_local_volumes_bind_mount(mocker: MockerFixture) -> None:
+    """Bind-mount volumes are removed via Util.delete_dir."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mock_delete = mocker.patch("docker.docker_compose_env.Util.delete_dir")
+    mocker.patch(
+        "docker.docker_compose_env.Util.translate_host_path",
+        side_effect=lambda p: p,
+    )
+
+    env.remove_local_volumes()
+
+    mock_delete.assert_called_once_with("/data/db")
+
+
+@pytest.mark.env
+def test_remove_local_volumes_named_volume(mocker: MockerFixture) -> None:
+    """Named volumes are removed via ``docker volume rm --force``."""
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mock_run = mocker.patch("docker.docker_compose_env.subprocess.run")
+
+    env.remove_local_volumes()
+
+    mock_run.assert_called_once()
+    cmd = mock_run.call_args[0][0]
+    assert cmd == ["docker", "volume", "rm", "--force", "uploads"]
+
+
+@pytest.mark.env
+def test_remove_local_volumes_no_volumes(mocker: MockerFixture) -> None:
+    """No-op when the environment has no volumes."""
+    env_cfg = _make_env_cfg_with_volumes([])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mock_run = mocker.patch("docker.docker_compose_env.subprocess.run")
+    mock_delete = mocker.patch("docker.docker_compose_env.Util.delete_dir")
+
+    env.remove_local_volumes()
+
+    mock_run.assert_not_called()
+    mock_delete.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# restore_local_volumes
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.env
+def test_restore_local_volumes_named_volume(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    """Named volume is created and populated from snapshot dir."""
+    vol_src = tmp_path / "volumes" / "uploads"
+    vol_src.mkdir(parents=True)
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "get_path", return_value=str(tmp_path))
+    mock_run = mocker.patch("docker.docker_compose_env.subprocess.run")
+
+    env.restore_local_volumes()
+
+    assert mock_run.call_count == 2
+    first_cmd = mock_run.call_args_list[0][0][0]
+    assert first_cmd == ["docker", "volume", "create", "uploads"]
+    second_cmd = mock_run.call_args_list[1][0][0]
+    assert "busybox:stable-glibc" in second_cmd
+
+
+@pytest.mark.env
+def test_restore_local_volumes_missing_src_warns(
+    mocker: MockerFixture, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Missing snapshot directory logs a warning and skips restore."""
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "get_path", return_value=str(tmp_path))
+    mock_run = mocker.patch("docker.docker_compose_env.subprocess.run")
+
+    with caplog.at_level(logging.WARNING):
+        env.restore_local_volumes()
+
+    mock_run.assert_not_called()
+    assert any("missing" in r.message.lower() for r in caplog.records)
+
+
+@pytest.mark.env
+def test_restore_local_volumes_docker_error_raises(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    """CalledProcessError from docker is re-raised as RuntimeError."""
+    vol_src = tmp_path / "volumes" / "uploads"
+    vol_src.mkdir(parents=True)
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "get_path", return_value=str(tmp_path))
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        side_effect=subprocess.CalledProcessError(1, "docker"),
+    )
+
+    with pytest.raises(RuntimeError, match="Failed to restore Docker volume"):
+        env.restore_local_volumes()
+
+
+@pytest.mark.env
+def test_restore_local_volumes_skips_bind_mounts(
+    mocker: MockerFixture, tmp_path: Path
+) -> None:
+    """Bind-mount volumes are always skipped during restore."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "get_path", return_value=str(tmp_path))
+    mock_run = mocker.patch("docker.docker_compose_env.subprocess.run")
+
+    env.restore_local_volumes()
+
+    mock_run.assert_not_called()

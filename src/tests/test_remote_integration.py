@@ -381,7 +381,11 @@ def test_hydrate_restores_data_clears_flag(
         str(tmp_path / "envs"),
         existing_env_cfg=_make_env_cfg(dehydrated=True),
     )
-    hydrate_mng.hydrate("my-env", remote_name="test-ftp")
+    env_mock_h = MagicMock()
+    env_mock_h.is_running.return_value = False
+    env_mng_h = MagicMock()
+    env_mng_h.get_environment_from_cfg.return_value = env_mock_h
+    hydrate_mng.hydrate("my-env", env_mng_h, remote_name="test-ftp")
 
     hydrate_mng.configMng.add_or_set_environment.assert_called_once()  # type: ignore[union-attr]
     saved = hydrate_mng.configMng.add_or_set_environment.call_args[0][1]  # type: ignore[union-attr]
@@ -420,7 +424,11 @@ def test_dehydrate_hydrate_roundtrip(
     pull_mng = _make_pull_mng(
         fake_remote_backend, str(envs_path), dehydrated_cfg
     )
-    pull_mng.hydrate("rt-env", remote_name="test-ftp")
+    env_mock_rt = MagicMock()
+    env_mock_rt.is_running.return_value = False
+    env_mng_rt = MagicMock()
+    env_mng_rt.get_environment_from_cfg.return_value = env_mock_rt
+    pull_mng.hydrate("rt-env", env_mng_rt, remote_name="test-ftp")
 
     assert (envs_path / "rt-env").exists()
 
