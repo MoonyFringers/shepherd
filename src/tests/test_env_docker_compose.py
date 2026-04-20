@@ -1833,6 +1833,28 @@ def _external_vol(tag: str, name: str) -> object:
 
 
 @pytest.mark.env
+def test_volumes_need_elevated_permissions_readable(
+    mocker: MockerFixture,
+) -> None:
+    """volumes_need_elevated_permissions returns False when all paths are readable."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "_is_path_tree_readable", return_value=True)
+    assert env.volumes_need_elevated_permissions() is False
+
+
+@pytest.mark.env
+def test_volumes_need_elevated_permissions_unreadable(
+    mocker: MockerFixture,
+) -> None:
+    """volumes_need_elevated_permissions returns True when a path is unreadable."""
+    env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    mocker.patch.object(env, "_is_path_tree_readable", return_value=False)
+    assert env.volumes_need_elevated_permissions() is True
+
+
+@pytest.mark.env
 def test_volume_streams_empty(mocker: MockerFixture) -> None:
     """No volumes → empty list returned."""
     env_cfg = _make_env_cfg_with_volumes([])
@@ -1846,7 +1868,7 @@ def test_volume_streams_bind_mount_readable(mocker: MockerFixture) -> None:
     env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
     env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
-    mocker.patch.object(env, "_is_readable", return_value=True)
+    mocker.patch.object(env, "_is_path_tree_readable", return_value=True)
     mock_popen = mocker.patch(
         "docker.docker_compose_env.subprocess.Popen",
         return_value=mocker.Mock(stdout=mocker.Mock()),
@@ -1863,17 +1885,17 @@ def test_volume_streams_bind_mount_readable(mocker: MockerFixture) -> None:
 
 @pytest.mark.env
 def test_volume_streams_bind_mount_sudo(mocker: MockerFixture) -> None:
-    """Bind-mount whose path is not readable → ``sudo tar -cC``."""
+    """Bind-mount with unreadable path and allow_sudo=True → ``sudo tar -cC``."""
     env_cfg = _make_env_cfg_with_volumes([_bind_vol("db_data", "/data/db")])
     env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
-    mocker.patch.object(env, "_is_readable", return_value=False)
+    mocker.patch.object(env, "_is_path_tree_readable", return_value=False)
     mock_popen = mocker.patch(
         "docker.docker_compose_env.subprocess.Popen",
         return_value=mocker.Mock(stdout=mocker.Mock()),
     )
 
-    streams = env.get_volume_tar_streams()
+    streams = env.get_volume_tar_streams(allow_sudo=True)
 
     assert len(streams) == 1
     tag, _ = streams[0]

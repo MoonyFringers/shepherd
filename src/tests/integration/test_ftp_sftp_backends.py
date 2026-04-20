@@ -94,6 +94,7 @@ def _make_push_mng(
     env_mock = MagicMock()
     env_mock.get_path.return_value = env_path
     env_mock.get_volume_tar_streams.return_value = []
+    env_mock.volumes_need_elevated_permissions.return_value = False
     env_mock.is_running.return_value = False
 
     env_mng = MagicMock()
