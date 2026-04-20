@@ -9,17 +9,16 @@
 
 _shepctl_completion() {
     COMPREPLY=()
-    args="${COMP_WORDS[@]:1}"
     cur="${COMP_WORDS[COMP_CWORD]}"
 
-    tokens=$(shepctl __complete $args)
+    tokens=$(shepctl __complete "${COMP_WORDS[@]:1}")
     readarray -t tokens_array <<< "$tokens"
     if [[ $? -ne 0 ]]; then
         echo "Error: Failed to get completions from shepctl" >&2
         return 1
     fi
 
-    COMPREPLY=( $(compgen -W "${tokens_array[*]}" -- ${cur}) )
+    COMPREPLY=( $(compgen -W "${tokens_array[*]}" -- "$cur") )
     return 0
 }
 
