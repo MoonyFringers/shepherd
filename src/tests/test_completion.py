@@ -1480,7 +1480,15 @@ def test_completion_remote_verbs(
     """Completing 'remote' returns the expected verb list."""
     sm = ShepherdMng(load_runtime_plugins=False)
     completions = sm.completionMng.get_completions(["remote"])
-    assert completions == ["add", "list", "delete", "envs", "get", "prune"]
+    assert completions == [
+        "add",
+        "list",
+        "delete",
+        "modify",
+        "envs",
+        "get",
+        "prune",
+    ]
 
 
 @pytest.mark.compl
