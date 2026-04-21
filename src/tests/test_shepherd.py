@@ -2116,6 +2116,69 @@ def test_cli_env_push_no_active_env_error(
 
 
 @pytest.mark.shpd
+def test_cli_env_up_dehydrated_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env up' on a dehydrated environment fails with a UsageError."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(
+        ConfigMng,
+        "get_active_environment",
+        return_value=mocker.Mock(tag="test-1", dehydrated=True),
+    )
+
+    result = runner.invoke(cli, ["env", "up"])
+
+    assert result.exit_code != 0
+    assert "dehydrated" in result.output
+    assert "hydrate" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_push_dehydrated_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env push' on a dehydrated environment fails with a UsageError."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(
+        ConfigMng,
+        "get_environment",
+        return_value=mocker.Mock(tag="test-1", dehydrated=True),
+    )
+
+    result = runner.invoke(cli, ["env", "push", "test-1"])
+
+    assert result.exit_code != 0
+    assert "dehydrated" in result.output
+    assert "hydrate" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_pull_dehydrated_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env pull' on an already-registered dehydrated env fails with a UsageError."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(
+        ConfigMng,
+        "get_environment",
+        return_value=mocker.Mock(tag="test-1", dehydrated=True),
+    )
+
+    result = runner.invoke(cli, ["env", "pull", "test-1"])
+
+    assert result.exit_code != 0
+    assert "dehydrated" in result.output
+    assert "hydrate" in result.output
+
+
+@pytest.mark.shpd
 def test_cli_env_dehydrate_defaults_to_active_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ) -> None:

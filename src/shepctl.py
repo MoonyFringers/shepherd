@@ -186,6 +186,13 @@ class PluginScopeGroup(click.Group):
         return registered.spec.command
 
 
+def _get_active_env_or_raise(shepherd: ShepherdMng) -> EnvironmentCfg:
+    envCfg = shepherd.configMng.get_active_environment()
+    if not envCfg:
+        raise click.UsageError("No active environment found.")
+    return envCfg
+
+
 def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     """
     Ensure an active environment exists before running a command handler.
@@ -198,9 +205,26 @@ def require_active_env(func: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(
         shepherd: ShepherdMng, *args: List[str], **kwargs: dict[str, str]
     ) -> Callable[..., Any]:
-        envCfg = shepherd.configMng.get_active_environment()
-        if not envCfg:
-            raise click.UsageError("No active environment found.")
+        return func(
+            shepherd, _get_active_env_or_raise(shepherd), *args, **kwargs
+        )
+
+    return wrapper
+
+
+def require_hydrated_env(func: Callable[..., Any]) -> Callable[..., Any]:
+    """Like require_active_env but also rejects dehydrated environments."""
+
+    @functools.wraps(func)
+    def wrapper(
+        shepherd: ShepherdMng, *args: List[str], **kwargs: dict[str, str]
+    ) -> Callable[..., Any]:
+        envCfg = _get_active_env_or_raise(shepherd)
+        if envCfg.dehydrated:
+            raise click.UsageError(
+                f"Environment '{envCfg.tag}' is dehydrated. "
+                "Restore local data with 'env hydrate' first."
+            )
         return func(shepherd, envCfg, *args, **kwargs)
 
     return wrapper
@@ -443,7 +467,7 @@ def list_envs(shepherd: ShepherdMng):
     ),
 )
 @click.pass_obj
-@require_active_env
+@require_hydrated_env
 def up_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
@@ -470,7 +494,7 @@ def up_env(
     help="Return after issuing the stop command without waiting.",
 )
 @click.pass_obj
-@require_active_env
+@require_hydrated_env
 def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
     """Stop environment."""
     shepherd.environmentMng.stop_env(envCfg, wait=not no_wait)
@@ -499,7 +523,7 @@ def halt_env(shepherd: ShepherdMng, envCfg: EnvironmentCfg, no_wait: bool):
     help="Keep updating the output until interrupted.",
 )
 @click.pass_obj
-@require_active_env
+@require_hydrated_env
 def reload_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
@@ -535,7 +559,7 @@ def reload_env(
     help="Keep updating the output until interrupted.",
 )
 @click.pass_obj
-@require_active_env
+@require_hydrated_env
 def status_env(
     shepherd: ShepherdMng,
     envCfg: EnvironmentCfg,
@@ -589,6 +613,12 @@ def push_env(
 ) -> None:
     """Push a new snapshot of ENV_TAG (or the checked-out env) to a remote."""
     env_tag = _resolve_env_tag(shepherd, env_tag)
+    existing = shepherd.configMng.get_environment(env_tag)
+    if existing and existing.dehydrated:
+        raise click.UsageError(
+            f"Environment '{env_tag}' is dehydrated. "
+            "Restore local data with 'env hydrate' first."
+        )
     label_list = [lbl.strip() for lbl in labels.split(",")] if labels else []
     shepherd.remoteMng.push(
         env_name=env_tag,
@@ -630,6 +660,12 @@ def pull_env(
 ) -> None:
     """Download ENV_TAG (or the checked-out env) from a remote snapshot."""
     env_tag = _resolve_env_tag(shepherd, env_tag)
+    existing = shepherd.configMng.get_environment(env_tag)
+    if existing and existing.dehydrated:
+        raise click.UsageError(
+            f"Environment '{env_tag}' is dehydrated. "
+            "Restore local data with 'env hydrate' instead."
+        )
     shepherd.remoteMng.pull(
         env_name=env_tag,
         remote_name=remote_name,
