@@ -823,40 +823,25 @@ def test_dehydrate_stops_env_when_user_confirms(
 
 
 @pytest.mark.remote
-def test_dehydrate_removes_bind_mount_device(tmp_path: pathlib.Path) -> None:
-    """dehydrate also deletes bind-mount volume device paths."""
+def test_dehydrate_delegates_volume_removal(tmp_path: pathlib.Path) -> None:
+    """dehydrate delegates volume cleanup to the backend via remove_local_volumes."""
     env_dir = tmp_path / "envs" / "my-env"
     env_dir.mkdir(parents=True)
-    device_dir = tmp_path / "volumes" / "data"
-    device_dir.mkdir(parents=True)
-    (device_dir / "db.sql").write_bytes(b"dump")
 
-    from config.config import VolumeCfg
-
-    vol = VolumeCfg(
-        tag="data",
-        driver="local",
-        driver_opts={"type": "none", "o": "bind", "device": str(device_dir)},
-    )
-    env_cfg = EnvironmentCfg(
-        template="default",
-        factory="docker-compose",
-        tag="my-env",
-        services=[],
-        probes=[],
-        networks=[],
-        volumes=[vol],
-    )
-
+    env_cfg = _make_env_cfg()
     configMng = MagicMock()
     configMng.get_environment.return_value = env_cfg
     configMng.config.envs_path = str(tmp_path / "envs")
     mng = RemoteMng(configMng)
 
-    mng.dehydrate("my-env", _make_env_mng_mock_not_running())
+    env_mock = MagicMock()
+    env_mock.is_running.return_value = False
+    env_mng_mock = MagicMock()
+    env_mng_mock.get_environment_from_cfg.return_value = env_mock
 
-    assert not env_dir.exists()
-    assert not device_dir.exists()
+    mng.dehydrate("my-env", env_mng_mock)
+
+    env_mock.remove_local_volumes.assert_called_once()
 
 
 # ---------------------------------------------------------------------------
@@ -1129,7 +1114,9 @@ def test_hydrate_restores_data_and_clears_flag(
     dehydrated_cfg = _make_env_cfg(dehydrated=True)
     mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
 
-    mng.hydrate("my-env", remote_name="test-ftp")
+    mng.hydrate(
+        "my-env", _make_env_mng_mock_not_running(), remote_name="test-ftp"
+    )
 
     mng.configMng.add_or_set_environment.assert_called_once()  # type: ignore[union-attr]
     saved = mng.configMng.add_or_set_environment.call_args[0][1]  # type: ignore[union-attr]
@@ -1146,7 +1133,9 @@ def test_hydrate_raises_for_unknown_env(
     mng = _make_pull_mng(fake, envs_path, existing_env_cfg=None)
 
     with pytest.raises(click.UsageError, match="not found"):
-        mng.hydrate("my-env", remote_name="test-ftp")
+        mng.hydrate(
+            "my-env", _make_env_mng_mock_not_running(), remote_name="test-ftp"
+        )
 
 
 @pytest.mark.remote
@@ -1160,7 +1149,9 @@ def test_hydrate_raises_for_non_dehydrated_env(
     mng = _make_pull_mng(fake, envs_path, existing_env_cfg=active_cfg)
 
     with pytest.raises(click.UsageError, match="not dehydrated"):
-        mng.hydrate("my-env", remote_name="test-ftp")
+        mng.hydrate(
+            "my-env", _make_env_mng_mock_not_running(), remote_name="test-ftp"
+        )
 
 
 @pytest.mark.remote
@@ -1174,7 +1165,12 @@ def test_hydrate_raises_for_nonexistent_snapshot_id(
     mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
 
     with pytest.raises(click.UsageError, match="not found"):
-        mng.hydrate("my-env", remote_name="test-ftp", snapshot_id="deadbeef")
+        mng.hydrate(
+            "my-env",
+            _make_env_mng_mock_not_running(),
+            remote_name="test-ftp",
+            snapshot_id="deadbeef",
+        )
 
 
 @pytest.mark.remote
@@ -1206,11 +1202,36 @@ def test_dehydrate_hydrate_roundtrip(
     # 4. Hydrate from the same backend.
     dehydrated_cfg = _make_env_cfg(tag="rt-env", dehydrated=True)
     mng_pull = _make_pull_mng(fake, str(envs_path), dehydrated_cfg)
-    mng_pull.hydrate("rt-env", remote_name="test-ftp")
+    mng_pull.hydrate(
+        "rt-env", _make_env_mng_mock_not_running(), remote_name="test-ftp"
+    )
 
     # The env dir should exist again (untar lands in envs_path/rt-env).
     restored_dir = envs_path / "rt-env"
     assert restored_dir.exists()
+
+
+@pytest.mark.remote
+def test_hydrate_delegates_volume_restoration(
+    tmp_path: pathlib.Path,
+) -> None:
+    """hydrate calls restore_local_volumes on the backend after chunk extraction."""
+    content = b"data" * 512
+    fake = FakeRemoteBackend()
+    _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    dehydrated_cfg = _make_env_cfg(dehydrated=True)
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
+
+    env_mock = MagicMock()
+    env_mock.is_running.return_value = False
+    env_mng_mock = MagicMock()
+    env_mng_mock.get_environment_from_cfg.return_value = env_mock
+
+    mng.hydrate("my-env", env_mng_mock, remote_name="test-ftp")
+
+    env_mock.restore_local_volumes.assert_called_once()
 
 
 @pytest.mark.remote

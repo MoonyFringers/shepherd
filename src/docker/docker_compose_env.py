@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import subprocess
 import time
 from typing import IO, Any, Optional, cast, override
@@ -17,13 +18,23 @@ from typing import IO, Any, Optional, cast, override
 import yaml
 
 from config import ConfigMng, EnvironmentCfg
-from config.config import InitCfg, ProbeCfg
+from config.config import InitCfg, ProbeCfg, VolumeCfg
 from environment import Environment
 from environment.environment import NonRecoverableStartError, ProbeRunResult
 from service import ServiceFactory
 from util.util import Util
 
 from .docker_compose_util import render_container, run_compose
+
+
+def _is_bind_mount(vol: VolumeCfg) -> bool:
+    """Return True when *vol* is a local bind-mount (type=none, o=bind)."""
+    return bool(
+        vol.driver == "local"
+        and vol.driver_opts
+        and vol.driver_opts.get("type") == "none"
+        and vol.driver_opts.get("o") == "bind"
+    )
 
 
 class _ProcStream:
@@ -82,14 +93,8 @@ class DockerComposeEnv(Environment):
         """Ensure the environment resources are available."""
         if self.envCfg.volumes:
             for vol in self.envCfg.volumes:
-                # Check if it's a host bind mount,
-                # in case create the host path
-                if (
-                    vol.driver == "local"
-                    and vol.driver_opts
-                    and vol.driver_opts.get("type") == "none"
-                    and vol.driver_opts.get("o") == "bind"
-                ):
+                if _is_bind_mount(vol):
+                    assert vol.driver_opts is not None
                     device_path = vol.driver_opts.get("device")
                     if device_path:
                         Util.ensure_dir(
@@ -108,12 +113,8 @@ class DockerComposeEnv(Environment):
         ``docker run`` container, so host-side permission checks do not apply.
         """
         for vol in self.envCfg.volumes or []:
-            if (
-                vol.driver == "local"
-                and vol.driver_opts
-                and vol.driver_opts.get("type") == "none"
-                and vol.driver_opts.get("o") == "bind"
-            ):
+            if _is_bind_mount(vol):
+                assert vol.driver_opts is not None
                 device = vol.driver_opts.get("device", "")
                 if device and not self._is_path_tree_readable(device):
                     return True
@@ -135,12 +136,8 @@ class DockerComposeEnv(Environment):
             return []
         result: list[tuple[str, IO[bytes]]] = []
         for vol in self.envCfg.volumes:
-            if (
-                vol.driver == "local"
-                and vol.driver_opts
-                and vol.driver_opts.get("type") == "none"
-                and vol.driver_opts.get("o") == "bind"
-            ):
+            if _is_bind_mount(vol):
+                assert vol.driver_opts is not None
                 device = vol.driver_opts.get("device", "")
                 result.append(
                     (vol.tag, self._path_tar_stream(device, allow_sudo))
@@ -189,6 +186,63 @@ class DockerComposeEnv(Environment):
             stderr=subprocess.PIPE,
         )
         return cast(IO[bytes], _ProcStream(proc))
+
+    @override
+    def remove_local_volumes(self) -> None:
+        for vol in self.envCfg.volumes or []:
+            if _is_bind_mount(vol):
+                assert vol.driver_opts is not None
+                device = Util.translate_host_path(
+                    vol.driver_opts.get("device", "")
+                )
+                if device:
+                    Util.delete_dir(device)
+            else:
+                vol_name = (
+                    vol.name if vol.is_external() and vol.name else vol.tag
+                )
+                subprocess.run(
+                    ["docker", "volume", "rm", "--force", vol_name],
+                    check=True,
+                )
+
+    @override
+    def restore_local_volumes(self) -> None:
+        for vol in self.envCfg.volumes or []:
+            if _is_bind_mount(vol):
+                continue
+            vol_name = vol.name if vol.is_external() and vol.name else vol.tag
+            src = os.path.join(self.get_path(), "volumes", vol.tag)
+            if not os.path.isdir(src):
+                logging.warning(
+                    "Volume snapshot directory missing, skipping restore: %s",
+                    src,
+                )
+                continue
+            try:
+                subprocess.run(
+                    ["docker", "volume", "create", vol_name], check=True
+                )
+                subprocess.run(
+                    [
+                        "docker",
+                        "run",
+                        "--rm",
+                        "-v",
+                        f"{src}:/src:ro",
+                        "-v",
+                        f"{vol_name}:/dst",
+                        "busybox:stable-glibc",
+                        "sh",
+                        "-c",
+                        "cp -a /src/. /dst/",
+                    ],
+                    check=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                raise RuntimeError(
+                    f"Failed to restore Docker volume '{vol_name}': {exc}"
+                ) from exc
 
     @override
     def clone_impl(self, dst_env_tag: str) -> DockerComposeEnv:

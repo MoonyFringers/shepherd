@@ -380,6 +380,26 @@ class Environment(ABC):
         """
         return []
 
+    def remove_local_volumes(self) -> None:
+        """Remove all local volume data for this environment.
+
+        Backends override this to clean up bind-mount device directories and
+        any backend-managed volumes (e.g. Docker named volumes).  The default
+        is a no-op for backends that have no local volume state.
+        """
+        pass
+
+    def restore_local_volumes(self) -> None:
+        """Restore backend-managed volumes from the extracted tar data.
+
+        Called by ``RemoteMng.hydrate`` after the snapshot tar has been
+        extracted into the env directory.  Backends override this to, e.g.,
+        populate Docker named volumes from ``{env_path}/volumes/{tag}/``.
+        Bind-mount volumes are handled implicitly by the tar extraction and
+        do not need an explicit restore step.
+        """
+        pass
+
     def ensure_resources(self):
         """Ensure the environment resources are available."""
         return self.ensure_resources_impl()

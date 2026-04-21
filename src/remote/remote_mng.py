@@ -13,8 +13,6 @@ from __future__ import annotations
 import datetime
 import json
 import os
-import shutil
-import subprocess
 import tarfile
 import threading
 from copy import deepcopy
@@ -422,10 +420,9 @@ class RemoteMng:
     def dehydrate(self, env_name: str, environment_mng: EnvironmentMng) -> None:
         """Strip local data for *env_name* while preserving its config entry.
 
-        Removes the environment directory and any bind-mount volume device
-        paths declared in the config.  Named Docker volumes are not removed
-        (they are managed by the Docker daemon).  After deletion the env's
-        ``dehydrated`` flag is set to ``True`` and the config is persisted.
+        Removes all backend-managed volumes, then the environment directory.
+        After deletion the env's ``dehydrated`` flag is set to ``True`` and
+        the config is persisted.
 
         :param env_name: Tag of the local environment to dehydrate.
         :param environment_mng: Used to check and stop the env if running.
@@ -446,20 +443,9 @@ class RemoteMng:
         env: Environment = environment_mng.get_environment_from_cfg(env_cfg)
         self._stop_if_running(env, environment_mng)
 
+        env.remove_local_volumes()
         env_dir = os.path.join(self.configMng.config.envs_path, env_name)
         self._delete_dir(env_dir)
-
-        # Also delete bind-mount device paths declared in VolumeCfg.
-        for vol in env_cfg.volumes or []:
-            if (
-                vol.driver == "local"
-                and vol.driver_opts
-                and vol.driver_opts.get("type") == "none"
-                and vol.driver_opts.get("o") == "bind"
-            ):
-                device = vol.driver_opts.get("device", "")
-                if device:
-                    self._delete_dir(device)
 
         env_cfg.dehydrated = True
         self.configMng.add_or_set_environment(env_name, env_cfg)
@@ -637,6 +623,7 @@ class RemoteMng:
     def hydrate(
         self,
         env_name: str,
+        environment_mng: Optional["EnvironmentMng"] = None,
         remote_name: Optional[str] = None,
         snapshot_id: Optional[str] = None,
     ) -> None:
@@ -644,9 +631,13 @@ class RemoteMng:
 
         Same chunk-download and untar logic as :meth:`pull`, but the env must
         already exist in config with ``dehydrated = True``.  After restoration,
-        ``dehydrated`` is cleared to ``False`` and the config is persisted.
+        backend-managed volumes (e.g. Docker named volumes) are repopulated
+        from the extracted tar data, then ``dehydrated`` is cleared to
+        ``False`` and the config is persisted.
 
         :param env_name: Tag of the dehydrated environment to restore.
+        :param environment_mng: Used to obtain the concrete backend for volume
+            restoration.  When ``None``, the volume-restore step is skipped.
         :param remote_name: Remote to pull from, or ``None`` for the default.
         :param snapshot_id: Specific snapshot to restore, or ``None`` for the
             latest.
@@ -671,6 +662,12 @@ class RemoteMng:
             downloaded, from_cache = self._restore_chunks(
                 backend, manifest, dest_dir, cache
             )
+
+        if environment_mng is not None:
+            env: "Environment" = environment_mng.get_environment_from_cfg(
+                env_cfg
+            )
+            env.restore_local_volumes()
 
         env_cfg.dehydrated = False
         self.configMng.add_or_set_environment(env_name, env_cfg)
@@ -748,21 +745,7 @@ class RemoteMng:
         )
 
     def _delete_dir(self, path: str) -> None:
-        """Delete *path* recursively; retry under sudo on PermissionError."""
-        try:
-            shutil.rmtree(path)
-        except FileNotFoundError:
-            pass  # already absent — treat as success
-        except PermissionError:
-            if os.name != "posix" or not shutil.which("sudo"):
-                raise
-            uid = os.getuid()
-            gid = os.getgid()
-            subprocess.run(
-                ["sudo", "chown", "-R", f"{uid}:{gid}", path],
-                check=True,
-            )
-            shutil.rmtree(path)
+        Util.delete_dir(path)
 
     # ------------------------------------------------------------------
     # Display methods (called by CLI commands)

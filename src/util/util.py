@@ -636,6 +636,24 @@ class Util:
         )
 
     @staticmethod
+    def delete_dir(path: str) -> None:
+        """Delete *path* recursively; retry under sudo on PermissionError."""
+        try:
+            shutil.rmtree(path)
+        except FileNotFoundError:
+            pass
+        except PermissionError:
+            if os.name != "posix" or not shutil.which("sudo"):
+                raise
+            uid = os.getuid()
+            gid = os.getgid()
+            subprocess.run(
+                ["sudo", "chown", "-R", f"{uid}:{gid}", path],
+                check=True,
+            )
+            shutil.rmtree(path)
+
+    @staticmethod
     def fmt_bytes(n: int) -> str:
         """Return a human-readable byte count (e.g. ``1.2 MiB``)."""
         for unit, threshold in (
