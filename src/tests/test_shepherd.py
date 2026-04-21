@@ -1441,6 +1441,157 @@ def test_cli_remote_add_ftp(
 
 
 @pytest.mark.shpd
+def test_cli_remote_add_ftp_anon(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote add --ftp --anon' registers an anonymous FTP remote."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "anon-ftp",
+            "--ftp",
+            "--anon",
+            "--host",
+            "nas2.test.test",
+            "--root-path",
+            "/ftp/shpdng",
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert "Remote 'anon-ftp' registered." in result.output
+    stored = yaml.safe_load(shpd_yaml.read_text())
+    remotes = stored.get("remotes", [])
+    anon_remote = next((r for r in remotes if r["name"] == "anon-ftp"), None)
+    assert anon_remote is not None
+    assert anon_remote["type"] == "ftp"
+    assert anon_remote["user"] == "anonymous"
+    assert not anon_remote.get("password")
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp_anon_rejects_user(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote add --ftp --anon --user' is rejected as a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "bad-ftp",
+            "--ftp",
+            "--anon",
+            "--host",
+            "nas2.test.test",
+            "--user",
+            "alice",
+            "--root-path",
+            "/ftp/shpdng",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--anon" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp_anon_rejects_password(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote add --ftp --anon --password' is rejected as a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "bad-ftp",
+            "--ftp",
+            "--anon",
+            "--host",
+            "nas2.test.test",
+            "--password",
+            "s3cr3t",
+            "--root-path",
+            "/ftp/shpdng",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--anon" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_ftp_missing_creds(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote add --ftp' without credentials or --anon is rejected."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "bad-ftp",
+            "--ftp",
+            "--host",
+            "ftp.example.com",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--anon" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_remote_add_sftp_rejects_anon(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'remote add --sftp --anon' is rejected as a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    (shpd_path / ".shpd.yaml").write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli,
+        [
+            "remote",
+            "add",
+            "bad-sftp",
+            "--sftp",
+            "--anon",
+            "--host",
+            "sftp.example.com",
+            "--root-path",
+            "/shpd",
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--anon" in result.output
+
+
+@pytest.mark.shpd
 def test_cli_remote_add_sftp(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ) -> None:
@@ -1772,7 +1923,9 @@ def test_cli_remote_add_ftp_missing_password(
     )
 
     assert result.exit_code != 0
-    assert "FTP remotes require --password" in result.output
+    assert (
+        "FTP remotes require --user and --password, or --anon" in result.output
+    )
 
 
 @pytest.mark.shpd
