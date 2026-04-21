@@ -1955,3 +1955,141 @@ def test_cli_remote_add_sftp_missing_credentials(
 
     assert result.exit_code != 0
     assert "SFTP remotes require --password or --identity-file" in result.output
+
+
+# ------------------------------------------------------------------
+# env push / pull / hydrate / dehydrate — default to checked-out env
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_env_push_defaults_to_active_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env push' without ENV_TAG pushes the checked-out environment."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_push = mocker.patch.object(RemoteMng, "push")
+
+    result = runner.invoke(cli, ["env", "push"])
+
+    assert result.exit_code == 0, result.output
+    mock_push.assert_called_once()
+    assert mock_push.call_args.kwargs["env_name"] == "test-1"
+
+
+@pytest.mark.shpd
+def test_cli_env_push_no_active_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env push' without ENV_TAG and no checked-out env fails."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(ConfigMng, "get_active_environment", return_value=None)
+
+    result = runner.invoke(cli, ["env", "push"])
+
+    assert result.exit_code != 0
+    assert "No environment checked out" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_dehydrate_defaults_to_active_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env dehydrate' without ENV_TAG dehydrates the checked-out environment."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_dehydrate = mocker.patch.object(RemoteMng, "dehydrate")
+
+    result = runner.invoke(cli, ["env", "dehydrate"])
+
+    assert result.exit_code == 0, result.output
+    mock_dehydrate.assert_called_once()
+    # dehydrate takes env_tag as a positional arg, not keyword
+    assert mock_dehydrate.call_args.args[0] == "test-1"
+
+
+@pytest.mark.shpd
+def test_cli_env_dehydrate_no_active_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env dehydrate' without ENV_TAG and no checked-out env fails."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(ConfigMng, "get_active_environment", return_value=None)
+
+    result = runner.invoke(cli, ["env", "dehydrate"])
+
+    assert result.exit_code != 0
+    assert "No environment checked out" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_pull_defaults_to_active_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env pull' without ENV_TAG pulls the checked-out environment."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_pull = mocker.patch.object(RemoteMng, "pull")
+
+    result = runner.invoke(cli, ["env", "pull"])
+
+    assert result.exit_code == 0, result.output
+    mock_pull.assert_called_once()
+    assert mock_pull.call_args.kwargs["env_name"] == "test-1"
+
+
+@pytest.mark.shpd
+def test_cli_env_pull_no_active_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env pull' without ENV_TAG and no checked-out env fails."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(ConfigMng, "get_active_environment", return_value=None)
+
+    result = runner.invoke(cli, ["env", "pull"])
+
+    assert result.exit_code != 0
+    assert "No environment checked out" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_hydrate_defaults_to_active_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env hydrate' without ENV_TAG hydrates the checked-out environment."""
+    from remote import RemoteMng
+
+    _setup_remote(shpd_conf)
+    mock_hydrate = mocker.patch.object(RemoteMng, "hydrate")
+
+    result = runner.invoke(cli, ["env", "hydrate"])
+
+    assert result.exit_code == 0, result.output
+    mock_hydrate.assert_called_once()
+    assert mock_hydrate.call_args.kwargs["env_name"] == "test-1"
+
+
+@pytest.mark.shpd
+def test_cli_env_hydrate_no_active_env_error(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+) -> None:
+    """'env hydrate' without ENV_TAG and no checked-out env fails."""
+    from config import ConfigMng
+
+    _setup_remote(shpd_conf)
+    mocker.patch.object(ConfigMng, "get_active_environment", return_value=None)
+
+    result = runner.invoke(cli, ["env", "hydrate"])
+
+    assert result.exit_code != 0
+    assert "No environment checked out" in result.output

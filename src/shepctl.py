@@ -548,8 +548,19 @@ def status_env(
     shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
+def _resolve_env_tag(shepherd: ShepherdMng, env_tag: Optional[str]) -> str:
+    if env_tag:
+        return env_tag
+    active = shepherd.configMng.get_active_environment()
+    if not active:
+        raise click.UsageError(
+            "No environment checked out. Pass ENV_TAG explicitly."
+        )
+    return active.tag
+
+
 @env.command(name="push")
-@click.argument("env_tag")
+@click.argument("env_tag", required=False)
 @click.option(
     "--remote",
     "remote_name",
@@ -571,12 +582,13 @@ def status_env(
 @click.pass_obj
 def push_env(
     shepherd: ShepherdMng,
-    env_tag: str,
+    env_tag: Optional[str],
     remote_name: Optional[str],
     set_tracking: bool,
     labels: Optional[str],
 ) -> None:
-    """Push a new snapshot of ENV_TAG to a remote."""
+    """Push a new snapshot of ENV_TAG (or the checked-out env) to a remote."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
     label_list = [lbl.strip() for lbl in labels.split(",")] if labels else []
     shepherd.remoteMng.push(
         env_name=env_tag,
@@ -588,15 +600,16 @@ def push_env(
 
 
 @env.command(name="dehydrate")
-@click.argument("env_tag")
+@click.argument("env_tag", required=False)
 @click.pass_obj
-def dehydrate_env(shepherd: ShepherdMng, env_tag: str) -> None:
-    """Strip local data for ENV_TAG while preserving its config entry."""
+def dehydrate_env(shepherd: ShepherdMng, env_tag: Optional[str]) -> None:
+    """Strip local data for ENV_TAG (or the checked-out env)."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
     shepherd.remoteMng.dehydrate(env_tag, shepherd.environmentMng)
 
 
 @env.command(name="pull")
-@click.argument("env_tag")
+@click.argument("env_tag", required=False)
 @click.option(
     "--remote",
     "remote_name",
@@ -611,11 +624,12 @@ def dehydrate_env(shepherd: ShepherdMng, env_tag: str) -> None:
 @click.pass_obj
 def pull_env(
     shepherd: ShepherdMng,
-    env_tag: str,
+    env_tag: Optional[str],
     remote_name: Optional[str],
     snapshot_id: Optional[str],
 ) -> None:
-    """Download ENV_TAG from a remote snapshot and register it locally."""
+    """Download ENV_TAG (or the checked-out env) from a remote snapshot."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
     shepherd.remoteMng.pull(
         env_name=env_tag,
         remote_name=remote_name,
@@ -624,7 +638,7 @@ def pull_env(
 
 
 @env.command(name="hydrate")
-@click.argument("env_tag")
+@click.argument("env_tag", required=False)
 @click.option(
     "--remote",
     "remote_name",
@@ -639,11 +653,12 @@ def pull_env(
 @click.pass_obj
 def hydrate_env(
     shepherd: ShepherdMng,
-    env_tag: str,
+    env_tag: Optional[str],
     remote_name: Optional[str],
     snapshot_id: Optional[str],
 ) -> None:
-    """Restore local data for the dehydrated ENV_TAG from a remote snapshot."""
+    """Restore local data for ENV_TAG (or the checked-out env) from a remote."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
     shepherd.remoteMng.hydrate(
         env_name=env_tag,
         remote_name=remote_name,
