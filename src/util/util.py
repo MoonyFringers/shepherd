@@ -428,6 +428,23 @@ class Util:
         return os.geteuid() == 0
 
     @staticmethod
+    def is_tree_readable(path: str) -> bool:
+        """Return False if any entry under path is unreadable by this process.
+
+        Uses os.walk with an onerror hook so that a PermissionError from any
+        nested os.listdir call is captured.  On non-POSIX hosts or when sudo
+        is unavailable, always returns True — escalation is impossible and
+        callers will surface the PermissionError naturally.
+        """
+        if os.name != "posix" or not shutil.which("sudo"):
+            return True
+        errors: list[OSError] = []
+        for _ in os.walk(path, onerror=errors.append):
+            if errors:
+                return False
+        return not errors
+
+    @staticmethod
     def run_command(
         cmd: Union[list[str], str],
         check: bool = True,

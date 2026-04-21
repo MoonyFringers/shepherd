@@ -307,9 +307,21 @@ class RemoteMng:
         env: Environment = environment_mng.get_environment_from_cfg(env_cfg)
         self._stop_if_running(env, environment_mng)
 
+        env_path = env.get_path()
+        env_needs_sudo = not Util.is_tree_readable(env_path)
+        vols_need_sudo = env.volumes_need_elevated_permissions()
+        allow_sudo = env_needs_sudo or vols_need_sudo
+        if allow_sudo:
+            if not Util.confirm(
+                "Some environment files (e.g. container-written data "
+                "directories) are not readable by the current user. "
+                "Proceed using sudo to read them?"
+            ):
+                Util.print_error_and_die("Push cancelled.")
         producer = TarStreamProducer(
-            env_path=env.get_path(),
-            volume_streams=env.get_volume_tar_streams(),
+            env_path=env_path,
+            volume_streams=env.get_volume_tar_streams(allow_sudo=allow_sudo),
+            env_needs_sudo=env_needs_sudo,
         )
         chunker = Chunker(
             min_size=remote_cfg.chunk.min_size_kb * 1024,

@@ -95,3 +95,86 @@ def test_stream_env_and_volume_arcnames(tmp_path: Path) -> None:
     )
     # No numeric index in any name
     assert not any(n.startswith("volumes/0") for n in names)
+
+
+@pytest.mark.storage
+def test_needs_elevated_permissions_cached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """needs_elevated_permissions() reflects the eager check done in __init__."""
+    import os as _os
+
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+
+    real_walk = _os.walk
+
+    def _patched_walk(path: str, onerror=None, **kwargs):  # type: ignore[override]
+        yield from real_walk(path, **kwargs)
+        if onerror is not None:
+            onerror(PermissionError(13, "Permission denied", str(path)))
+
+    monkeypatch.setattr("util.util.os.walk", _patched_walk)
+    monkeypatch.setattr("util.util.shutil.which", lambda _: "/usr/bin/sudo")
+
+    producer = TarStreamProducer(str(env_dir), [])
+    assert producer.needs_elevated_permissions() is True
+
+
+class _FakeProc:
+    """Minimal subprocess.Popen stand-in for _add_env_sudo tests."""
+
+    def __init__(self, stream: io.BytesIO, returncode: int = 0) -> None:
+        self.stdout = stream
+        self.stderr = io.BytesIO(b"")
+        self.returncode = returncode
+
+    def wait(self) -> int:
+        return self.returncode
+
+
+@pytest.mark.storage
+def test_stream_env_sudo_fallback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Falls back to sudo tar and emits env/ entries when env is not readable."""
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+    (env_dir / "cfg.yml").write_text("x: 1")
+
+    sudo_stream = _make_tar_stream({"./cfg.yml": b"x: 1"})
+
+    popen_calls: list[list[str]] = []
+
+    def _fake_popen(cmd: list[str], **kwargs):  # type: ignore[override]
+        popen_calls.append(cmd)
+        return _FakeProc(sudo_stream)
+
+    monkeypatch.setattr("storage.tar_stream.subprocess.Popen", _fake_popen)
+    monkeypatch.setattr(
+        TarStreamProducer, "_is_env_readable", lambda self: False
+    )
+
+    producer = TarStreamProducer(str(env_dir), [])
+    names = _list_tar_names(producer.stream())
+
+    assert any(n.startswith("env") for n in names)
+    assert len(popen_calls) == 1
+    assert popen_calls[0][:3] == ["sudo", "tar", "-cC"]
+    assert popen_calls[0][3] == str(env_dir)
+
+
+@pytest.mark.storage
+def test_reinject_empty_stream_raises_runtime_error(
+    tmp_path: Path,
+) -> None:
+    """_reinject raises RuntimeError with a readable message on empty volume stream."""
+    env_dir = tmp_path / "env"
+    env_dir.mkdir()
+
+    empty_stream = io.BytesIO(b"")
+
+    producer = TarStreamProducer(str(env_dir), [("db_data", empty_stream)])
+    with pytest.raises(RuntimeError, match="db_data"):
+        with producer.stream() as s:
+            s.read()

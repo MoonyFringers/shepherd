@@ -358,13 +358,25 @@ class Environment(ABC):
         """Return the directory for the environment with a given tag."""
         return os.path.join(self.configMng.config.envs_path, env_tag)
 
-    def get_volume_tar_streams(self) -> list[tuple[str, IO[bytes]]]:
+    def volumes_need_elevated_permissions(self) -> bool:
+        """Return True if any volume path requires sudo to archive.
+
+        Backends override this for backends where host-side paths can be owned
+        by container users.  The default is False (no volumes, or volumes that
+        are always accessible without privilege escalation).
+        """
+        return False
+
+    def get_volume_tar_streams(
+        self, allow_sudo: bool = False
+    ) -> list[tuple[str, IO[bytes]]]:
         """Return one ``(volume_tag, tar_stream)`` pair per environment volume.
 
         Each stream is uncompressed, rooted at ``.`` (entries like
         ``./subdir/file``).  The tag binds the stream to the volume for
         identity-preserving restore.  The default returns an empty list;
-        backends override this.
+        backends override this.  Pass ``allow_sudo=True`` only after the user
+        has consented to elevated-privilege operations.
         """
         return []
 

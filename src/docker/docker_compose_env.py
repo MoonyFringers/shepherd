@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import subprocess
 import time
 from typing import IO, Any, Optional, cast, override
@@ -98,13 +97,39 @@ class DockerComposeEnv(Environment):
                         )
 
     @override
-    def get_volume_tar_streams(self) -> list[tuple[str, IO[bytes]]]:
+    def volumes_need_elevated_permissions(self) -> bool:
+        """Return True if any bind-mount volume path requires sudo to archive.
+
+        Uses a recursive ``os.walk`` check (same approach as
+        ``TarStreamProducer._is_env_readable``) so that directories whose
+        root is accessible but whose contents are owned by a container user
+        (e.g. a postgres data directory) are correctly detected.  Docker
+        named/external volumes are excluded — they are streamed via a
+        ``docker run`` container, so host-side permission checks do not apply.
+        """
+        for vol in self.envCfg.volumes or []:
+            if (
+                vol.driver == "local"
+                and vol.driver_opts
+                and vol.driver_opts.get("type") == "none"
+                and vol.driver_opts.get("o") == "bind"
+            ):
+                device = vol.driver_opts.get("device", "")
+                if device and not self._is_path_tree_readable(device):
+                    return True
+        return False
+
+    @override
+    def get_volume_tar_streams(
+        self, allow_sudo: bool = False
+    ) -> list[tuple[str, IO[bytes]]]:
         """Return one ``(volume_tag, tar_stream)`` pair per volume.
 
-        Bind-mounts are streamed directly from the host path (sudo when the
-        path is not readable by the current process).  Named and external
-        volumes are streamed via a temporary ``docker run`` container so no
-        knowledge of Docker's internal volume storage layout is required.
+        Bind-mounts are streamed directly from the host path (sudo only when
+        ``allow_sudo=True`` *and* the path is not fully readable by the
+        current process).  Named and external volumes are streamed via a
+        temporary ``docker run`` container so no knowledge of Docker's
+        internal volume storage layout is required.
         """
         if not self.envCfg.volumes:
             return []
@@ -117,7 +142,9 @@ class DockerComposeEnv(Environment):
                 and vol.driver_opts.get("o") == "bind"
             ):
                 device = vol.driver_opts.get("device", "")
-                result.append((vol.tag, self._path_tar_stream(device)))
+                result.append(
+                    (vol.tag, self._path_tar_stream(device, allow_sudo))
+                )
             else:
                 vol_name = (
                     vol.name if vol.is_external() and vol.name else vol.tag
@@ -127,14 +154,17 @@ class DockerComposeEnv(Environment):
                 )
         return result
 
-    def _is_readable(self, path: str) -> bool:
-        return os.access(path, os.R_OK)
+    def _is_path_tree_readable(self, path: str) -> bool:
+        return Util.is_tree_readable(path)
 
-    def _path_tar_stream(self, path: str) -> IO[bytes]:
+    def _path_tar_stream(
+        self, path: str, allow_sudo: bool = False
+    ) -> IO[bytes]:
+        readable = self._is_path_tree_readable(path)
         cmd = (
-            ["tar", "-cC", path, "."]
-            if self._is_readable(path)
-            else ["sudo", "tar", "-cC", path, "."]
+            ["sudo", "tar", "-cC", path, "."]
+            if not readable and allow_sudo
+            else ["tar", "-cC", path, "."]
         )
         proc = subprocess.Popen(
             cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE
