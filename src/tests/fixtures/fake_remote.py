@@ -56,6 +56,13 @@ class FakeRemoteBackend(RemoteBackend):
     def delete(self, path: str) -> None:
         self._store.pop(path, None)
 
+    def rename(self, src_path: str, dst_path: str) -> None:
+        if src_path not in self._store:
+            raise FileNotFoundError(
+                f"FakeRemoteBackend: cannot rename missing path: {src_path}"
+            )
+        self._store[dst_path] = self._store.pop(src_path)
+
     def close(self) -> None:
         pass
 

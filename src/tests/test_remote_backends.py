@@ -269,3 +269,113 @@ def test_sftp_close_closes_transport() -> None:
     with pytest.raises(RuntimeError):
         backend.close()
     mock_transport.close.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# chunk_tmp_path helper
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_chunk_tmp_path_format() -> None:
+    """chunk_tmp_path returns {shard}/{hash}.tmp, differing from chunk_path by .tmp."""
+    from remote.backend import RemoteBackend
+
+    h = _CHUNK_HASH
+    assert RemoteBackend.chunk_tmp_path(h) == f"chunks/ab/{h}.tmp"
+    assert (
+        RemoteBackend.chunk_tmp_path(h) == RemoteBackend.chunk_path(h) + ".tmp"
+    )
+
+
+# ---------------------------------------------------------------------------
+# FTPBackend — rename
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_ftp_rename_calls_ftp_rename() -> None:
+    """rename issues ftp.rename() at the correct absolute paths."""
+    mock_ftp = MagicMock()
+    backend = _make_ftp_backend(mock_ftp)
+    src = f"chunks/ab/{_CHUNK_HASH}.tmp"
+    dst = _CHUNK_PATH
+    backend.rename(src, dst)
+    mock_ftp.rename.assert_called_once_with(f"{_ROOT}/{src}", f"{_ROOT}/{dst}")
+
+
+@pytest.mark.remote
+def test_ftp_rename_updates_shard_cache() -> None:
+    """rename removes the .tmp name and inserts the final name in the shard cache."""
+    mock_ftp = MagicMock()
+
+    def retrlines_side_effect(cmd: str, callback: object) -> None:
+        if "NLST" in cmd:
+            callback(f"{_CHUNK_HASH}.tmp")  # type: ignore[operator]
+
+    mock_ftp.retrlines.side_effect = retrlines_side_effect
+    backend = _make_ftp_backend(mock_ftp)
+
+    # Warm the shard cache.
+    backend.exists(f"chunks/ab/{_CHUNK_HASH}.tmp")
+
+    backend.rename(f"chunks/ab/{_CHUNK_HASH}.tmp", _CHUNK_PATH)
+
+    shard = backend._shard_cache.get("ab", set())
+    assert f"{_CHUNK_HASH}.tmp" not in shard
+    assert _CHUNK_HASH in shard
+
+
+@pytest.mark.remote
+def test_ftp_rename_cold_cache_does_not_raise() -> None:
+    """rename succeeds and leaves the cache untouched when the shard is not warmed."""
+    mock_ftp = MagicMock()
+    backend = _make_ftp_backend(mock_ftp)
+
+    # Shard "ab" is deliberately NOT warmed before the rename.
+    assert "ab" not in backend._shard_cache
+
+    backend.rename(f"chunks/ab/{_CHUNK_HASH}.tmp", _CHUNK_PATH)
+
+    mock_ftp.rename.assert_called_once()
+    # Cache must remain absent — not populated with stale data.
+    assert "ab" not in backend._shard_cache
+
+
+@pytest.mark.remote
+def test_ftp_warm_shard_excludes_tmp_files() -> None:
+    """_warm_shard must not add .tmp file names to the shard cache."""
+    mock_ftp = MagicMock()
+    tmp_name = f"{_CHUNK_HASH}.tmp"
+
+    def retrlines_side_effect(cmd: str, callback: object) -> None:
+        if "NLST" in cmd:
+            callback(tmp_name)  # type: ignore[operator]
+            callback(_CHUNK_HASH)  # type: ignore[operator]
+
+    mock_ftp.retrlines.side_effect = retrlines_side_effect
+    backend = _make_ftp_backend(mock_ftp)
+
+    # Trigger shard warming.
+    backend.exists(_CHUNK_PATH)
+
+    shard = backend._shard_cache.get("ab", set())
+    assert tmp_name not in shard
+    assert _CHUNK_HASH in shard
+
+
+# ---------------------------------------------------------------------------
+# SFTPBackend — rename
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_sftp_rename_calls_sftp_rename() -> None:
+    """rename delegates to sftp.rename() at the correct absolute paths."""
+    mock_sftp = MagicMock()
+    mock_transport = MagicMock()
+    backend = _make_sftp_backend(mock_sftp, mock_transport)
+    src = f"chunks/ab/{_CHUNK_HASH}.tmp"
+    dst = _CHUNK_PATH
+    backend.rename(src, dst)
+    mock_sftp.rename.assert_called_once_with(f"{_ROOT}/{src}", f"{_ROOT}/{dst}")

@@ -104,6 +104,11 @@ class SFTPBackend(RemoteBackend):
         except FileNotFoundError:
             pass
 
+    def rename(self, src_path: str, dst_path: str) -> None:
+        # Errors propagate intentionally: a failed rename must abort the push
+        # rather than leave a .tmp file silently treated as a valid chunk.
+        self._sftp.rename(self._abs(src_path), self._abs(dst_path))
+
     def close(self) -> None:
         try:
             self._sftp.close()

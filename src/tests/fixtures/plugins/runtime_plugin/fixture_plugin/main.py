@@ -43,6 +43,9 @@ class FakeRemoteBackend(RemoteBackend):
     def delete(self, path: str) -> None:
         pass
 
+    def rename(self, src_path: str, dst_path: str) -> None:
+        pass
+
     def close(self) -> None:
         pass
 
