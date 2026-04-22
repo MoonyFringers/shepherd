@@ -44,6 +44,14 @@ class RemoteBackend(ABC):
         return f"chunks/{chunk_hash[:2]}/{chunk_hash}"
 
     @staticmethod
+    def chunk_tmp_path(chunk_hash: str) -> str:
+        """Return the in-flight temp path for *chunk_hash* during upload.
+
+        Example: ``ab3f1c9d...`` → ``chunks/ab/ab3f1c9d....tmp``
+        """
+        return f"chunks/{chunk_hash[:2]}/{chunk_hash}.tmp"
+
+    @staticmethod
     def snapshots_prefix(env_name: str) -> str:
         """Return the remote path prefix for all snapshots of *env_name*.
 
@@ -93,6 +101,14 @@ class RemoteBackend(ABC):
     @abstractmethod
     def delete(self, path: str) -> None:
         """Delete *path* from the remote."""
+
+    @abstractmethod
+    def rename(self, src_path: str, dst_path: str) -> None:
+        """Atomically rename *src_path* to *dst_path* on the remote.
+
+        Both paths are always in the same shard directory.  Implementations
+        map to ``RNFR``/``RNTO`` (FTP) or ``sftp.rename()`` (SFTP).
+        """
 
     @abstractmethod
     def close(self) -> None:

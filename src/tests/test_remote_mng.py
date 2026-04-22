@@ -1476,16 +1476,153 @@ def test_prune_empty_remote() -> None:
 
 @pytest.mark.remote
 def test_prune_prints_summary(capsys: pytest.CaptureFixture[str]) -> None:
-    """prune prints a summary line with scanned and orphaned counts."""
+    """prune prints a summary line with scanned, orphaned, and tmp counts."""
     fake = FakeRemoteBackend()
     _seed_prune_backend(fake, "my-env", [_HASH_A], [_HASH_B])
     mng = _make_prune_mng(fake)
 
     mng.prune(remote_name="test-ftp")
 
-    out = capsys.readouterr().out
+    out = " ".join(capsys.readouterr().out.split())
     assert "2 chunk(s) scanned" in out
     assert "1 orphan(s) deleted" in out
+    assert "0 incomplete upload(s) cleaned" in out
+
+
+@pytest.mark.remote
+def test_prune_deletes_stranded_tmp_files() -> None:
+    """prune removes .tmp files left by interrupted uploads."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [])
+
+    stranded = f"chunks/aa/{_HASH_A}.tmp"
+    fake._store[stranded] = b"partial"
+
+    mng = _make_prune_mng(fake)
+    mng.prune(remote_name="test-ftp")
+
+    assert stranded not in fake._store
+    assert RemoteBackend.chunk_path(_HASH_A) in fake._store
+
+
+@pytest.mark.remote
+def test_prune_dry_run_preserves_tmp_files() -> None:
+    """prune --dry-run leaves .tmp files intact."""
+    fake = FakeRemoteBackend()
+    _seed_prune_backend(fake, "my-env", [_HASH_A], [])
+
+    stranded = f"chunks/aa/{_HASH_A}.tmp"
+    fake._store[stranded] = b"partial"
+
+    mng = _make_prune_mng(fake)
+    mng.prune(remote_name="test-ftp", dry_run=True)
+
+    assert stranded in fake._store
+
+
+@pytest.mark.remote
+def test_push_chunks_stored_without_tmp_suffix(
+    tmp_path: pathlib.Path,
+) -> None:
+    """All chunk paths in the backend after push use the final hash name, not .tmp."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"hello" * 1024)
+
+    fake = FakeRemoteBackend()
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+    mng.push("my-env", env_mng, remote_name="test-ftp")
+
+    chunk_paths = [k for k in fake._store if k.startswith("chunks/")]
+    assert chunk_paths, "Expected at least one chunk to be uploaded"
+    for path in chunk_paths:
+        assert not path.endswith(
+            ".tmp"
+        ), f"Chunk path {path!r} still has .tmp suffix after push"
+
+
+@pytest.mark.remote
+def test_push_issues_rename_after_upload(
+    tmp_path: pathlib.Path,
+) -> None:
+    """push uploads each chunk to a .tmp path then renames to the final path."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"hello" * 1024)
+
+    fake = FakeRemoteBackend()
+    upload_calls: list[str] = []
+    rename_calls: list[tuple[str, str]] = []
+
+    original_upload = fake.upload
+    original_rename = fake.rename
+
+    def _spy_upload(path: str, data: bytes) -> None:
+        upload_calls.append(path)
+        original_upload(path, data)
+
+    def _spy_rename(src: str, dst: str) -> None:
+        rename_calls.append((src, dst))
+        original_rename(src, dst)
+
+    fake.upload = _spy_upload  # type: ignore[method-assign]
+    fake.rename = _spy_rename  # type: ignore[method-assign]
+
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+    mng.push("my-env", env_mng, remote_name="test-ftp")
+
+    chunk_uploads = [p for p in upload_calls if p.startswith("chunks/")]
+    assert chunk_uploads, "Expected at least one chunk upload"
+    for path in chunk_uploads:
+        assert path.endswith(
+            ".tmp"
+        ), f"Chunk uploaded to non-.tmp path: {path!r}"
+
+    assert len(rename_calls) == len(chunk_uploads)
+    for tmp_path_val, final_path in rename_calls:
+        assert tmp_path_val.endswith(".tmp")
+        assert final_path == tmp_path_val[: -len(".tmp")]
+
+
+@pytest.mark.remote
+def test_push_shard_cache_ignores_stranded_tmp(
+    tmp_path: pathlib.Path,
+) -> None:
+    """A stranded .tmp file must not suppress re-upload of its chunk."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"hello" * 1024)
+
+    fake = FakeRemoteBackend()
+
+    # First push to discover which hashes are produced.
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+    mng.push("my-env", env_mng, remote_name="test-ftp")
+    chunk_paths = [k for k in fake._store if k.startswith("chunks/")]
+    assert chunk_paths
+
+    # Simulate a crash: replace final chunk files with partial .tmp files.
+    for final_path in chunk_paths:
+        parts = final_path.split("/")  # ["chunks", shard, hash]
+        fake._store.pop(final_path)
+        fake._store[f"chunks/{parts[1]}/{parts[2]}.tmp"] = b"partial"
+
+    # Second push must re-upload the chunks, not skip them.
+    mng2, env_mng2 = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+    uploaded_on_second: list[str] = []
+    original_upload = fake.upload
+
+    def _spy(path: str, data: bytes) -> None:
+        if path.startswith("chunks/") and path.endswith(".tmp"):
+            uploaded_on_second.append(path)
+        original_upload(path, data)
+
+    fake.upload = _spy  # type: ignore[method-assign]
+    mng2.push("my-env", env_mng2, remote_name="test-ftp")
+
+    assert (
+        uploaded_on_second
+    ), "Chunks must be re-uploaded when only .tmp files exist"
 
 
 # ---------------------------------------------------------------------------

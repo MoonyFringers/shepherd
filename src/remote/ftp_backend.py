@@ -77,6 +77,10 @@ class FTPBackend(RemoteBackend):
         self._mkdirs(posixpath.dirname(abs_path))
         self._ftp.storbinary(f"STOR {abs_path}", io.BytesIO(data))
         # Keep shard cache consistent after a new chunk is written.
+        # When uploading via the write-then-rename pattern the caller first
+        # uploads to a .tmp path (added here) and then calls rename(), which
+        # swaps the .tmp entry for the final hash.  The end state is correct
+        # as long as both calls are made in sequence on the same instance.
         parts = path.split("/")
         if len(parts) == 3 and parts[0] == "chunks":
             shard = parts[1]
@@ -104,6 +108,21 @@ class FTPBackend(RemoteBackend):
             self._ftp.delete(self._abs(path))
         except ftplib.error_perm:
             pass
+
+    def rename(self, src_path: str, dst_path: str) -> None:
+        self._ftp.rename(self._abs(src_path), self._abs(dst_path))
+        src_parts = src_path.split("/")
+        dst_parts = dst_path.split("/")
+        if (
+            len(src_parts) == 3
+            and src_parts[0] == "chunks"
+            and len(dst_parts) == 3
+            and dst_parts[0] == "chunks"
+        ):
+            shard = dst_parts[1]
+            if shard in self._shard_cache:
+                self._shard_cache[shard].discard(src_parts[2])
+                self._shard_cache[shard].add(dst_parts[2])
 
     def close(self) -> None:
         try:
@@ -137,4 +156,8 @@ class FTPBackend(RemoteBackend):
             )
         except ftplib.error_perm:
             pass
-        self._shard_cache[shard] = {posixpath.basename(n) for n in names}
+        self._shard_cache[shard] = {
+            posixpath.basename(n)
+            for n in names
+            if not posixpath.basename(n).endswith(".tmp")
+        }

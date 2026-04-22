@@ -352,16 +352,21 @@ class RemoteMng:
                 for chunk in chunker.chunk_stream(stream):
                     shard = chunk.hash[:2]
                     if shard not in shard_cache:
-                        shard_cache[shard] = set(
-                            backend.list_prefix(f"chunks/{shard}")
-                        )
+                        shard_cache[shard] = {
+                            name
+                            for name in backend.list_prefix(f"chunks/{shard}")
+                            if not name.endswith(".tmp")
+                        }
                     chunk_hashes.append(chunk.hash)
                     total_raw += chunk.raw_size
                     total_stored += len(chunk.data)
                     if chunk.hash not in shard_cache[shard]:
-                        backend.upload(
-                            RemoteBackend.chunk_path(chunk.hash), chunk.data
+                        tmp_path = RemoteBackend.chunk_tmp_path(chunk.hash)
+                        backend.upload(tmp_path, chunk.data)
+                        backend.rename(
+                            tmp_path, RemoteBackend.chunk_path(chunk.hash)
                         )
+                        shard_cache[shard].add(chunk.hash)
                         uploaded += 1
 
             now = _utcnow()
@@ -725,23 +730,32 @@ class RemoteMng:
 
             # Enumerate every stored chunk across all 256 hex shards.
             orphans: list[str] = []
+            tmp_files: list[str] = []
             total = 0
             for shard in (f"{i:02x}" for i in range(256)):
-                for chunk_hash in backend.list_prefix(f"chunks/{shard}"):
-                    total += 1
-                    if chunk_hash not in referenced:
-                        orphans.append(chunk_hash)
+                for name in backend.list_prefix(f"chunks/{shard}"):
+                    if name.endswith(".tmp"):
+                        tmp_files.append(f"chunks/{shard}/{name}")
+                    else:
+                        total += 1
+                        if name not in referenced:
+                            orphans.append(name)
 
-            # Delete (or dry-run report) orphaned chunks.
+            # Delete (or dry-run report) orphaned chunks and stranded temp
+            # files left by interrupted uploads.
             if not dry_run:
                 for chunk_hash in orphans:
                     backend.delete(RemoteBackend.chunk_path(chunk_hash))
+                for tmp_path in tmp_files:
+                    backend.delete(tmp_path)
 
         action = "would be deleted" if dry_run else "deleted"
+        tmp_action = "would be cleaned" if dry_run else "cleaned"
         Util.print(
             f"Prune '{remote_cfg.name}': "
             f"{total} chunk(s) scanned, "
-            f"{len(orphans)} orphan(s) {action}."
+            f"{len(orphans)} orphan(s) {action}, "
+            f"{len(tmp_files)} incomplete upload(s) {tmp_action}."
         )
 
     def _delete_dir(self, path: str) -> None:
