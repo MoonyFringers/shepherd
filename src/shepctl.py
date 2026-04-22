@@ -22,6 +22,12 @@ from environment import EnvironmentMng
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
 from plugin import PluginMng, PluginRuntimeMng
 from remote import RemoteMng
+from remote.remote_progress import (
+    run_dehydrate_with_progress,
+    run_hydrate_with_progress,
+    run_pull_with_progress,
+    run_push_with_progress,
+)
 from service import ServiceMng
 from util import Util, setup_logging
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
@@ -620,7 +626,8 @@ def push_env(
             "Restore local data with 'env hydrate' first."
         )
     label_list = [lbl.strip() for lbl in labels.split(",")] if labels else []
-    shepherd.remoteMng.push(
+    run_push_with_progress(
+        shepherd.remoteMng,
         env_name=env_tag,
         environment_mng=shepherd.environmentMng,
         remote_name=remote_name,
@@ -635,7 +642,11 @@ def push_env(
 def dehydrate_env(shepherd: ShepherdMng, env_tag: Optional[str]) -> None:
     """Strip local data for ENV_TAG (or the checked-out env)."""
     env_tag = _resolve_env_tag(shepherd, env_tag)
-    shepherd.remoteMng.dehydrate(env_tag, shepherd.environmentMng)
+    run_dehydrate_with_progress(
+        shepherd.remoteMng,
+        env_name=env_tag,
+        environment_mng=shepherd.environmentMng,
+    )
 
 
 @env.command(name="pull")
@@ -666,7 +677,8 @@ def pull_env(
             f"Environment '{env_tag}' is dehydrated. "
             "Restore local data with 'env hydrate' instead."
         )
-    shepherd.remoteMng.pull(
+    run_pull_with_progress(
+        shepherd.remoteMng,
         env_name=env_tag,
         remote_name=remote_name,
         snapshot_id=snapshot_id,
@@ -695,7 +707,8 @@ def hydrate_env(
 ) -> None:
     """Restore local data for ENV_TAG (or the checked-out env) from a remote."""
     env_tag = _resolve_env_tag(shepherd, env_tag)
-    shepherd.remoteMng.hydrate(
+    run_hydrate_with_progress(
+        shepherd.remoteMng,
         env_name=env_tag,
         environment_mng=shepherd.environmentMng,
         remote_name=remote_name,
