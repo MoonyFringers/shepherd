@@ -92,10 +92,7 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].volumes[0].driver == "local"
     assert not env_templates[0].volumes[0].is_external()
     assert env_templates[0].volumes[0].driver_opts
-    assert (
-        env_templates[0].volumes[0].driver_opts["device"]
-        == "${test_path}/volumes/srv/data"
-    )
+    assert env_templates[0].volumes[0].driver_opts["device"] == "/srv/data"
 
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"
@@ -153,7 +150,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].properties["sys_psw"] == "sys"
     assert service_templates[1].properties["user"] == "docker"
     assert service_templates[1].properties["psw"] == "docker"
-    assert config.envs[0].template == Constants.ENV_TEMPLATE_DEFAULT
+    assert config.envs[0].template == "default"
     assert config.envs[0].factory == Constants.ENV_FACTORY_DEFAULT
     assert config.envs[0].tag == "sample-1"
     services = config.envs[0].services
@@ -213,9 +210,6 @@ def test_load_config(mocker: MockerFixture):
     assert ports and ports[0] == "3000:3000"
     assert config.templates_path == "${test_path}/templates"
     assert config.envs_path == "${test_path}/envs"
-    assert config.volumes_path == "${test_path}/volumes"
-    assert config.staging_area.volumes_path == "${test_path}/sa_volumes"
-    assert config.staging_area.images_path == "${test_path}/sa_images"
     assert config.plugins is not None
     assert config.plugins[0].id == "acme"
     assert config.plugins[0].enabled == "true"
@@ -541,10 +535,6 @@ def test_parse_plugin_enabled_supports_bool_and_placeholder():
     config_yaml = """
 templates_path: ${templates_path}
 envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
 plugins:
   - id: acme
     enabled: false
@@ -635,13 +625,14 @@ def test_load_config_with_refs(mocker: MockerFixture):
     assert config.envs[0].volumes[0].tag == "nginx"
     assert config.envs[0].volumes[0].driver_opts
     assert (
-        config.envs[0].volumes[0].driver_opts["device"] == "./volumes/foo/nginx"
+        config.envs[0].volumes[0].driver_opts["device"]
+        == "./templates/foo/nginx"
     )
     assert config.envs[0].volumes[1].tag == "postgres"
     assert config.envs[0].volumes[1].driver_opts
     assert (
         config.envs[0].volumes[1].driver_opts["device"]
-        == "./volumes/foo/postgres"
+        == "./templates/foo/postgres"
     )
     assert config.envs[0].networks
     assert config.envs[0].networks[0].tag == "foo"
@@ -891,10 +882,6 @@ def test_parse_fragment_ref_string_shorthand():
     config_yaml = """
 templates_path: /tmp
 envs_path: /tmp
-volumes_path: /tmp
-staging_area:
-  volumes_path: /tmp
-  images_path: /tmp
 env_templates:
   - tag: demo
     factory: docker-compose
@@ -923,10 +910,6 @@ def test_parse_fragment_ref_with_values():
     config_yaml = """
 templates_path: /tmp
 envs_path: /tmp
-volumes_path: /tmp
-staging_area:
-  volumes_path: /tmp
-  images_path: /tmp
 env_templates:
   - tag: demo
     factory: docker-compose
@@ -1251,10 +1234,6 @@ def test_load_config_remote_chunk_defaults():
     config_yaml = """
 templates_path: /tmp
 envs_path: /tmp
-volumes_path: /tmp
-staging_area:
-  volumes_path: /tmp
-  images_path: /tmp
 remotes:
   - name: minimal
     type: ftp

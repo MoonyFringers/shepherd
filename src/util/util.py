@@ -29,9 +29,6 @@ DEFAULT_SHPD_VALUES_TEMPLATE = """# Shepherd workspace directory
 shpd_path=~/shpd
 templates_path=${shpd_path}/templates
 envs_path=${shpd_path}/envs
-volumes_path=${shpd_path}/volumes
-staging_area_volumes_path=${shpd_path}/sa_volumes
-staging_area_images_path=${shpd_path}/sa_images
 
 # Shepherd default environment type
 default_env_type=docker-compose
@@ -370,9 +367,6 @@ class Util:
     @staticmethod
     def ensure_shpd_dirs(constants: Constants):
         dirs = {
-            "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
-            "SHPD_SSH_DIR": constants.SHPD_SSH_DIR,
-            "SHPD_SSHD_DIR": constants.SHPD_SSHD_DIR,
             "SHPD_PLUGINS_DIR": constants.SHPD_PLUGINS_DIR,
         }
 

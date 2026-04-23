@@ -55,13 +55,7 @@ def test_shepherdmng_creates_dirs(
         sm.configMng.config.templates_path + "/" + Constants.ENV_TEMPLATES_DIR,
         sm.configMng.config.templates_path + "/" + Constants.SVC_TEMPLATES_DIR,
         sm.configMng.config.envs_path,
-        sm.configMng.config.volumes_path,
-        sm.configMng.constants.SHPD_CERTS_DIR,
         sm.configMng.constants.SHPD_PLUGINS_DIR,
-        sm.configMng.constants.SHPD_SSH_DIR,
-        sm.configMng.constants.SHPD_SSHD_DIR,
-        sm.configMng.config.staging_area.volumes_path,
-        sm.configMng.config.staging_area.images_path,
     ]
 
     for template in sm.configMng.get_environment_templates() or []:

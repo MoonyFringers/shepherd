@@ -20,18 +20,6 @@ service_templates:
         environment: []
         inits: null
     properties: {}
-  - tag: postgres
-    factory: postgres
-    containers:
-      - image: ${pg_image}
-        tag: pg-container
-        environment: []
-        ports:
-          - net_listener_port:${pg_listener_port}
-        inits: null
-    properties:
-      sys_user: ${db_sys_usr}
-      sys_psw: ${db_sys_psw}
-      user: ${db_usr}
-      psw: ${db_psw}
+plugins: []
+remotes: []
 envs: []

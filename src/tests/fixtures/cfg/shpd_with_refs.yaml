@@ -1,9 +1,5 @@
 templates_path: ${templates_path}
 envs_path: ${envs_path}
-volumes_path: ${volumes_path}
-staging_area:
-  volumes_path: ${staging_area_volumes_path}
-  images_path: ${staging_area_images_path}
 env_templates:
   - tag: nginx-postgres
     factory: docker-compose
@@ -30,7 +26,7 @@ env_templates:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
       - tag: postgres
@@ -40,7 +36,7 @@ env_templates:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
 service_templates:
@@ -173,7 +169,7 @@ envs:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
       - tag: postgres
@@ -183,7 +179,7 @@ envs:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.volumes_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
     status:

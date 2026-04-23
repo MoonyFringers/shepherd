@@ -27,18 +27,6 @@ class Constants:
         return os.path.join(self.SHPD_PATH, ".shpd.yaml")
 
     @property
-    def SHPD_CERTS_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".certs")
-
-    @property
-    def SHPD_SSH_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".ssh")
-
-    @property
-    def SHPD_SSHD_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".sshd")
-
-    @property
     def SHPD_PLUGINS_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, "plugins")
 
@@ -68,7 +56,6 @@ class Constants:
     # Environment templates:
 
     ENV_TEMPLATES_DIR: str = "envs"
-    ENV_TEMPLATE_DEFAULT: str = "default"
 
     # Environment types
 
@@ -83,8 +70,6 @@ class Constants:
     # Service templates:
 
     SVC_TEMPLATES_DIR: str = "svcs"
-    SVC_TEMPLATE_DEFAULT: str = "default"
-    SVC_TAG_DEFAULT: str = "service-default"
 
     # Service factories:
 
@@ -114,53 +99,10 @@ class Constants:
         config loading/resolution flows.
         """
         return {
-            "env_templates": [
-                {
-                    "tag": self.ENV_TEMPLATE_DEFAULT,
-                    "factory": self.ENV_FACTORY_DEFAULT,
-                    "service_templates": [
-                        {
-                            "template": self.SVC_TEMPLATE_DEFAULT,
-                            "tag": self.SVC_TAG_DEFAULT,
-                        }
-                    ],
-                    "networks": [
-                        {
-                            "tag": self.NET_KEY_DEFAULT,
-                            "name": self.NET_NAME_DEFAULT,
-                            "external": "true",
-                        }
-                    ],
-                }
-            ],
-            "service_templates": [
-                {
-                    "tag": self.SVC_TEMPLATE_DEFAULT,
-                    "factory": self.SVC_FACTORY_DEFAULT,
-                    "labels": [],
-                    "properties": {},
-                    "containers": [
-                        {
-                            "image": "",
-                            "hostname": None,
-                            "container_name": None,
-                            "workdir": None,
-                            "volumes": [],
-                            "environment": [],
-                            "ports": [],
-                            "networks": [],
-                            "extra_hosts": [],
-                        }
-                    ],
-                },
-            ],
+            "env_templates": [],
+            "service_templates": [],
             "templates_path": "${templates_path}",
             "envs_path": "${envs_path}",
-            "volumes_path": "${volumes_path}",
-            "staging_area": {
-                "volumes_path": "${staging_area_volumes_path}",
-                "images_path": "${staging_area_images_path}",
-            },
             "plugins": [],
             "remotes": [],
             "envs": [],
