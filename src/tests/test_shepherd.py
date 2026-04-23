@@ -2192,8 +2192,7 @@ def test_cli_env_dehydrate_defaults_to_active_env(
 
     assert result.exit_code == 0, result.output
     mock_dehydrate.assert_called_once()
-    # dehydrate takes env_tag as a positional arg, not keyword
-    assert mock_dehydrate.call_args.args[0] == "test-1"
+    assert mock_dehydrate.call_args.kwargs["env_name"] == "test-1"
 
 
 @pytest.mark.shpd

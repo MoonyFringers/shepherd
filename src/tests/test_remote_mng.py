@@ -1626,6 +1626,194 @@ def test_push_shard_cache_ignores_stranded_tmp(
 
 
 # ---------------------------------------------------------------------------
+# Push hooks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_push_hooks_on_start_and_on_chunk_and_on_complete(
+    tmp_path: pathlib.Path,
+) -> None:
+    """push invokes on_start once, on_chunk per chunk, on_complete once."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"abc" * 1024)
+
+    fake = FakeRemoteBackend()
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+
+    starts: list[None] = []
+    chunks: list[tuple[int, int, bool]] = []
+    completes: list[tuple[str, int, int, int, int]] = []
+
+    from remote.remote_progress import PushHooks
+
+    hooks = PushHooks(
+        on_start=lambda: starts.append(None),
+        on_chunk=lambda raw, stored, is_new: chunks.append(
+            (raw, stored, is_new)
+        ),
+        on_complete=lambda snap, up, sk, raw, st: completes.append(
+            (snap, up, sk, raw, st)
+        ),
+    )
+
+    mng.push("my-env", env_mng, remote_name="test-ftp", push_hooks=hooks)
+
+    assert len(starts) == 1
+    assert len(chunks) >= 1
+    assert len(completes) == 1
+    snap_id, uploaded, skipped, total_raw, total_stored = completes[0]
+    assert uploaded + skipped == len(chunks)
+    assert total_raw > 0
+    assert total_stored > 0
+
+
+@pytest.mark.remote
+def test_push_hooks_on_chunk_totals_match(tmp_path: pathlib.Path) -> None:
+    """Sum of raw_size and stored_size across on_chunk calls matches
+    the n_raw / n_stored forwarded to on_complete."""
+    env_dir = tmp_path / "my-env"
+    env_dir.mkdir()
+    (env_dir / "data.txt").write_bytes(b"x" * 2048)
+
+    fake = FakeRemoteBackend()
+    mng, env_mng = _make_push_mng(fake, _make_env_cfg(), str(env_dir))
+
+    accumulated_raw = [0]
+    accumulated_stored = [0]
+    complete_raw = [0]
+    complete_stored = [0]
+
+    from remote.remote_progress import PushHooks
+
+    def on_chunk(raw: int, stored: int, is_new: bool) -> None:
+        accumulated_raw[0] += raw
+        accumulated_stored[0] += stored
+
+    def on_complete(snap: str, up: int, sk: int, raw: int, st: int) -> None:
+        complete_raw[0] = raw
+        complete_stored[0] = st
+
+    hooks = PushHooks(on_chunk=on_chunk, on_complete=on_complete)
+    mng.push("my-env", env_mng, remote_name="test-ftp", push_hooks=hooks)
+
+    assert accumulated_raw[0] == complete_raw[0]
+    assert accumulated_stored[0] == complete_stored[0]
+
+
+# ---------------------------------------------------------------------------
+# Restore hooks (pull / hydrate)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_pull_restore_hooks_are_invoked(tmp_path: pathlib.Path) -> None:
+    """pull invokes on_manifest, on_chunk per chunk, and on_complete once."""
+    content = b"pull me" * 512
+    fake = FakeRemoteBackend()
+    manifest = _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    mng = _make_pull_mng(fake, envs_path)
+
+    from remote.remote_progress import RestoreHooks
+
+    manifests_seen: list[tuple[int, str]] = []
+    chunks_seen: list[bool] = []
+    completes: list[tuple[str, int, int, int]] = []
+
+    hooks = RestoreHooks(
+        on_manifest=lambda total, snap: manifests_seen.append((total, snap)),
+        on_chunk=lambda from_cache: chunks_seen.append(from_cache),
+        on_complete=lambda snap, dl, fc, sb: completes.append(
+            (snap, dl, fc, sb)
+        ),
+    )
+
+    mng.pull("my-env", remote_name="test-ftp", restore_hooks=hooks)
+
+    assert len(manifests_seen) == 1
+    total_chunks, snap_id = manifests_seen[0]
+    assert total_chunks == manifest.chunk_count
+    assert snap_id == manifest.snapshot_id
+    assert len(chunks_seen) == manifest.chunk_count
+    assert len(completes) == 1
+    assert completes[0][0] == manifest.snapshot_id
+
+
+@pytest.mark.remote
+def test_hydrate_restore_hooks_are_invoked(tmp_path: pathlib.Path) -> None:
+    """hydrate invokes on_manifest, on_chunk per chunk, and on_complete once."""
+    content = b"hydrate me" * 512
+    fake = FakeRemoteBackend()
+    manifest = _seed_fake_backend(fake, "my-env", content)
+
+    envs_path = str(tmp_path / "envs")
+    dehydrated_cfg = _make_env_cfg(dehydrated=True)
+    mng = _make_pull_mng(fake, envs_path, existing_env_cfg=dehydrated_cfg)
+
+    from remote.remote_progress import RestoreHooks
+
+    manifests_seen: list[tuple[int, str]] = []
+    chunks_seen: list[bool] = []
+    completes: list[tuple[str, int, int, int]] = []
+
+    hooks = RestoreHooks(
+        on_manifest=lambda total, snap: manifests_seen.append((total, snap)),
+        on_chunk=lambda from_cache: chunks_seen.append(from_cache),
+        on_complete=lambda snap, dl, fc, sb: completes.append(
+            (snap, dl, fc, sb)
+        ),
+    )
+
+    mng.hydrate(
+        "my-env",
+        _make_env_mng_mock_not_running(),
+        remote_name="test-ftp",
+        restore_hooks=hooks,
+    )
+
+    assert len(manifests_seen) == 1
+    assert manifests_seen[0][0] == manifest.chunk_count
+    assert len(chunks_seen) == manifest.chunk_count
+    assert len(completes) == 1
+    assert completes[0][0] == manifest.snapshot_id
+
+
+# ---------------------------------------------------------------------------
+# Dehydrate hooks
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.remote
+def test_dehydrate_hooks_on_phase_called_twice(
+    tmp_path: pathlib.Path,
+) -> None:
+    """dehydrate calls on_phase exactly twice: once for volumes, once for data."""
+    env_dir = tmp_path / "envs" / "my-env"
+    env_dir.mkdir(parents=True)
+
+    env_cfg = _make_env_cfg()
+    configMng = MagicMock()
+    configMng.get_environment.return_value = env_cfg
+    configMng.config.envs_path = str(tmp_path / "envs")
+    mng = RemoteMng(configMng)
+
+    phases: list[str] = []
+
+    from remote.remote_progress import DehydrateHooks
+
+    hooks = DehydrateHooks(on_phase=lambda label: phases.append(label))
+
+    mng.dehydrate(
+        "my-env", _make_env_mng_mock_not_running(), dehydrate_hooks=hooks
+    )
+
+    assert phases == ["Removing volumes", "Deleting local data"]
+
+
+# ---------------------------------------------------------------------------
 # Plugin backend dispatch
 # ---------------------------------------------------------------------------
 

@@ -41,6 +41,7 @@ from .sftp_backend import SFTPBackend
 if TYPE_CHECKING:
     from environment.environment import Environment, EnvironmentMng
     from plugin.runtime import PluginRuntimeMng
+    from remote.remote_progress import DehydrateHooks, PushHooks, RestoreHooks
 
 
 def _utcnow() -> str:
@@ -80,6 +81,10 @@ class RemoteMng:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def resolve_remote_name(self, name: Optional[str]) -> str:
+        """Return the display name of the resolved remote."""
+        return self._resolve_remote(name).name
 
     def _resolve_remote(self, name: Optional[str]) -> RemoteCfg:
         """Return the named remote, the default, or raise
@@ -269,6 +274,7 @@ class RemoteMng:
         remote_name: Optional[str] = None,
         set_tracking: bool = False,
         labels: Optional[list[str]] = None,
+        push_hooks: Optional[PushHooks] = None,
     ) -> None:
         """Create a new remote snapshot for *env_name*.
 
@@ -348,6 +354,8 @@ class RemoteMng:
             # OS pipe buffer and then blocks on write — natural backpressure
             # with no deadlock risk.
             shard_cache: dict[str, set[str]] = {}
+            if push_hooks and push_hooks.on_start:
+                push_hooks.on_start()
             with producer.stream() as stream:
                 for chunk in chunker.chunk_stream(stream):
                     shard = chunk.hash[:2]
@@ -360,7 +368,12 @@ class RemoteMng:
                     chunk_hashes.append(chunk.hash)
                     total_raw += chunk.raw_size
                     total_stored += len(chunk.data)
-                    if chunk.hash not in shard_cache[shard]:
+                    is_new = chunk.hash not in shard_cache[shard]
+                    if push_hooks:
+                        push_hooks.on_chunk(
+                            chunk.raw_size, len(chunk.data), is_new
+                        )
+                    if is_new:
                         tmp_path = RemoteBackend.chunk_tmp_path(chunk.hash)
                         backend.upload(tmp_path, chunk.data)
                         backend.rename(
@@ -414,15 +427,25 @@ class RemoteMng:
             self.configMng.add_or_set_environment(env_name, env_cfg)
 
         skipped = len(chunk_hashes) - uploaded
-        Util.print(
-            f"Pushed '{env_name}' → '{remote_cfg.name}' "
-            f"[{snapshot_id}]: "
-            f"{uploaded} chunk(s) uploaded, "
-            f"{skipped} already present, "
-            f"{Util.fmt_bytes(total_stored)} stored."
-        )
+        if push_hooks:
+            push_hooks.on_complete(
+                snapshot_id, uploaded, skipped, total_raw, total_stored
+            )
+        else:
+            Util.print(
+                f"Pushed '{env_name}' → '{remote_cfg.name}' "
+                f"[{snapshot_id}]: "
+                f"{uploaded} chunk(s) uploaded, "
+                f"{skipped} already present, "
+                f"{Util.fmt_bytes(total_stored)} stored."
+            )
 
-    def dehydrate(self, env_name: str, environment_mng: EnvironmentMng) -> None:
+    def dehydrate(
+        self,
+        env_name: str,
+        environment_mng: EnvironmentMng,
+        dehydrate_hooks: Optional[DehydrateHooks] = None,
+    ) -> None:
         """Strip local data for *env_name* while preserving its config entry.
 
         Removes all backend-managed volumes, then the environment directory.
@@ -448,7 +471,11 @@ class RemoteMng:
         env: Environment = environment_mng.get_environment_from_cfg(env_cfg)
         self._stop_if_running(env, environment_mng)
 
+        if dehydrate_hooks:
+            dehydrate_hooks.on_phase("Removing volumes")
         env.remove_local_volumes()
+        if dehydrate_hooks:
+            dehydrate_hooks.on_phase("Deleting local data")
         env_dir = os.path.join(self.configMng.config.envs_path, env_name)
         self._delete_dir(env_dir)
 
@@ -511,6 +538,7 @@ class RemoteMng:
         manifest: SnapshotManifest,
         dest_dir: str,
         cache: LocalChunkCache | NullLocalChunkCache,
+        restore_hooks: Optional[RestoreHooks] = None,
     ) -> tuple[int, int]:
         """Download, decompress, and untar all chunks into *dest_dir*.
 
@@ -540,12 +568,16 @@ class RemoteMng:
                         if (cached := cache.get(chunk_hash)) is not None:
                             compressed = cached
                             counters[1] += 1
+                            from_cache = True
                         else:
                             compressed = backend.download(
                                 RemoteBackend.chunk_path(chunk_hash)
                             )
                             cache.put(chunk_hash, compressed)
                             counters[0] += 1
+                            from_cache = False
+                        if restore_hooks:
+                            restore_hooks.on_chunk(from_cache)
                         wf.write(dctx.decompress(compressed))
             except BrokenPipeError:
                 # The read end was closed early (e.g. tarfile raised an error
@@ -574,6 +606,7 @@ class RemoteMng:
         env_name: str,
         remote_name: Optional[str] = None,
         snapshot_id: Optional[str] = None,
+        restore_hooks: Optional[RestoreHooks] = None,
     ) -> None:
         """Create a local environment entry from a remote snapshot.
 
@@ -600,8 +633,12 @@ class RemoteMng:
 
         with self._build_backend(remote_cfg) as backend:
             manifest = self._resolve_manifest(backend, env_name, snapshot_id)
+            if restore_hooks:
+                restore_hooks.on_manifest(
+                    manifest.chunk_count, manifest.snapshot_id
+                )
             downloaded, from_cache = self._restore_chunks(
-                backend, manifest, dest_dir, cache
+                backend, manifest, dest_dir, cache, restore_hooks
             )
 
         env_cfg = EnvironmentCfg(
@@ -617,13 +654,21 @@ class RemoteMng:
         )
         self.configMng.add_or_set_environment(env_name, env_cfg)
 
-        Util.print(
-            f"Pulled '{env_name}' ← '{remote_cfg.name}' "
-            f"[{manifest.snapshot_id}]: "
-            f"{downloaded} chunk(s) downloaded, "
-            f"{from_cache} from cache, "
-            f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
-        )
+        if restore_hooks:
+            restore_hooks.on_complete(
+                manifest.snapshot_id,
+                downloaded,
+                from_cache,
+                manifest.stored_size_bytes,
+            )
+        else:
+            Util.print(
+                f"Pulled '{env_name}' ← '{remote_cfg.name}' "
+                f"[{manifest.snapshot_id}]: "
+                f"{downloaded} chunk(s) downloaded, "
+                f"{from_cache} from cache, "
+                f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
+            )
 
     def hydrate(
         self,
@@ -631,6 +676,7 @@ class RemoteMng:
         environment_mng: Optional["EnvironmentMng"] = None,
         remote_name: Optional[str] = None,
         snapshot_id: Optional[str] = None,
+        restore_hooks: Optional[RestoreHooks] = None,
     ) -> None:
         """Restore local data for a dehydrated environment.
 
@@ -664,8 +710,12 @@ class RemoteMng:
 
         with self._build_backend(remote_cfg) as backend:
             manifest = self._resolve_manifest(backend, env_name, snapshot_id)
+            if restore_hooks:
+                restore_hooks.on_manifest(
+                    manifest.chunk_count, manifest.snapshot_id
+                )
             downloaded, from_cache = self._restore_chunks(
-                backend, manifest, dest_dir, cache
+                backend, manifest, dest_dir, cache, restore_hooks
             )
 
         if environment_mng is not None:
@@ -677,13 +727,21 @@ class RemoteMng:
         env_cfg.dehydrated = False
         self.configMng.add_or_set_environment(env_name, env_cfg)
 
-        Util.print(
-            f"Hydrated '{env_name}' ← '{remote_cfg.name}' "
-            f"[{manifest.snapshot_id}]: "
-            f"{downloaded} chunk(s) downloaded, "
-            f"{from_cache} from cache, "
-            f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
-        )
+        if restore_hooks:
+            restore_hooks.on_complete(
+                manifest.snapshot_id,
+                downloaded,
+                from_cache,
+                manifest.stored_size_bytes,
+            )
+        else:
+            Util.print(
+                f"Hydrated '{env_name}' ← '{remote_cfg.name}' "
+                f"[{manifest.snapshot_id}]: "
+                f"{downloaded} chunk(s) downloaded, "
+                f"{from_cache} from cache, "
+                f"{Util.fmt_bytes(manifest.stored_size_bytes)} stored."
+            )
 
     # ------------------------------------------------------------------
     # Prune
