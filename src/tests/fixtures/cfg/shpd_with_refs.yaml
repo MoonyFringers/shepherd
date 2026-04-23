@@ -26,7 +26,7 @@ env_templates:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.envs_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
       - tag: postgres
@@ -36,7 +36,7 @@ env_templates:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.envs_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
 service_templates:
@@ -169,7 +169,7 @@ envs:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.envs_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
       - tag: postgres
@@ -179,7 +179,7 @@ envs:
         driver_opts:
           type: none
           o: bind
-          device: "#{cfg.envs_path}/#{env.tag}/#{vol.tag}"
+          device: "#{cfg.templates_path}/#{env.tag}/#{vol.tag}"
         labels:
           env: production
     status:

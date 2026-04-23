@@ -59,7 +59,7 @@ env_templates:
         driver_opts:
           type: none
           o: bind
-          device: ${envs_path}/srv/data
+          device: /srv/data
         labels:
           env: production
 service_templates:

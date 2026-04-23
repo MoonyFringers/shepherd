@@ -1,0 +1,25 @@
+templates_path: ${templates_path}
+envs_path: ${envs_path}
+env_templates:
+  - tag: default
+    factory: docker-compose
+    service_templates:
+      - template: default
+        tag: service-default
+    networks:
+      - tag: shpdnet
+        name: envnet
+        external: true
+service_templates:
+  - tag: default
+    factory: docker
+    containers:
+      - image: ""
+        tag: container-1
+        ports: []
+        environment: []
+        inits: null
+    properties: {}
+plugins: []
+remotes: []
+envs: []

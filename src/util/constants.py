@@ -70,7 +70,6 @@ class Constants:
     # Service templates:
 
     SVC_TEMPLATES_DIR: str = "svcs"
-    SVC_TAG_DEFAULT: str = "service-default"
 
     # Service factories:
 

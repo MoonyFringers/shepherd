@@ -92,10 +92,7 @@ def test_load_config(mocker: MockerFixture):
     assert env_templates[0].volumes[0].driver == "local"
     assert not env_templates[0].volumes[0].is_external()
     assert env_templates[0].volumes[0].driver_opts
-    assert (
-        env_templates[0].volumes[0].driver_opts["device"]
-        == "${test_path}/envs/srv/data"
-    )
+    assert env_templates[0].volumes[0].driver_opts["device"] == "/srv/data"
 
     service_templates = config.service_templates
     assert service_templates and service_templates[0].tag == "oracle"
@@ -627,11 +624,15 @@ def test_load_config_with_refs(mocker: MockerFixture):
     assert config.envs[0].volumes
     assert config.envs[0].volumes[0].tag == "nginx"
     assert config.envs[0].volumes[0].driver_opts
-    assert config.envs[0].volumes[0].driver_opts["device"] == "./envs/foo/nginx"
+    assert (
+        config.envs[0].volumes[0].driver_opts["device"]
+        == "./templates/foo/nginx"
+    )
     assert config.envs[0].volumes[1].tag == "postgres"
     assert config.envs[0].volumes[1].driver_opts
     assert (
-        config.envs[0].volumes[1].driver_opts["device"] == "./envs/foo/postgres"
+        config.envs[0].volumes[1].driver_opts["device"]
+        == "./templates/foo/postgres"
     )
     assert config.envs[0].networks
     assert config.envs[0].networks[0].tag == "foo"

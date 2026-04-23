@@ -32,7 +32,7 @@ def shpd_conf(tmp_path: Path, mocker: MockerFixture) -> tuple[Path, Path]:
     config_file.write_text(values.replace("${test_path}", str(temp_home)))
 
     shpd_yaml = temp_home / ".shpd.yaml"
-    shpd_yaml.write_text(read_fixture("svc", "shpd.yaml"))
+    shpd_yaml.write_text(read_fixture("env", "shpd_bootstrap.yaml"))
 
     os.environ["SHPD_CONF"] = str(config_file)
     return temp_home, config_file
