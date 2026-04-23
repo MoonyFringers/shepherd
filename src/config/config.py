@@ -798,16 +798,6 @@ class EnvironmentCfg(Resolvable):
 
 
 @dataclass
-class StagingAreaCfg(Resolvable):
-    """
-    Represents the configuration for the staging area.
-    """
-
-    volumes_path: str
-    images_path: str
-
-
-@dataclass
 class PluginCfg(Resolvable):
     """Represents one installed plugin entry in the main config."""
 
@@ -910,8 +900,6 @@ class Config(Resolvable):
 
     templates_path: str
     envs_path: str
-    volumes_path: str
-    staging_area: StagingAreaCfg
     env_templates: Optional[list[EnvironmentTemplateCfg]] = None
     service_templates: Optional[list[ServiceTemplateCfg]] = None
     env_template_fragments: Optional[list[EnvTemplateFragmentCfg]] = None
@@ -1157,13 +1145,6 @@ def _parse_service(item: Any) -> ServiceCfg:
     )
 
 
-def _parse_staging_area(item: Any) -> StagingAreaCfg:
-    return StagingAreaCfg(
-        volumes_path=item["volumes_path"],
-        images_path=item["images_path"],
-    )
-
-
 def _parse_plugin(item: Any) -> PluginCfg:
     enabled_value = item.get("enabled", True)
     return PluginCfg(
@@ -1382,8 +1363,6 @@ def parse_config(yaml_str: str) -> Config:
         ),
         templates_path=data["templates_path"],
         envs_path=data["envs_path"],
-        volumes_path=data["volumes_path"],
-        staging_area=_parse_staging_area(data["staging_area"]),
         plugins=(
             [_parse_plugin(plugin) for plugin in data.get("plugins", [])]
             if data.get("plugins") is not None
@@ -1445,9 +1424,6 @@ class ConfigMng:
                 self.config.templates_path, Constants.SVC_TEMPLATES_DIR
             ),
             "ENVS": self.config.envs_path,
-            "VOLUMES": self.config.volumes_path,
-            "VOLUMES_SA": self.config.staging_area.volumes_path,
-            "IMAGES_SA": self.config.staging_area.images_path,
         }
 
         for template in self.config.env_templates or []:

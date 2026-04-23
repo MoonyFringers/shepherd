@@ -156,11 +156,6 @@ class Constants:
             ],
             "templates_path": "${templates_path}",
             "envs_path": "${envs_path}",
-            "volumes_path": "${volumes_path}",
-            "staging_area": {
-                "volumes_path": "${staging_area_volumes_path}",
-                "images_path": "${staging_area_images_path}",
-            },
             "plugins": [],
             "remotes": [],
             "envs": [],
