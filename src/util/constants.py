@@ -27,18 +27,6 @@ class Constants:
         return os.path.join(self.SHPD_PATH, ".shpd.yaml")
 
     @property
-    def SHPD_CERTS_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".certs")
-
-    @property
-    def SHPD_SSH_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".ssh")
-
-    @property
-    def SHPD_SSHD_DIR(self) -> str:
-        return os.path.join(self.SHPD_PATH, ".sshd")
-
-    @property
     def SHPD_PLUGINS_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, "plugins")
 

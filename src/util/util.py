@@ -367,9 +367,6 @@ class Util:
     @staticmethod
     def ensure_shpd_dirs(constants: Constants):
         dirs = {
-            "SHPD_CERTS_DIR": constants.SHPD_CERTS_DIR,
-            "SHPD_SSH_DIR": constants.SHPD_SSH_DIR,
-            "SHPD_SSHD_DIR": constants.SHPD_SSHD_DIR,
             "SHPD_PLUGINS_DIR": constants.SHPD_PLUGINS_DIR,
         }
 
