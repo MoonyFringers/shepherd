@@ -99,7 +99,7 @@ class PluginEnvironmentView(Protocol):
         self,
         env_tag: Optional[str],
         svc_tag: str,
-        svc_template: Optional[str],
+        svc_template: str,
         svc_class: Optional[str],
     ) -> None:
         """Add *svc_tag* to the environment identified by *env_tag*."""

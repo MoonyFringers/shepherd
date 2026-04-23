@@ -24,7 +24,7 @@ import yaml
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
 from service import Service, ServiceFactory
-from util import Constants, Util
+from util import Util
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
 from .render import (
@@ -1213,7 +1213,7 @@ class EnvironmentMng:
         self,
         env_tag: Optional[str],
         svc_tag: str,
-        svc_template: Optional[str],
+        svc_template: str,
         svc_class: Optional[str],
     ):
         """Add a service to an environment."""
@@ -1226,9 +1226,7 @@ class EnvironmentMng:
                     f"Service: '{svc_tag}' already "
                     f"defined in environment: '{envCfg.tag}'."
                 )
-            svc_type_cfg = self.configMng.get_service_template(
-                svc_template if svc_template else Constants.SVC_TEMPLATE_DEFAULT
-            )
+            svc_type_cfg = self.configMng.get_service_template(svc_template)
 
             if svc_type_cfg:
                 svcCfg = self.configMng.svc_cfg_from_service_template(
@@ -1236,11 +1234,7 @@ class EnvironmentMng:
                 )
             else:
                 svcCfg = self.configMng.svc_cfg_from_tag(
-                    (
-                        svc_template
-                        if svc_template
-                        else Constants.SVC_TEMPLATE_DEFAULT
-                    ),
+                    svc_template,
                     svc_tag,
                     svc_class,
                 )

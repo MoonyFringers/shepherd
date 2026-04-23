@@ -153,7 +153,7 @@ def test_load_config(mocker: MockerFixture):
     assert service_templates[1].properties["sys_psw"] == "sys"
     assert service_templates[1].properties["user"] == "docker"
     assert service_templates[1].properties["psw"] == "docker"
-    assert config.envs[0].template == Constants.ENV_TEMPLATE_DEFAULT
+    assert config.envs[0].template == "default"
     assert config.envs[0].factory == Constants.ENV_FACTORY_DEFAULT
     assert config.envs[0].tag == "sample-1"
     services = config.envs[0].services
