@@ -6,8 +6,10 @@ env_templates:
     service_templates:
       - template: nginx
         tag: web
+        optional: false
       - template: postgres
         tag: db
+        optional: false
     probes: []
     networks:
       - tag: "#{env.tag}"
@@ -60,6 +62,7 @@ service_templates:
         extra_hosts: []
         build: null
         inits: null
+        healthcheck: null
     labels:
       - com.example.type=web
     properties: {}
@@ -83,6 +86,7 @@ service_templates:
         extra_hosts: []
         build: null
         inits: null
+        healthcheck: null
     labels:
       - com.example.type=db
     properties: {}
@@ -112,6 +116,7 @@ envs:
             extra_hosts: []
             build: null
             inits: null
+            healthcheck: null
         labels:
           - com.example.type=web
         service_class: "#{not.exist}"
@@ -144,6 +149,7 @@ envs:
             extra_hosts: []
             build: null
             inits: null
+            healthcheck: null
         labels:
           - com.example.type=db
         properties:

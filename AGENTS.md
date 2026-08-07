@@ -107,6 +107,10 @@ helper: `local-dev-testing` workflow.
   `src/pyproject.toml`).
 - Test files: `src/tests/test_*.py`; fixtures in `src/tests/fixtures/`.
 - Markers: `env`, `svc`, `cfg`, `shpd`, `compl`, `docker`.
+- **Every patch must include tests that cover the new or changed
+  code.** Coverage is not yet CI-blocking here, but that is not a
+  reason to skip it — manual verification is not a substitute. Full
+  detail: `local-dev-testing` workflow.
 
 ## Coding style & naming conventions
 

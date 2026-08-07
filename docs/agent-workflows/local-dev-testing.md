@@ -46,6 +46,17 @@ pytest -m cfg                                 # by marker
 
 Markers: `cfg`, `env`, `svc`, `shpd`, `compl`, `docker`.
 
+**Every patch must include tests that cover the new or changed code.**
+Coverage reporting is configured (`--cov` in `src/pyproject.toml`,
+`codecov.yml`), but it is currently `informational: true` — CI won't
+block a drop in coverage. That is not license to skip tests: manual
+verification (running a command by hand, checking a container comes
+up) is not a substitute for a unit test that survives the next
+refactor. Check the coverage delta for touched files
+(`pytest --cov-report=term` output) before considering a change done,
+same discipline as the sibling `numero-uno-backend` repo's Codecov
+patch gate, just not yet CI-enforced here.
+
 Build the binary
 -----------------
 

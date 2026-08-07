@@ -222,6 +222,17 @@ def render_container(
         container_def["networks"] = cnt.networks
     if cnt.extra_hosts:
         container_def["extra_hosts"] = cnt.extra_hosts
+    if cnt.healthcheck:
+        healthcheck_def: dict[str, Any] = {"test": cnt.healthcheck.test}
+        if cnt.healthcheck.interval:
+            healthcheck_def["interval"] = cnt.healthcheck.interval
+        if cnt.healthcheck.timeout:
+            healthcheck_def["timeout"] = cnt.healthcheck.timeout
+        if cnt.healthcheck.retries is not None:
+            healthcheck_def["retries"] = cnt.healthcheck.retries
+        if cnt.healthcheck.start_period:
+            healthcheck_def["start_period"] = cnt.healthcheck.start_period
+        container_def["healthcheck"] = healthcheck_def
     if labels:
         container_def["labels"] = labels
     return container_def

@@ -464,6 +464,25 @@ class InitCfg(Resolvable):
 
 
 @dataclass
+class HealthcheckCfg(Resolvable):
+    """
+    Represents a container's docker-compose-native healthcheck.
+
+    Mirrors compose's `healthcheck:` block directly (test/interval/
+    timeout/retries/start_period), rendered straight into the generated
+    compose YAML by `render_container` — distinct from `ProbeCfg`, which
+    runs as its own disposable compose service via `compose run --rm`
+    rather than polling the target container in place.
+    """
+
+    test: list[str]
+    interval: Optional[str] = None
+    timeout: Optional[str] = None
+    retries: Optional[int] = None
+    start_period: Optional[str] = None
+
+
+@dataclass
 class ContainerCfg(Resolvable):
     tag: str
     image: Optional[str] = None
@@ -483,6 +502,7 @@ class ContainerCfg(Resolvable):
     extra_hosts: Optional[list[str]] = None
     build: Optional[BuildCfg] = None
     inits: Optional[list[InitCfg]] = None
+    healthcheck: Optional[HealthcheckCfg] = None
 
 
 @dataclass
@@ -542,10 +562,19 @@ class ServiceTemplateCfg(Resolvable):
 class ServiceTemplateRefCfg(Resolvable):
     """
     Represents a service template reference.
+
+    `optional` marks a service as opt-in rather than always materialized:
+    `env add` excludes it by default (the docker-compose `profiles:`
+    equivalent). Bring it in explicitly afterwards with
+    `svc add <template> <tag>` against the checked-out environment.
     """
 
     template: str
     tag: str
+    optional: str = field(default="false", metadata={"boolify": True})
+
+    def is_optional(self) -> bool:
+        return str_to_bool(self.optional)
 
 
 @dataclass
@@ -936,6 +965,16 @@ def _parse_ready(item: Any) -> ReadyCfg:
     )
 
 
+def _parse_healthcheck(item: Any) -> HealthcheckCfg:
+    return HealthcheckCfg(
+        test=item["test"],
+        interval=item.get("interval"),
+        timeout=item.get("timeout"),
+        retries=item.get("retries"),
+        start_period=item.get("start_period"),
+    )
+
+
 def _parse_container(item: Any) -> ContainerCfg:
     inits = (
         [_parse_init(init) for init in item.get("inits", [])]
@@ -955,6 +994,11 @@ def _parse_container(item: Any) -> ContainerCfg:
         extra_hosts=item.get("extra_hosts", []),
         build=_parse_build(item["build"]) if item.get("build") else None,
         inits=inits,
+        healthcheck=(
+            _parse_healthcheck(item["healthcheck"])
+            if item.get("healthcheck")
+            else None
+        ),
     )
 
 
@@ -1016,9 +1060,15 @@ def _parse_volume(item: Any) -> VolumeCfg:
 
 
 def _parse_service_template_ref(item: Any) -> ServiceTemplateRefCfg:
+    optional_value = item.get("optional", False)
     return ServiceTemplateRefCfg(
         template=item["template"],
         tag=item["tag"],
+        optional=(
+            bool_to_str(optional_value)
+            if isinstance(optional_value, bool)
+            else optional_value
+        ),
     )
 
 
@@ -2112,7 +2162,9 @@ class ConfigMng:
         services: list[ServiceCfg] = [
             self.svc_cfg_from_service_template(template, ref.tag, None)
             for ref in svc_refs
-            if (template := self.get_service_template(ref.template)) is not None
+            if not ref.is_optional()
+            and (template := self.get_service_template(ref.template))
+            is not None
         ]
 
         return EnvironmentCfg(

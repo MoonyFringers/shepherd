@@ -891,6 +891,7 @@ class PluginRuntimeMng:
         return type(template_ref)(
             template=template_name,
             tag=template_ref.tag,
+            optional=template_ref.optional,
         )
 
     def _namespace_fragment_ref(
