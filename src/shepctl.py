@@ -433,6 +433,13 @@ def list_envs(shepherd: ShepherdMng):
     shepherd.environmentMng.list_envs()
 
 
+@env.command(name="templates")
+@click.pass_obj
+def list_env_templates(shepherd: ShepherdMng):
+    """List registered environment templates."""
+    shepherd.environmentMng.list_env_templates()
+
+
 # =====================================================
 # UP
 # =====================================================
@@ -723,6 +730,13 @@ def hydrate_env(
 def svc():
     """Manage services."""
     pass
+
+
+@svc.command(name="templates")
+@click.pass_obj
+def list_svc_templates(shepherd: ShepherdMng):
+    """List registered service templates."""
+    shepherd.serviceMng.list_svc_templates()
 
 
 @svc.command(name="get")

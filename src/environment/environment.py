@@ -790,6 +790,31 @@ class EnvironmentMng:
             f"{len(envs)} environment(s) found.", highlight=False
         )
 
+    def list_env_templates(self):
+        """List all registered environment templates (built-in and
+        plugin-contributed)."""
+        templates = self.configMng.get_environment_templates()
+        if not templates:
+            Util.console.print(
+                "[yellow]No environment templates registered.[/yellow]"
+            )
+            return
+
+        rows = [[t.tag, t.factory] for t in templates]
+
+        Util.render_table(
+            title="Environment Templates",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "Factory", "style": "magenta"},
+            ],
+            rows=rows,
+        )
+        Util.console.print(
+            f"{len(templates)} environment template(s) found.",
+            highlight=False,
+        )
+
     def start_env(
         self,
         envCfg: EnvironmentCfg,

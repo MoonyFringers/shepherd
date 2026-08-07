@@ -30,9 +30,17 @@ pip install -r src/requirements.txt -r src/requirements-dev.txt
 
 ## Install and enable
 
+`plugin install` takes a tar archive, not a bare directory. Build one
+listing contents explicitly — `tar czf archive.tar.gz .` embeds a
+top-level `.` entry that the archive path check rejects.
+
 ```bash
-# Install directly from the source directory (--force overwrites an existing copy)
-python3 src/shepctl.py plugin install examples/plugins/hello-plugin --force
+# Build the archive
+tar czf /tmp/hello-plugin.tar.gz -C examples/plugins/hello-plugin \
+  plugin.yaml hello_plugin README.md
+
+# Install (--force overwrites an existing copy)
+python3 src/shepctl.py plugin install /tmp/hello-plugin.tar.gz --force
 
 # Enable the plugin
 python3 src/shepctl.py plugin enable hello-plugin
@@ -47,10 +55,18 @@ python3 src/shepctl.py plugin get hello-plugin
 # New CLI command contributed by the plugin
 python3 src/shepctl.py hello greet
 python3 src/shepctl.py hello greet World
+```
 
-# List plugin-owned service and environment templates
-python3 src/shepctl.py svc template list
-python3 src/shepctl.py env template list
+There is no `env template list` / `svc template list` command yet.
+Validate the plugin's templates registered by adding an environment
+from one directly:
+
+```bash
+python3 src/shepctl.py env add hello-plugin/demo my-hello-env
+python3 src/shepctl.py env checkout my-hello-env
+python3 src/shepctl.py env up
+python3 src/shepctl.py env halt
+python3 src/shepctl.py env delete my-hello-env
 ```
 
 ## Type checking

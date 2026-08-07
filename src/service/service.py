@@ -222,6 +222,31 @@ class ServiceMng:
     def _is_details(self) -> bool:
         return bool(self.cli_flags.get("details", False))
 
+    def list_svc_templates(self):
+        """List all registered service templates (built-in and
+        plugin-contributed)."""
+        templates = self.configMng.get_service_templates()
+        if not templates:
+            Util.console.print(
+                "[yellow]No service templates registered.[/yellow]"
+            )
+            return
+
+        rows = [[t.tag, t.factory] for t in templates]
+
+        Util.render_table(
+            title="Service Templates",
+            columns=[
+                {"header": "Tag", "style": "cyan"},
+                {"header": "Factory", "style": "magenta"},
+            ],
+            rows=rows,
+        )
+        Util.console.print(
+            f"{len(templates)} service template(s) found.",
+            highlight=False,
+        )
+
     def get_service(
         self, envCfg: EnvironmentCfg, svc_tag: str
     ) -> Optional[Service]:
