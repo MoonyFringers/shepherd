@@ -1060,6 +1060,12 @@ def remote():
 @click.option(
     "--sftp", "backend_type", flag_value="sftp", help="SFTP transport."
 )
+@click.option(
+    "--registry",
+    "backend_type",
+    flag_value="registry",
+    help="OCI container registry transport.",
+)
 @click.option("--host", required=True, help="Remote server hostname.")
 @click.option("--user", default=None, help="Login username.")
 @click.option(
@@ -1087,7 +1093,14 @@ def remote():
 @click.option(
     "--root-path",
     required=True,
-    help="Root directory on the remote for the chunk store.",
+    help="Root directory on the remote for the chunk store "
+    "(repository name for --registry).",
+)
+@click.option(
+    "--insecure",
+    is_flag=True,
+    default=False,
+    help="Connect over plain HTTP instead of HTTPS (--registry only).",
 )
 @click.option(
     "--set-default",
@@ -1107,13 +1120,18 @@ def add_remote(
     password: Optional[str],
     identity_file: Optional[str],
     root_path: str,
+    insecure: bool,
     set_default: bool,
 ) -> None:
     """Register a new remote storage backend."""
     if not backend_type:
-        raise click.UsageError("Specify a transport with --ftp or --sftp.")
+        raise click.UsageError(
+            "Specify a transport with --ftp, --sftp, or --registry."
+        )
     if anon and backend_type != "ftp":
         raise click.UsageError("--anon is only valid for FTP remotes.")
+    if insecure and backend_type != "registry":
+        raise click.UsageError("--insecure is only valid for --registry.")
     if backend_type == "ftp":
         if anon and (user or password):
             raise click.UsageError(
@@ -1130,6 +1148,9 @@ def add_remote(
         raise click.UsageError(
             "SFTP remotes require --password or --identity-file."
         )
+    properties: Optional[dict[str, Any]] = (
+        {"insecure": True} if insecure else None
+    )
     remote_cfg = RemoteCfg(
         name=name,
         type=backend_type,
@@ -1140,6 +1161,7 @@ def add_remote(
         root_path=root_path,
         identity_file=identity_file,
         default="true" if set_default else "false",
+        properties=properties,
     )
     try:
         shepherd.configMng.add_remote(remote_cfg)
@@ -1185,6 +1207,11 @@ def delete_remote(shepherd: ShepherdMng, name: str) -> None:
 )
 @click.option("--root-path", default=None, help="New root path on remote.")
 @click.option(
+    "--insecure/--no-insecure",
+    default=None,
+    help="Toggle plain-HTTP mode (--registry only).",
+)
+@click.option(
     "--set-default",
     is_flag=True,
     default=False,
@@ -1201,6 +1228,7 @@ def modify_remote(
     anon: bool,
     identity_file: Optional[str],
     root_path: Optional[str],
+    insecure: Optional[bool],
     set_default: bool,
 ) -> None:
     """Modify an existing remote storage backend."""
@@ -1225,6 +1253,13 @@ def modify_remote(
         updates["identity_file"] = identity_file
     if root_path:
         updates["root_path"] = root_path
+    if insecure is not None:
+        existing = shepherd.configMng.get_remote(name)
+        if existing is None:
+            raise click.UsageError(f"Remote '{name}' is not configured.")
+        properties = dict(existing.properties or {})
+        properties["insecure"] = insecure
+        updates["properties"] = properties
     if set_default:
         updates["default"] = "true"
     if not updates:

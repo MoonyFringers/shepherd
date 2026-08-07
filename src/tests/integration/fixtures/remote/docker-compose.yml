@@ -15,3 +15,10 @@ services:
     command: "sftpuser:sftppass:1001::upload"
     ports:
       - "2222:22"
+
+  registry:
+    image: registry:2
+    environment:
+      REGISTRY_STORAGE_DELETE_ENABLED: "true"
+    ports:
+      - "5500:5000"

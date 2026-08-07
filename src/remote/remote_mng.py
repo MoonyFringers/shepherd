@@ -36,6 +36,7 @@ from util import Util
 
 from .backend import RemoteBackend
 from .ftp_backend import FTPBackend
+from .registry_backend import RegistryBackend
 from .sftp_backend import SFTPBackend
 
 if TYPE_CHECKING:
@@ -150,13 +151,26 @@ class RemoteMng:
                 root_path=root_path,
             )
 
+        if cfg.type == "registry":
+            properties = cfg.properties or {}
+            registry_host = host
+            if port is not None:
+                registry_host = f"{host}:{port}"
+            return RegistryBackend(
+                host=registry_host,
+                user=user,
+                password=cfg.password or "",
+                root_path=root_path,
+                insecure=bool(properties.get("insecure", False)),
+            )
+
         if self._plugin_runtime is not None:
             backend = self._plugin_runtime.build_remote_backend(cfg.type, cfg)
             if backend is not None:
                 return backend
         raise click.UsageError(
             f"Unknown remote type '{cfg.type}'. "
-            "Built-in types are 'ftp' and 'sftp'. "
+            "Built-in types are 'ftp', 'sftp', and 'registry'. "
             "Use a plugin to add additional transport backends."
         )
 

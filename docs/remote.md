@@ -213,6 +213,99 @@ remotes:
 
 ---
 
+### Registry (OCI)
+
+Stores chunks and manifests in a Docker/OCI container registry instead of a
+file-oriented server. A chunk's SHA-256 hash — already computed for
+deduplication — doubles as its OCI blob digest, so existence checks and
+uploads piggyback directly on the registry's own content-addressed blob
+store instead of a bespoke listing/caching scheme. Each snapshot also gets
+a real, `docker pull`-able multi-layer OCI image assembled from its chunk
+blobs (see [Registry Notes](#registry-notes) below and ADR-0007).
+
+#### CLI (Registry)
+
+```sh
+shepctl remote add my-registry --registry \
+    --host registry.example.com \
+    --user deploy \
+    --password "${REGISTRY_PASSWORD}" \
+    --root-path myorg/shepherd-backups \
+    --set-default
+
+# Local/test registry without TLS (e.g. `docker run -p 5000:5000 registry:2`)
+shepctl remote add local-registry --registry \
+    --host localhost:5000 \
+    --root-path shepherd-test \
+    --insecure
+```
+
+`--host` and `--root-path` are required. `--root-path` is the OCI
+repository name (not a filesystem path) — every object for this remote is
+stored as a distinct tag inside that one repository. `--user`/`--password`
+are optional; when set they are used both for HTTP Basic auth and to
+resolve the registry's Bearer-token auth challenge (the same flow
+`docker login`/`docker push` use). `--insecure` connects over plain HTTP
+instead of HTTPS.
+
+#### Config YAML (Registry)
+
+```yaml
+remotes:
+  - name: my-registry
+    type: registry
+    host: registry.example.com
+    user: deploy
+    password: "${REGISTRY_PASSWORD}"
+    root_path: myorg/shepherd-backups
+    properties:
+      insecure: false   # optional; true for plain-HTTP local/test registries
+    default: true
+```
+
+#### Registry Notes
+
+- Uses [`requests`](https://requests.readthedocs.io/) over the OCI
+  Distribution Spec (`GET`/`HEAD`/`PUT`/`DELETE` on `/v2/<repo>/blobs/...`
+  and `/v2/<repo>/manifests/...`) — the same wire protocol `docker
+  push`/`docker pull` use.
+- **Chunks are bare, untagged blobs.** A chunk's path
+  (`chunks/<shard>/<hash>`) already embeds its SHA-256 hash, which *is*
+  its OCI blob digest, so existence checks and downloads resolve the
+  digest straight from the path — no manifest lookup, no per-chunk tag.
+  Every other object (snapshot manifest, `latest.json`, `index.json`)
+  keeps the original model: a small single-layer OCI artifact tagged
+  with a translated form of the path (`/` and `:` become `_`, since OCI
+  tag names disallow both).
+- **Per-shard chunk index.** Registries expose no blob-listing API, only
+  a repository tag list, so a small JSON object per shard
+  (`chunks/<shard>/.index.json`) tracks which chunk hashes exist in that
+  shard; `shepctl remote get`/`shepctl remote prune` (and push-time
+  dedup checks) read this instead of tag-listing. The index is updated
+  in memory as chunks are confirmed or removed and flushed once per
+  touched shard when the backend connection closes.
+- **Per-snapshot OCI image.** Writing a snapshot's manifest also
+  assembles one real multi-layer OCI image — layers are that snapshot's
+  chunk blobs, in order — under an immutable per-snapshot tag and a
+  mutable per-environment `latest`-style tag repointed on every push.
+  This image is genuinely `docker pull`/`crane manifest`-able and
+  registry-native layer dedup applies to it directly, but it is **not
+  runnable**: layers are opaque zstd-compressed chunks, not real tar
+  diffs, so `docker run`/`docker save` will not produce a coherent
+  filesystem. It exists for registry-native visibility/interoperability,
+  not execution. See [ADR-0007](decisions/0007-registry-backend-snapshot-images.md)
+  for the full design.
+- **Deletion support (`shepctl remote prune`) depends on the registry.**
+  Many registries — notably Docker Hub — disable manifest/blob deletion
+  by default; a local `registry:2` container needs
+  `REGISTRY_STORAGE_DELETE_ENABLED=true` to support it. When deletion is
+  unsupported, `prune` silently skips removal rather than failing
+  (mirroring FTP/SFTP's "best effort" stance on missing paths).
+- Bearer tokens obtained during the auth challenge are cached in memory
+  for the lifetime of the backend connection.
+
+---
+
 ## Advanced: Chunk Tuning
 
 The default FastCDC parameters work well for most environments. Override them
