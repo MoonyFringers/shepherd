@@ -36,7 +36,8 @@ convert.sh
 wiki
 shepctl.spec
 build
-AGENTS.md
-CLAUDE.md
-.claude
 vhs
+
+# Claude Code local settings (developer-specific, not shared)
+.claude/settings.local.json
+.claude/scheduled_tasks.lock

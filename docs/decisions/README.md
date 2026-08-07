@@ -2,6 +2,9 @@
 
 This directory contains decision records for **shepherd**.
 
+Shortcut: read [`CURRENT.md`](CURRENT.md) for the net-result snapshot
+of all active decisions before reading the full corpus below.
+
 ## New ADR
 
 - Copy `adr-template.md` to `NNNN-title-with-dashes.md`
