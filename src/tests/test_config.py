@@ -1192,6 +1192,169 @@ def test_env_cfg_from_tag_fails_on_duplicate_service_tag(mocker: MockerFixture):
 
 
 # ---------------------------------------------------------------------------
+# ContainerCfg.healthcheck tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_container_healthcheck():
+    """A container's healthcheck block parses into HealthcheckCfg."""
+    from config.config import _parse_container
+
+    cnt = _parse_container(
+        {
+            "tag": "db",
+            "image": "postgres:16-alpine",
+            "healthcheck": {
+                "test": ["CMD-SHELL", "pg_isready -U test"],
+                "interval": "5s",
+                "timeout": "3s",
+                "retries": 5,
+                "start_period": "10s",
+            },
+        }
+    )
+
+    assert cnt.healthcheck is not None
+    assert cnt.healthcheck.test == ["CMD-SHELL", "pg_isready -U test"]
+    assert cnt.healthcheck.interval == "5s"
+    assert cnt.healthcheck.timeout == "3s"
+    assert cnt.healthcheck.retries == 5
+    assert cnt.healthcheck.start_period == "10s"
+
+
+@pytest.mark.cfg
+def test_parse_container_no_healthcheck():
+    """A container with no healthcheck block parses healthcheck as None."""
+    from config.config import _parse_container
+
+    cnt = _parse_container({"tag": "db", "image": "postgres:16-alpine"})
+
+    assert cnt.healthcheck is None
+
+
+@pytest.mark.docker
+def test_render_container_healthcheck():
+    """render_container emits a compose healthcheck: block when set."""
+    from config.config import ContainerCfg, HealthcheckCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="db",
+        image="postgres:16-alpine",
+        run_hostname="db",
+        healthcheck=HealthcheckCfg(
+            test=["CMD-SHELL", "pg_isready -U test"],
+            interval="5s",
+            timeout="3s",
+            retries=5,
+        ),
+    )
+
+    rendered = render_container(cnt, labels=None)
+
+    assert rendered["healthcheck"] == {
+        "test": ["CMD-SHELL", "pg_isready -U test"],
+        "interval": "5s",
+        "timeout": "3s",
+        "retries": 5,
+    }
+
+
+@pytest.mark.docker
+def test_render_container_no_healthcheck():
+    """render_container omits healthcheck entirely when unset."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(tag="db", image="postgres:16-alpine")
+
+    rendered = render_container(cnt, labels=None)
+
+    assert "healthcheck" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# ServiceTemplateRefCfg.optional tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_service_template_ref_optional():
+    """optional: true parses and is_optional() reflects it."""
+    from config.config import _parse_service_template_ref
+
+    ref = _parse_service_template_ref(
+        {"template": "crawler", "tag": "crawler", "optional": True}
+    )
+
+    assert ref.is_optional() is True
+
+
+@pytest.mark.cfg
+def test_parse_service_template_ref_defaults_not_optional():
+    """No optional key defaults to not optional."""
+    from config.config import _parse_service_template_ref
+
+    ref = _parse_service_template_ref({"template": "db", "tag": "db"})
+
+    assert ref.is_optional() is False
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_excludes_optional_service(mocker: MockerFixture):
+    """env_cfg_from_tag omits refs marked optional from materialized services."""
+    from config.config import EnvironmentTemplateCfg
+
+    cMng = _load_config_manager(mocker)
+
+    tmpl = EnvironmentTemplateCfg(
+        tag="demo",
+        factory="docker-compose",
+        service_templates=[
+            ServiceTemplateRefCfg(template="oracle", tag="required"),
+            ServiceTemplateRefCfg(
+                template="postgres", tag="extra", optional="true"
+            ),
+        ],
+        probes=[],
+        networks=[],
+        volumes=[],
+    )
+
+    env = cMng.env_cfg_from_tag(tmpl, "test-env")
+
+    assert env.services is not None
+    tags = {s.tag for s in env.services}
+    assert tags == {"required"}
+
+
+@pytest.mark.cfg
+def test_namespace_service_template_ref_preserves_optional():
+    """Plugin-declared optional refs keep the flag after canonicalization.
+
+    Regression test: _namespace_service_template_ref used to reconstruct
+    ServiceTemplateRefCfg without carrying `optional`, silently defeating
+    exclusion for every plugin-declared optional ref.
+    """
+    from plugin.runtime import PluginRuntimeMng
+
+    ref = ServiceTemplateRefCfg(
+        template="crawler", tag="crawler", optional="true"
+    )
+
+    # _namespace_service_template_ref uses no instance state; call it
+    # unbound rather than constructing a full PluginRuntimeMng (which
+    # eagerly loads enabled plugins in __init__).
+    namespaced = PluginRuntimeMng._namespace_service_template_ref(
+        None, "my-plugin", ref, {"crawler"}
+    )
+
+    assert namespaced.is_optional() is True
+    assert namespaced.template == "my-plugin/crawler"
+
+
+# ---------------------------------------------------------------------------
 # Remote storage config tests
 # ---------------------------------------------------------------------------
 

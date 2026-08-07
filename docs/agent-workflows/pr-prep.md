@@ -56,6 +56,10 @@ cd src && pytest
 ```
 
 All hooks and tests must pass; fix source, not tests, on a mismatch.
+Every patch must include tests covering the new or changed code —
+manual verification alone (running a command by hand, checking a
+container starts) doesn't survive the next refactor. See
+`local-dev-testing` for detail.
 
 CLA gate
 ---------

@@ -41,6 +41,7 @@ env_templates:
     service_templates:
       - template: default
         tag: service-default
+        optional: false
     probes: []
     networks:
       - tag: shpdnet
@@ -81,6 +82,7 @@ service_templates:
         extra_hosts: []
         build: null
         inits: null
+        healthcheck: null
     labels: []
     properties:
       pump_dir_name: ${ora_pump_dir}
@@ -109,6 +111,7 @@ service_templates:
           context_path: "#{cfg.envs_path}/#{env.tag}/build"
           dockerfile_path: "#{cnt.build.context_path}/Dockerfile"
         inits: null
+        healthcheck: null
     labels: []
     properties:
       sys_user: ${db_sys_usr}
@@ -138,6 +141,7 @@ envs:
               context_path: "#{cfg.envs_path}/#{env.tag}/build"
               dockerfile_path: "#{cnt.build.context_path}/Dockerfile"
             inits: null
+            healthcheck: null
         tag: pg-1
         service_class: null
         labels: []
@@ -190,6 +194,7 @@ envs:
             extra_hosts: []
             build: null
             inits: null
+            healthcheck: null
         labels: []
         properties: {}
         upstreams: []
@@ -214,6 +219,7 @@ envs:
             extra_hosts: []
             build: null
             inits: null
+            healthcheck: null
         labels: []
         properties:
           instance.name: primary
@@ -243,6 +249,7 @@ envs:
             networks: []
             extra_hosts: []
             inits: null
+            healthcheck: null
         labels: []
         properties: {}
         upstreams: []

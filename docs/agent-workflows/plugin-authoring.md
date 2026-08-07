@@ -114,17 +114,45 @@ class MyEnvironmentFactory(EnvironmentFactory):
         )
 ```
 
-Known gap: `ContainerCfg` has no `healthcheck` field — only script-based
-`ProbeCfg`, which attaches to env/service templates, not a container
-directly. A compose `healthcheck:` block has no 1:1 declarative
-translation; write a probe script instead
-([MoonyFringers/shepherd#260](https://github.com/MoonyFringers/shepherd/issues/260)).
+`ContainerCfg` supports a `healthcheck` field, mirroring compose's
+native `healthcheck:` block directly (`test`/`interval`/`timeout`/
+`retries`/`start_period`) — it's rendered straight into the generated
+compose YAML and polled by Docker itself, distinct from `ProbeCfg`
+(a disposable one-shot service run via `compose run --rm`):
 
-Known gap: no docker-compose `profiles:` equivalent. An optional,
-opt-in service within an environment (like a profile-gated crawler)
-must become its own standalone env template instead of a flag on the
-main one
-([MoonyFringers/shepherd#261](https://github.com/MoonyFringers/shepherd/issues/261)).
+```yaml
+containers:
+  - image: postgres:16-alpine
+    tag: app
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U myuser"]
+      interval: "5s"
+      timeout: "3s"
+      retries: 5
+```
+
+For a docker-compose `profiles:`-equivalent — an optional, opt-in
+service within an environment template — mark the service_templates
+ref `optional: true`. `env add` excludes it by default; bring it in
+explicitly afterwards against the checked-out environment:
+
+```yaml
+env_templates:
+  - tag: full
+    service_templates:
+      - template: app
+        tag: app
+      - template: crawler
+        tag: crawler
+        optional: true   # excluded by `env add`, not part of the base env
+```
+
+```sh
+shepctl env add my-plugin/full my-env
+shepctl env checkout my-env
+shepctl svc add my-plugin/crawler crawler   # opt in explicitly
+shepctl env up                              # now starts crawler too
+```
 
 Install / enable / test loop
 -------------------------------

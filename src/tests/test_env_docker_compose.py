@@ -164,6 +164,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     inits: null
+    healthcheck: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -198,6 +199,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     inits: null
+    healthcheck: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -220,6 +222,7 @@ probes:
         - "#{env.tag}"
       extra_hosts: []
       inits: null
+      healthcheck: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
     script_path: null
@@ -237,6 +240,7 @@ probes:
         - "#{env.tag}"
       extra_hosts: []
       inits: null
+      healthcheck: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
     script_path: null
@@ -316,6 +320,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     inits: null
+    healthcheck: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -350,6 +355,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     inits: null
+    healthcheck: null
   labels:
   - com.example.label1=value1
   - com.example.label2=value2
@@ -372,6 +378,7 @@ probes:
         - test-1
       extra_hosts: []
       inits: null
+      healthcheck: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
     script_path: null
@@ -389,6 +396,7 @@ probes:
         - test-1
       extra_hosts: []
       inits: null
+      healthcheck: null
       build: null
     script: sh -c 'pg_isready -h db -p 5432 -U docker -d docker'
     script_path: null
@@ -1511,6 +1519,7 @@ probes:
     - '#{env.tag}'
     extra_hosts: []
     inits: null
+    healthcheck: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
   script_path: null
@@ -1552,6 +1561,7 @@ probes:
     - test-1
     extra_hosts: []
     inits: null
+    healthcheck: null
     build: null
   script: sh -c 'pg_isready -h db -p 5432 -U sys -d docker'
   script_path: null
