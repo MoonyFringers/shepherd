@@ -201,7 +201,9 @@ class PluginMng:
             member_path = os.path.join(destination, member.name)
             resolved_path = os.path.realpath(member_path)
             resolved_destination = os.path.realpath(destination)
-            if not resolved_path.startswith(resolved_destination + os.sep):
+            if resolved_path != resolved_destination and not (
+                resolved_path.startswith(resolved_destination + os.sep)
+            ):
                 Util.print_error_and_die(
                     "Plugin archive contains an invalid path."
                 )

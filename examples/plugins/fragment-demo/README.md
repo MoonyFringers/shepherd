@@ -66,12 +66,19 @@ pip install -r src/requirements.txt -r src/requirements-dev.txt
 
 ## Install and enable
 
+`plugin install` takes a tar archive, not a bare directory. Build one
+listing contents explicitly — `tar czf archive.tar.gz .` embeds a
+top-level `.` entry that the archive path check rejects.
+
 ```bash
-# Install both plugins (order does not matter — Shepherd resolves load order)
-python3 src/shepctl.py plugin install \
-  examples/plugins/fragment-demo/data-plugin --force
-python3 src/shepctl.py plugin install \
-  examples/plugins/fragment-demo/app-plugin --force
+# Order does not matter — Shepherd resolves load order via depends_on.
+tar czf /tmp/data-plugin.tar.gz \
+  -C examples/plugins/fragment-demo/data-plugin plugin.yaml data_plugin
+tar czf /tmp/app-plugin.tar.gz \
+  -C examples/plugins/fragment-demo/app-plugin plugin.yaml app_plugin
+
+python3 src/shepctl.py plugin install /tmp/data-plugin.tar.gz --force
+python3 src/shepctl.py plugin install /tmp/app-plugin.tar.gz --force
 
 python3 src/shepctl.py plugin enable data-plugin
 python3 src/shepctl.py plugin enable app-plugin
@@ -79,17 +86,20 @@ python3 src/shepctl.py plugin enable app-plugin
 # Verify both appear in the registry
 python3 src/shepctl.py plugin get data-plugin
 python3 src/shepctl.py plugin get app-plugin
-
-# The fragment should be visible in the template list
-python3 src/shepctl.py env template list
 ```
+
+There is no `env template list` command yet; the fragment's presence
+is confirmed instead by successfully adding an environment from the
+`app-plugin/demo` template in Usage below.
 
 ## Usage
 
 ```bash
 # Start the demo environment using the configuration example
 export SHPD_CONFIG=examples/configurations/fragment-demo/shpd.yaml
-python3 src/shepctl.py env start my-app
+python3 src/shepctl.py env add app-plugin/demo my-app
+python3 src/shepctl.py env checkout my-app
+python3 src/shepctl.py env up
 ```
 
 ## Type checking
