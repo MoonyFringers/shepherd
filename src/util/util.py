@@ -43,6 +43,12 @@ log_format=%(asctime)s - %(levelname)s - %(message)s
 
 class Util:
     console = Console()
+    # Dedicated stderr console for error output. Shell completion
+    # (`shepctl __complete ...`) requires stdout to contain only
+    # completion candidates — an error printed via the main `console`
+    # (which defaults to stdout) would corrupt the candidate list any
+    # error path hit during completion resolution.
+    err_console = Console(stderr=True)
 
     @dataclass
     class OsInfo:
@@ -122,7 +128,7 @@ class Util:
 
     @staticmethod
     def print_error_and_die(message: str):
-        Util.console.print(f"[red]Error:[/red] {message}", highlight=False)
+        Util.err_console.print(f"[red]Error:[/red] {message}", highlight=False)
         sys.exit(1)
 
     @staticmethod
@@ -475,7 +481,7 @@ class Util:
             )
             return result
         except subprocess.CalledProcessError as e:
-            Util.console.print(f"Command failed: {e}", style="red")
+            Util.err_console.print(f"Command failed: {e}", style="red")
             if check:
                 sys.exit(1)
             return e

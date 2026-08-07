@@ -17,16 +17,21 @@ pytest_plugins = ["fixtures.fake_remote"]
 
 @pytest.fixture(autouse=True)
 def _no_rich_color(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Replace Util.console with a plain, no-color Console for every test.
+    """Replace Util.console/err_console with plain, no-color Consoles for
+    every test.
 
-    ``Util.console`` is a class-level attribute initialized at import time.
-    If pytest runs in a colour-capable terminal the Rich Console caches
-    colour support and emits ANSI escape codes even when CliRunner captures
-    stdout, making plain-string assertions fail.  Patching it here ensures
-    consistent, colour-free output across all environments.
+    ``Util.console``/``Util.err_console`` are class-level attributes
+    initialized at import time. If pytest runs in a colour-capable
+    terminal the Rich Console caches colour support and emits ANSI escape
+    codes even when CliRunner captures stdout/stderr, making plain-string
+    assertions fail. Patching them here ensures consistent, colour-free
+    output across all environments.
     """
     from util.util import Util
 
     monkeypatch.setattr(
         Util, "console", Console(force_terminal=False, no_color=True)
+    )
+    monkeypatch.setattr(
+        Util, "err_console", Console(force_terminal=False, no_color=True)
     )
