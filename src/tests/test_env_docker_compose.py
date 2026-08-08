@@ -270,6 +270,7 @@ status:
     expected_obj.setdefault("ready", None)
     expected_obj.setdefault("tracking_remote", None)
     expected_obj.setdefault("dehydrated", None)
+    expected_obj.setdefault("config", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
@@ -426,6 +427,7 @@ status:
     expected_obj.setdefault("ready", None)
     expected_obj.setdefault("tracking_remote", None)
     expected_obj.setdefault("dehydrated", None)
+    expected_obj.setdefault("config", None)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
