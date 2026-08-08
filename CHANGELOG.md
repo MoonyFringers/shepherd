@@ -10,3 +10,8 @@ and this project adheres to
 ## [0.0.1] - Unreleased
 
 ### Added
+
+- Plugin `config` values are now available to `${VAR}` template
+  resolution in that plugin's `service_templates`/`env_templates`, no
+  longer requiring a separately-exported, identically-named shell
+  variable (#278).

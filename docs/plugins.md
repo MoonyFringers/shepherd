@@ -86,6 +86,15 @@ Fields:
 config fields. YAML booleans are normalized, and placeholders such as
 `${PLUGIN_ENABLED}` are preserved until resolution time.
 
+Every key in a plugin's `config` block is also available to `${VAR}`
+placeholder resolution — including in that plugin's own
+`service_templates`/`env_templates` (`context_path`, `dockerfile_path`,
+`volumes`, etc). With the example above, `${region}` resolves to
+`eu-west-1` anywhere in the config tree, no separately-exported shell
+variable required. Resolution precedence for a given `${KEY}` is:
+`~/.shpd.values` (`user_values`) → plugin `config` → environment
+variable.
+
 ## Plugin Descriptor
 
 Each installed plugin ships a descriptor that defines its metadata and

@@ -223,6 +223,125 @@ def test_load_config(mocker: MockerFixture):
     assert config.envs[0].status.rendered_config is None
 
 
+_MINIMAL_VALUES = (
+    "shpd_path=/tmp/shpd\n"
+    "log_file=/tmp/shpd/shepctl.log\n"
+    "log_level=WARNING\n"
+    "log_stdout=false\n"
+    "log_format=%(asctime)s - %(levelname)s - %(message)s\n"
+)
+
+
+def _load_config_with_yaml(
+    mocker: MockerFixture, config_yaml: str, values: str = _MINIMAL_VALUES
+) -> Config:
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+    cMng = ConfigMng(".shpd.conf")
+    return cMng.load_config()
+
+
+@pytest.mark.cfg
+def test_plugin_config_resolves_template_placeholder(mocker: MockerFixture):
+    """A plugin's own `config` values resolve ${VAR} placeholders in that
+    plugin's service_templates, without a same-named shell/user_values
+    variable (shepherd#278)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        build:
+          context_path: ${region}
+          dockerfile_path: ${region}/Dockerfile
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.service_templates
+    build = config.service_templates[0].containers[0].build
+    assert build
+    assert build.context_path == "eu-west-1"
+    assert build.dockerfile_path == "eu-west-1/Dockerfile"
+
+
+@pytest.mark.cfg
+def test_user_values_override_plugin_config(mocker: MockerFixture):
+    """A user_values entry with the same key takes precedence over a
+    plugin's `config` value on collision."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        build:
+          context_path: ${region}
+          dockerfile_path: ${region}/Dockerfile
+"""
+    values = _MINIMAL_VALUES + "region=us-east-1\n"
+    config = _load_config_with_yaml(mocker, config_yaml, values)
+    config.set_resolved()
+
+    build = config.service_templates[0].containers[0].build
+    assert build
+    assert build.context_path == "us-east-1"
+
+
+@pytest.mark.cfg
+def test_plugin_config_resolution_no_plugins(mocker: MockerFixture):
+    """No plugins/config present: resolution behaves exactly as before,
+    falling back to the environment variable."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        build:
+          context_path: ${SOME_ENV_ONLY_VAR}
+          dockerfile_path: ${SOME_ENV_ONLY_VAR}/Dockerfile
+"""
+    mocker.patch.dict(os.environ, {"SOME_ENV_ONLY_VAR": "from-env"})
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    build = config.service_templates[0].containers[0].build
+    assert build
+    assert build.context_path == "from-env"
+
+
 @pytest.mark.cfg
 def test_core_canonical_template_lookup(mocker: MockerFixture):
     cMng = _load_config_manager(mocker)
