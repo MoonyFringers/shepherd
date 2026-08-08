@@ -9,11 +9,13 @@
 
 from .backend import RemoteBackend
 from .ftp_backend import FTPBackend
+from .registry_backend import RegistryBackend
 from .remote_mng import RemoteMng
 from .sftp_backend import SFTPBackend
 
 __all__ = [
     "FTPBackend",
+    "RegistryBackend",
     "RemoteBackend",
     "RemoteMng",
     "SFTPBackend",

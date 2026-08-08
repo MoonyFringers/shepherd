@@ -16,6 +16,7 @@ from typing import Generator
 
 import paramiko
 import pytest
+import requests
 from click.testing import CliRunner
 
 from config.config import RemoteCfg, RemoteChunkCfg
@@ -85,6 +86,21 @@ def _wait_sftp_ready(
                 transport.close()
         time.sleep(0.5)
     raise TimeoutError(f"SFTP {host}:{port} not ready after {timeout}s")
+
+
+def _wait_registry_ready(host: str, port: int, timeout: float = 30.0) -> None:
+    """Probe until the registry's base API endpoint responds."""
+    deadline = time.monotonic() + timeout
+    url = f"http://{host}:{port}/v2/"
+    while time.monotonic() < deadline:
+        try:
+            resp = requests.get(url, timeout=2)
+            if resp.status_code == 200:
+                return
+        except Exception:
+            pass
+        time.sleep(0.5)
+    raise TimeoutError(f"Registry {host}:{port} not ready after {timeout}s")
 
 
 def read_fixture(*parts: str) -> str:
@@ -194,6 +210,7 @@ def remote_backends() -> Generator[dict[str, RemoteCfg], None, None]:
     try:
         _wait_ftp_ready("127.0.0.1", 2121, "ftpuser", "ftppass")
         _wait_sftp_ready("127.0.0.1", 2222, "sftpuser", "sftppass")
+        _wait_registry_ready("127.0.0.1", 5500)
         yield {
             "ftp": RemoteCfg(
                 name="ftp",
@@ -216,6 +233,15 @@ def remote_backends() -> Generator[dict[str, RemoteCfg], None, None]:
                 password="sftppass",
                 root_path="/upload",
                 chunk=_CHUNK_CFG,
+            ),
+            "registry": RemoteCfg(
+                name="registry",
+                type="registry",
+                host="127.0.0.1",
+                port=5500,
+                root_path="shepherd-test",
+                chunk=_CHUNK_CFG,
+                properties={"insecure": True},
             ),
         }
     finally:

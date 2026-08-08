@@ -6,17 +6,20 @@
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
 """Integration tests for remote push/pull/dehydrate/hydrate/prune flows
-against real FTP and SFTP backends running in Docker containers.
+against real FTP, SFTP, and OCI registry backends running in Docker
+containers.
 
-Each test receives a ``backend_cfg`` fixture parametrized over ``ftp`` and
-``sftp``, giving 12 test runs total (6 tests × 2 backends).  Docker containers
-are started once per session via the ``remote_backends`` fixture in conftest.py.
+Each test receives a ``backend_cfg`` fixture parametrized over ``ftp``,
+``sftp``, and ``registry``, giving 18 test runs total (6 tests × 3
+backends).  Docker containers are started once per session via the
+``remote_backends`` fixture in conftest.py.
 
 Marker: ``integration`` + ``docker``.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import subprocess
@@ -28,6 +31,7 @@ import pytest
 
 from config.config import EnvironmentCfg, RemoteCfg
 from remote.backend import RemoteBackend
+from remote.registry_backend import RegistryBackend
 from remote.remote_mng import RemoteMng
 from storage.snapshot import IndexCatalogue, SnapshotManifest
 
@@ -50,7 +54,7 @@ pytestmark = [
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(params=["ftp", "sftp"])
+@pytest.fixture(params=["ftp", "sftp", "registry"])
 def backend_cfg(
     remote_backends: dict[str, RemoteCfg], request: pytest.FixtureRequest
 ) -> RemoteCfg:
@@ -201,6 +205,26 @@ def test_push_first_time(
 
         for chunk_hash in manifest.chunks:
             assert backend.exists(RemoteBackend.chunk_path(chunk_hash))
+
+        if backend_cfg.type == "registry":
+            # Registry-only: the per-snapshot image assembled alongside
+            # the manifest JSON is a real, independently fetchable OCI
+            # artifact with one layer per chunk, in manifest order.
+            assert isinstance(backend, RegistryBackend)
+            tag = backend._snapshot_image_tag(env_name, snapshot_id)
+            resp = backend._request(
+                "GET",
+                f"/manifests/{tag}",
+                headers={
+                    "Accept": ("application/vnd.oci.image.manifest.v1+json")
+                },
+            )
+            resp.raise_for_status()
+            image_manifest = resp.json()
+            assert len(image_manifest["layers"]) == manifest.chunk_count
+            assert [layer["digest"] for layer in image_manifest["layers"]] == [
+                f"sha256:{h}" for h in manifest.chunks
+            ]
 
 
 @pytest.mark.integration
@@ -357,9 +381,15 @@ def test_prune_removes_orphans(
     )
     push_mng.push(env_name, env_mng, remote_name=backend_cfg.name)
 
-    orphan_hash = "aa" * 32
+    # The chunk hash must be the real digest of the uploaded bytes: real
+    # pushes always compute the path's hash from the actual chunk
+    # content (see Chunker/RemoteMng), and the registry backend relies
+    # on that invariant to resolve a chunk's blob digest straight from
+    # its path without a manifest lookup.
+    orphan_data = b"orphan-data"
+    orphan_hash = hashlib.sha256(orphan_data).hexdigest()
     with push_mng._build_backend(backend_cfg) as backend:
-        backend.upload(RemoteBackend.chunk_path(orphan_hash), b"orphan-data")
+        backend.upload(RemoteBackend.chunk_path(orphan_hash), orphan_data)
         assert backend.exists(RemoteBackend.chunk_path(orphan_hash))
 
         manifest_bytes = backend.download(

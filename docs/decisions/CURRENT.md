@@ -59,7 +59,7 @@ so the de facto answer is git-cliff — but ADR-0003 itself has not been
 formally accepted. Don't treat this as settled; if the tooling changes,
 ADR-0003 needs to move to accepted (or be superseded) in the same PR.
 
-## Remote storage deduplication (ADR-0006)
+## Remote storage deduplication (ADR-0006, registry transport ADR-0007)
 
 Accepted 2026-04-12. Environments include backing-service state
 (Postgres dumps, Redis snapshots, etc.) alongside service definitions.
@@ -67,4 +67,15 @@ Naive one-`.tar.gz`-per-backup retransmits unchanged data on every
 push. ADR-0006 defines client-side, remote-agnostic deduplication (the
 remote stays a passive store — FTP/S3/similar, read/write/list only,
 no server-side compute) so repeated backups only transfer changed
-chunks.
+chunks. Three transports ship in core: FTP, SFTP, and an OCI
+container-registry transport (added 2026-08-07). The registry
+transport's object layout was revised 2026-08-08 (ADR-0007, which
+supersedes ADR-0006's original registry section): chunks are stored as
+bare content-addressed blobs (no per-chunk tag — a chunk's SHA-256
+hash *is* its OCI blob digest, resolved straight from its path), and
+each snapshot additionally gets a real multi-layer OCI image
+(immutable per-snapshot tag + mutable per-environment `latest`-style
+tag) assembled from those chunk blobs, so `docker pull`/`crane` see a
+real artifact instead of one tag per chunk. This is a
+transport-internal change only — `RemoteMng` and the chunking
+algorithm itself are unaffected. Details: [docs/remote.md](../remote.md).

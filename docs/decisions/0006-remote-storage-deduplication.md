@@ -1,5 +1,5 @@
 ---
-status: "accepted"
+status: "accepted; registry-transport section superseded by ADR-0007 (2026-08-08)"
 date: 2026-04-12
 decision-makers:
   - '@giubacc'
@@ -128,16 +128,33 @@ the existing `_delete_dir_with_sudo` pattern.
 
 ### Built-in Transports
 
-Two transports ship with the core:
+Three transports ship with the core:
 
 - **FTP** — using stdlib `ftplib`. Existence checks use the shard-listing
   strategy (one `NLST` per 2-char prefix per session, resolved from an
   in-memory set).
 - **SFTP** — using `paramiko`. Provides encrypted transfer and SSH key
   authentication, making it the preferred choice for most real deployments.
+- **Registry (OCI)** — added 2026-08-07, using `requests` over the OCI
+  Distribution Spec. Maps the same `RemoteBackend` contract onto a
+  Docker/OCI container registry's native blob store: a chunk's SHA-256
+  hash *is* its OCI blob digest, so existence checks are a single `HEAD`
+  per chunk rather than a shard-listing cache, and the registry does
+  digest verification server-side for free. Each stored path is tagged
+  individually in one repository (registries have no directory listing);
+  `list_prefix` is implemented via the repository's tag-list endpoint.
+  This is a transport addition only — the chunking/dedup algorithm above
+  is unchanged, which is why it is documented here rather than in a new
+  ADR. Full transport-specific notes, including the manifest-uniqueness
+  safeguard needed to make digest-based delete tag-scoped in practice:
+  [docs/remote.md](../remote.md#registry-oci). **This per-path-tag
+  object layout was superseded 2026-08-08 by ADR-0007**, which stops
+  tagging individual chunks and instead assembles a real multi-layer
+  OCI image per snapshot; see ADR-0007 for the current registry
+  object layout.
 
-Both implement the same `RemoteBackend` ABC and are interchangeable from
-the orchestration layer's perspective.
+All three implement the same `RemoteBackend` ABC and are interchangeable
+from the orchestration layer's perspective.
 
 ### Backend Extensibility
 
@@ -160,9 +177,9 @@ See [docs/remote.md](../remote.md) for the full configuration reference,
 built-in transport details, and worked CLI examples.
 
 Remotes are persisted in the main Shepherd config (`~/.shpd.conf`) under a
-top-level `remotes` list. Each entry has a `name`, a `type` (`ftp` or `sftp`
-for built-ins, or a plugin-registered type id), type-specific connection
-fields, and optional chunk tuning and local cache settings.
+top-level `remotes` list. Each entry has a `name`, a `type` (`ftp`, `sftp`,
+or `registry` for built-ins, or a plugin-registered type id), type-specific
+connection fields, and optional chunk tuning and local cache settings.
 
 Remotes are managed via `shepctl remote`:
 
