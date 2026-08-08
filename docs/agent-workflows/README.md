@@ -11,4 +11,3 @@ documents.
 | [plugin-authoring](plugin-authoring.md) | Build or modify a shepherd plugin |
 | [pr-prep](pr-prep.md) | Commit, push, or open a pull request |
 | [local-dev-testing](local-dev-testing.md) | Set up the dev environment, run tests/lint locally |
-| [codex-task-routing](codex-task-routing.md) | Decide whether a task should run in Claude Code or route to Codex MCP |

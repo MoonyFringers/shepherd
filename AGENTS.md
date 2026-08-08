@@ -37,7 +37,6 @@ task guidance. Read the matching workflow before acting:
 | Build or modify a shepherd plugin | `plugin-authoring` |
 | Commit, push, or open a pull request | `pr-prep` |
 | Set up the dev environment, run tests/lint locally | `local-dev-testing` |
-| Decide Claude Code vs Codex MCP routing for a task | `codex-task-routing` |
 
 Claude wrappers under `.claude/` exist only for compatibility; the
 documents above are authoritative.
