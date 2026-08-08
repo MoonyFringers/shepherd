@@ -1564,6 +1564,21 @@ class ConfigMng:
 
         return user_values
 
+    def _build_resolver(self, config: Config) -> Dict[str, str]:
+        """
+        Merge plugin config values (defaults) under user_values (explicit
+        overrides) into the template resolver mapping, so a plugin's own
+        `config` dict is available to that plugin's `${VAR}` template
+        resolution without also requiring a same-named shell/user_values
+        variable.
+        """
+        resolver: Dict[str, str] = {}
+        for plugin_cfg in config.plugins or []:
+            for key, value in (plugin_cfg.config or {}).items():
+                resolver[str(key)] = str(value)
+        resolver.update(self.user_values)
+        return resolver
+
     def load_config(self) -> Config:
         """
         Loads and processes the configuration file.
@@ -1577,7 +1592,7 @@ class ConfigMng:
 
         # Reparse through model constructors to normalize defaults/types.
         config = parse_config(yaml.dump(config_data, sort_keys=False))
-        config.set_resolver(self.user_values)
+        config.set_resolver(self._build_resolver(config))
         return config
 
     def load(self):
