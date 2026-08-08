@@ -1933,6 +1933,27 @@ class ConfigMng:
         self.store()
         return plugin
 
+    def set_plugin_config_value(
+        self, plugin_id: str, key: str, value: str
+    ) -> PluginCfg:
+        """Set one key in a plugin's own config dict and persist it."""
+        was_resolved = self.config.is_resolved()
+        self.config.set_unresolved()
+        try:
+            plugin = self.get_plugin(plugin_id)
+            if plugin is None:
+                raise ValueError(f"Plugin '{plugin_id}' not found.")
+            config = dict(plugin.config or {})
+            config[key] = value
+            plugin.config = config
+            self.store()
+            return plugin
+        finally:
+            if was_resolved:
+                self.config.set_resolved()
+            else:
+                self.config.set_unresolved()
+
     def remove_plugin(self, plugin_id: str) -> PluginCfg:
         """Remove one plugin entry from config and persist the change."""
         plugins = list(self.config.plugins or [])

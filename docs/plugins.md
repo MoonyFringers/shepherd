@@ -465,7 +465,9 @@ class MyPlugin(ShepherdPlugin):
 `PluginContext` has four fields:
 
 - `config: PluginConfigView` — always set; provides read access to
-  environments, templates, and plugin metadata.
+  environments, templates, and plugin metadata, plus one write
+  operation (`set_plugin_config_value`) scoped to the plugin's own
+  config block.
 - `environment: PluginEnvironmentView | None` — set after the full CLI
   bootstrap; exposes environment lifecycle operations.
 - `service: PluginServiceView | None` — set after the full CLI bootstrap;
@@ -481,7 +483,16 @@ executes they are always populated.
 
 `PluginConfigView` exposes: `get_environments`, `get_active_environment`,
 `get_environment`, `get_environment_templates`, `get_service_templates`,
-`get_plugin`, `get_plugin_dir`.
+`get_plugin`, `get_plugin_dir`, `set_plugin_config_value`.
+
+`set_plugin_config_value(plugin_id, key, value)` lets a plugin persist a
+value into its own `config` block (e.g. from an interactive setup
+command), without requiring the user to hand-edit `~/.shpd.conf`. The
+plugin passes its own `plugin_id` explicitly — this method isn't
+scoped to "the calling plugin" implicitly, since `ConfigMng` is shared
+by every plugin. The write takes effect immediately, including for
+`${VAR}` template resolution on the next command invocation (config is
+reloaded per invocation).
 
 `PluginEnvironmentView` exposes: `list_envs`, `describe_env`,
 `get_environment_from_tag`, `add_env`, `add_service`, `delete_env`,

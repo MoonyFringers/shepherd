@@ -342,6 +342,151 @@ service_templates:
     assert build.context_path == "from-env"
 
 
+def _load_config_manager_with_yaml(
+    mocker: MockerFixture, config_yaml: str, values: str = _MINIMAL_VALUES
+) -> ConfigMng:
+    mock_open1 = mock_open(read_data=values)
+    mock_open2 = mock_open(read_data=config_yaml)
+    mocker.patch("os.path.exists", return_value=True)
+    mocker.patch(
+        "builtins.open",
+        side_effect=[mock_open1.return_value, mock_open2.return_value],
+    )
+    cMng = ConfigMng(".shpd.conf")
+    cMng.load()
+    return cMng
+
+
+@pytest.mark.cfg
+def test_set_plugin_config_value_persists(mocker: MockerFixture):
+    """A plugin can persist a value into its own config block via
+    ConfigMng.set_plugin_config_value (shepherd#280)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    store_mock = mocker.patch.object(cMng, "store")
+
+    plugin = cMng.set_plugin_config_value("acme", "backend_path", "/srv/app")
+
+    assert plugin.config == {
+        "region": "eu-west-1",
+        "backend_path": "/srv/app",
+    }
+    assert cMng.get_plugin("acme")
+    assert cMng.get_plugin("acme").config == plugin.config  # type: ignore
+    store_mock.assert_called_once()
+
+
+@pytest.mark.cfg
+def test_set_plugin_config_value_creates_config_dict_when_none(
+    mocker: MockerFixture,
+):
+    """A plugin with no config block yet gets one created on first write."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+
+    plugin = cMng.set_plugin_config_value("acme", "backend_path", "/srv/app")
+
+    assert plugin.config == {"backend_path": "/srv/app"}
+
+
+@pytest.mark.cfg
+def test_set_plugin_config_value_preserves_other_placeholders(
+    mocker: MockerFixture,
+):
+    """Writing one key must not bake other keys' live ${VAR}
+    substitutions into the stored config as literals."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      home_ref: ${MY_HOME}
+"""
+    mocker.patch.dict(os.environ, {"MY_HOME": "/actual/home/value"})
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+
+    plugin = cMng.set_plugin_config_value("acme", "new_key", "new_val")
+
+    # The raw (unresolved) stored value is what store()/cfg_asdict would
+    # persist — must keep the placeholder, not the live-resolved value.
+    assert vars(plugin)["config"] == {
+        "home_ref": "${MY_HOME}",
+        "new_key": "new_val",
+    }
+    # The returned object stays live/resolved for normal callers.
+    assert cMng.config.is_resolved()
+    assert plugin.config == {
+        "home_ref": "/actual/home/value",
+        "new_key": "new_val",
+    }
+
+
+@pytest.mark.cfg
+def test_set_plugin_config_value_keeps_unresolved_state(
+    mocker: MockerFixture,
+):
+    """If the tree was already unresolved before the call, it must stay
+    unresolved afterwards, not flip to resolved as a side effect."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+    cMng.config.set_unresolved()
+
+    cMng.set_plugin_config_value("acme", "backend_path", "/srv/app")
+
+    assert not cMng.config.is_resolved()
+
+
+@pytest.mark.cfg
+def test_set_plugin_config_value_unknown_plugin_raises(mocker: MockerFixture):
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+
+    with pytest.raises(ValueError):
+        cMng.set_plugin_config_value("missing", "key", "value")
+
+    assert cMng.config.is_resolved()
+
+
 @pytest.mark.cfg
 def test_core_canonical_template_lookup(mocker: MockerFixture):
     cMng = _load_config_manager(mocker)
