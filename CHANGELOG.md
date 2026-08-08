@@ -15,3 +15,7 @@ and this project adheres to
   resolution in that plugin's `service_templates`/`env_templates`, no
   longer requiring a separately-exported, identically-named shell
   variable (#278).
+- `PluginConfigView.set_plugin_config_value` lets a plugin persist a
+  value into its own config block (e.g. from an interactive setup
+  command) without requiring the user to hand-edit `~/.shpd.conf`
+  (#280).

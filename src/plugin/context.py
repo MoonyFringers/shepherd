@@ -39,7 +39,10 @@ class PluginConfigView(Protocol):
 
     Provides read access to the loaded Shepherd configuration — environments,
     templates, and plugin metadata.  Write operations (``store``, ``load``,
-    ``set_plugin_enabled`` …) are intentionally excluded.
+    ``set_plugin_enabled`` …) are intentionally excluded, with one exception:
+    ``set_plugin_config_value`` lets a plugin persist values into its own
+    config block (e.g. from an interactive setup command), scoped to a
+    ``plugin_id`` the plugin must supply itself.
     """
 
     def get_environments(self) -> list[EnvironmentCfg]:
@@ -70,6 +73,12 @@ class PluginConfigView(Protocol):
 
     def get_plugin_dir(self, plugin_id: str) -> str:
         """Return the managed install directory for *plugin_id*."""
+        ...
+
+    def set_plugin_config_value(
+        self, plugin_id: str, key: str, value: str
+    ) -> PluginCfg:
+        """Set one key in *plugin_id*'s own config dict and persist it."""
         ...
 
 
