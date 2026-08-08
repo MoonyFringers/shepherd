@@ -208,50 +208,82 @@ class Resolvable:
         resolved: bool,
         obj: Any = None,
         refMap: dict[str, "Resolvable"] | None = None,
+        user_values: dict[str, str] | None = None,
     ):
         """
         Propagate resolver/reference context and resolution mode recursively.
 
         This is the core state-wiring pass used by `set_resolved`,
-        `set_unresolved`, and `set_resolver`.
+        `set_unresolved`, and `set_resolver`. `user_values` is the same
+        mapping reference for the whole tree (it always wins in
+        `_resolve_str`, see there); `resolver` is the per-node mapping —
+        an `EnvironmentCfg` with its own `config` dict merges that on top
+        of the incoming `resolver` for itself and its subtree only,
+        leaving sibling subtrees on the unmerged mapping.
         """
         if obj is None:
             obj = self
 
         if is_dataclass(obj) and isinstance(obj, Resolvable):
             lRefMap = obj._set_refMap(refMap)
-            object.__setattr__(obj, "_resolver", resolver or os.environ)
+            node_resolver = resolver
+            if isinstance(obj, EnvironmentCfg) and obj.config and resolved:
+                node_resolver = dict(resolver or {})
+                node_resolver.update(
+                    {str(k): str(v) for k, v in obj.config.items()}
+                )
+            object.__setattr__(obj, "_resolver", node_resolver or os.environ)
+            object.__setattr__(obj, "_user_values", user_values or {})
             for f in fields(obj):
                 if fVal := getattr(obj, f.name, None):
-                    self._walk_and_set(resolver, resolved, fVal, lRefMap)
+                    self._walk_and_set(
+                        node_resolver, resolved, fVal, lRefMap, user_values
+                    )
             object.__setattr__(obj, "_resolved", resolved)
 
         elif isinstance(obj, list):
             for item in cast(list[Any], obj):
-                self._walk_and_set(resolver, resolved, item, refMap)
+                self._walk_and_set(
+                    resolver, resolved, item, refMap, user_values
+                )
 
         elif isinstance(obj, dict):
             for _, v in cast(dict[str, Any], obj).items():
-                self._walk_and_set(resolver, resolved, v, refMap)
+                self._walk_and_set(resolver, resolved, v, refMap, user_values)
 
     def set_resolved(self):
-        self._walk_and_set(getattr(self, "_resolver", None), True)
+        self._walk_and_set(
+            getattr(self, "_resolver", None),
+            True,
+            user_values=getattr(self, "_user_values", None),
+        )
 
     def set_unresolved(self):
-        self._walk_and_set(getattr(self, "_resolver", None), False)
+        self._walk_and_set(
+            getattr(self, "_resolver", None),
+            False,
+            user_values=getattr(self, "_user_values", None),
+        )
 
-    def set_resolver(self, mapping: dict[str, str] | None):
-        self._walk_and_set(mapping, True)
+    def set_resolver(
+        self,
+        mapping: dict[str, str] | None,
+        user_values: dict[str, str] | None = None,
+    ):
+        self._walk_and_set(mapping, True, user_values=user_values)
 
     def is_resolved(self) -> bool:
         return getattr(self, "_resolved", False)
 
     def _resolve_str(self, s: str) -> str:
         mapping = getattr(self, "_resolver", None) or os.environ
+        user_values: dict[str, str] = getattr(self, "_user_values", None) or {}
         refMap = cast(dict[str, Resolvable], getattr(self, "_refMap", {}))
 
         def var_repl(match: Match[str]) -> str:
             key = match.group(1)
+            if key in user_values:
+                return str(user_values[key])
             if key in mapping:
                 return str(mapping[key])
             return os.environ.get(key, match.group(0))
@@ -720,6 +752,7 @@ class EnvironmentCfg(Resolvable):
     tracking_remote: Optional[str] = None
     dehydrated: Optional[bool] = None
     status: EntityStatus = field(default_factory=EntityStatus)
+    config: Optional[dict[str, Any]] = None
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -1271,6 +1304,7 @@ def _parse_environment(item: Any) -> EnvironmentCfg:
         tracking_remote=item.get("tracking_remote"),
         dehydrated=item.get("dehydrated"),
         status=_parse_status(item["status"]),
+        config=item.get("config"),
     )
 
 
@@ -1564,19 +1598,21 @@ class ConfigMng:
 
         return user_values
 
-    def _build_resolver(self, config: Config) -> Dict[str, str]:
+    def _build_plugin_resolver(self, config: Config) -> Dict[str, str]:
         """
-        Merge plugin config values (defaults) under user_values (explicit
-        overrides) into the template resolver mapping, so a plugin's own
-        `config` dict is available to that plugin's `${VAR}` template
-        resolution without also requiring a same-named shell/user_values
-        variable.
+        Build the base template resolver mapping from plugin config values
+        (defaults), so a plugin's own `config` dict is available to that
+        plugin's `${VAR}` template resolution without also requiring a
+        same-named shell/user_values variable. `user_values` is layered on
+        top separately (see `set_resolver`) rather than merged in here, so
+        an `EnvironmentCfg`'s own `config` (per-environment overrides, see
+        `Resolvable._walk_and_set`) can sit between the two: plugin config
+        default → environment override → user_values (always wins).
         """
         resolver: Dict[str, str] = {}
         for plugin_cfg in config.plugins or []:
             for key, value in (plugin_cfg.config or {}).items():
                 resolver[str(key)] = str(value)
-        resolver.update(self.user_values)
         return resolver
 
     def load_config(self) -> Config:
@@ -1592,7 +1628,9 @@ class ConfigMng:
 
         # Reparse through model constructors to normalize defaults/types.
         config = parse_config(yaml.dump(config_data, sort_keys=False))
-        config.set_resolver(self._build_resolver(config))
+        config.set_resolver(
+            self._build_plugin_resolver(config), self.user_values
+        )
         return config
 
     def load(self):
@@ -2015,6 +2053,33 @@ class ConfigMng:
                 return
         self.config.envs.append(newEnv)
         self.store()
+
+    def set_environment_config_value(
+        self, env_tag: str, key: str, value: str
+    ) -> EnvironmentCfg:
+        """Set one key in an environment's own config dict and persist it.
+
+        Values set here override the plugin's own config defaults, but are
+        still overridable by `~/.shpd.values` (`user_values`), for that
+        environment's `${VAR}` template resolution — see
+        `Resolvable._walk_and_set`.
+        """
+        was_resolved = self.config.is_resolved()
+        self.config.set_unresolved()
+        try:
+            for env in self.config.envs:
+                if env.tag == env_tag:
+                    config = dict(env.config or {})
+                    config[key] = value
+                    env.config = config
+                    self.store()
+                    return env
+            raise ValueError(f"Environment '{env_tag}' not found.")
+        finally:
+            if was_resolved:
+                self.config.set_resolved()
+            else:
+                self.config.set_unresolved()
 
     def remove_environment(self, envTag: str):
         """

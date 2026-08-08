@@ -19,3 +19,8 @@ and this project adheres to
   value into its own config block (e.g. from an interactive setup
   command) without requiring the user to hand-edit `~/.shpd.conf`
   (#280).
+- Environment instances can now carry their own `config` block,
+  distinct from their plugin's config, overriding it for that
+  environment's `${VAR}` template resolution only.
+  `PluginConfigView.set_environment_config_value` persists into it
+  (#281).

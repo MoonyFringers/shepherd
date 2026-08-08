@@ -91,9 +91,31 @@ placeholder resolution — including in that plugin's own
 `service_templates`/`env_templates` (`context_path`, `dockerfile_path`,
 `volumes`, etc). With the example above, `${region}` resolves to
 `eu-west-1` anywhere in the config tree, no separately-exported shell
-variable required. Resolution precedence for a given `${KEY}` is:
-`~/.shpd.values` (`user_values`) → plugin `config` → environment
-variable.
+variable required.
+
+An individual environment instance (an entry under `envs:`, the thing
+created by `env add <template> <tag>`) can also carry its own `config`
+block, keyed exactly like a plugin's:
+
+```yaml
+envs:
+  - tag: my-env
+    template: acme/full
+    factory: acme-env-factory
+    config:
+      region: us-east-1
+```
+
+This is the one case where two different scopes both apply to the same
+`${VAR}` name: the environment's own `config` overrides its plugin's
+`config` default for templates resolved within *that* environment's
+subtree only — sibling environments, and anything outside `envs:`,
+keep resolving against the plugin default. Resolution precedence for a
+given `${KEY}`, most specific override last:
+
+plugin `config` (default) → environment `config` (per-instance
+override, if set) → `~/.shpd.values` (`user_values`, always wins) →
+process environment variable (final fallback).
 
 ## Plugin Descriptor
 
@@ -483,7 +505,8 @@ executes they are always populated.
 
 `PluginConfigView` exposes: `get_environments`, `get_active_environment`,
 `get_environment`, `get_environment_templates`, `get_service_templates`,
-`get_plugin`, `get_plugin_dir`, `set_plugin_config_value`.
+`get_plugin`, `get_plugin_dir`, `set_plugin_config_value`,
+`set_environment_config_value`.
 
 `set_plugin_config_value(plugin_id, key, value)` lets a plugin persist a
 value into its own `config` block (e.g. from an interactive setup
@@ -493,6 +516,12 @@ scoped to "the calling plugin" implicitly, since `ConfigMng` is shared
 by every plugin. The write takes effect immediately, including for
 `${VAR}` template resolution on the next command invocation (config is
 reloaded per invocation).
+
+`set_environment_config_value(env_tag, key, value)` is the same idea
+one scope level down — it writes into a specific environment's own
+`config` block instead of the plugin's. Useful when a value should
+differ per environment instance rather than being shared machine-wide
+(see the environment-scoped `${VAR}` resolution note above).
 
 `PluginEnvironmentView` exposes: `list_envs`, `describe_env`,
 `get_environment_from_tag`, `add_env`, `add_service`, `delete_env`,

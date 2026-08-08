@@ -488,6 +488,233 @@ envs: []
 
 
 @pytest.mark.cfg
+def test_environment_config_overrides_plugin_config(mocker: MockerFixture):
+    """An environment's own `config` overrides its plugin's `config`
+    default when resolving ${VAR} placeholders within that environment's
+    own subtree (shepherd#281)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    config:
+      region: us-east-1
+    services:
+      - tag: svc
+        factory: docker
+        template: svc-template
+        status: {}
+        containers:
+          - tag: c
+            image: nginx:latest
+            build:
+              context_path: ${region}
+              dockerfile_path: ${region}/Dockerfile
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    build = config.envs[0].services[0].containers[0].build
+    assert build
+    assert build.context_path == "us-east-1"
+
+
+@pytest.mark.cfg
+def test_environment_without_config_falls_back_to_plugin_config(
+    mocker: MockerFixture,
+):
+    """An environment with no `config` block resolves against its
+    plugin's `config` default, unchanged (regression guard)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    services:
+      - tag: svc
+        factory: docker
+        template: svc-template
+        status: {}
+        containers:
+          - tag: c
+            image: nginx:latest
+            build:
+              context_path: ${region}
+              dockerfile_path: ${region}/Dockerfile
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    build = config.envs[0].services[0].containers[0].build
+    assert build
+    assert build.context_path == "eu-west-1"
+
+
+@pytest.mark.cfg
+def test_user_values_override_environment_config(mocker: MockerFixture):
+    """`user_values` still wins over an environment's own `config` value
+    on collision — the override escape hatch stays final."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+plugins:
+  - id: acme
+    enabled: true
+    config:
+      region: eu-west-1
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    config:
+      region: us-east-1
+    services:
+      - tag: svc
+        factory: docker
+        template: svc-template
+        status: {}
+        containers:
+          - tag: c
+            image: nginx:latest
+            build:
+              context_path: ${region}
+              dockerfile_path: ${region}/Dockerfile
+"""
+    values = _MINIMAL_VALUES + "region=ap-south-1\n"
+    config = _load_config_with_yaml(mocker, config_yaml, values)
+    config.set_resolved()
+
+    build = config.envs[0].services[0].containers[0].build
+    assert build
+    assert build.context_path == "ap-south-1"
+
+
+@pytest.mark.cfg
+def test_set_environment_config_value_persists(mocker: MockerFixture):
+    """A plugin can persist a value into a specific environment's own
+    config block via ConfigMng.set_environment_config_value
+    (shepherd#281)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    config:
+      region: eu-west-1
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    store_mock = mocker.patch.object(cMng, "store")
+
+    env = cMng.set_environment_config_value(
+        "my-env", "backend_path", "/srv/app"
+    )
+
+    assert env.config == {"region": "eu-west-1", "backend_path": "/srv/app"}
+    store_mock.assert_called_once()
+    assert cMng.config.is_resolved()
+
+
+@pytest.mark.cfg
+def test_set_environment_config_value_preserves_other_placeholders(
+    mocker: MockerFixture,
+):
+    """Writing one key must not bake other keys' live ${VAR}
+    substitutions into the stored config as literals."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    config:
+      home_ref: ${MY_HOME}
+"""
+    mocker.patch.dict(os.environ, {"MY_HOME": "/actual/home/value"})
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+
+    env = cMng.set_environment_config_value("my-env", "new_key", "new_val")
+
+    assert vars(env)["config"] == {
+        "home_ref": "${MY_HOME}",
+        "new_key": "new_val",
+    }
+    assert cMng.config.is_resolved()
+
+
+@pytest.mark.cfg
+def test_set_environment_config_value_keeps_unresolved_state(
+    mocker: MockerFixture,
+):
+    """If the tree was already unresolved before the call, it must stay
+    unresolved afterwards, not flip to resolved as a side effect."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - tag: my-env
+    template: t
+    factory: f
+    status: {}
+    config:
+      region: eu-west-1
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+    cMng.config.set_unresolved()
+
+    cMng.set_environment_config_value("my-env", "backend_path", "/srv/app")
+
+    assert not cMng.config.is_resolved()
+
+
+@pytest.mark.cfg
+def test_set_environment_config_value_unknown_env_raises(
+    mocker: MockerFixture,
+):
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+"""
+    cMng = _load_config_manager_with_yaml(mocker, config_yaml)
+    mocker.patch.object(cMng, "store")
+
+    with pytest.raises(ValueError):
+        cMng.set_environment_config_value("missing", "key", "value")
+
+    assert cMng.config.is_resolved()
+
+
+@pytest.mark.cfg
 def test_core_canonical_template_lookup(mocker: MockerFixture):
     cMng = _load_config_manager(mocker)
 
@@ -608,6 +835,7 @@ def test_store_config_with_real_files():
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
                 item.setdefault("dehydrated", None)
+                item.setdefault("config", None)
             for remote in expected.get("remotes") or []:
                 remote.setdefault("host", None)
                 remote.setdefault("port", None)
@@ -944,6 +1172,7 @@ def test_store_config_with_refs_with_real_files():
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
                 item.setdefault("dehydrated", None)
+                item.setdefault("config", None)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
