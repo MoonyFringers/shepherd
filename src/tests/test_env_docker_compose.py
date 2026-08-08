@@ -1917,7 +1917,12 @@ def test_volume_streams_bind_mount_sudo(mocker: MockerFixture) -> None:
 
 @pytest.mark.env
 def test_volume_streams_named_volume(mocker: MockerFixture) -> None:
-    """Named volume → ``docker run --rm -v <tag>:/mnt``."""
+    """Named volume → ``docker run --rm -v <env>_<tag>:/mnt``.
+
+    Compose project-prefixes non-external volume names by default (every
+    compose invocation in this class runs with ``-p envCfg.tag``), so the
+    real Docker volume is ``<env.tag>_<vol.tag>``, not the bare tag.
+    """
     env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
     env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
@@ -1933,7 +1938,35 @@ def test_volume_streams_named_volume(mocker: MockerFixture) -> None:
     assert tag == "uploads"
     cmd = mock_popen.call_args[0][0]
     assert "docker" in cmd
-    assert "uploads:/mnt" in cmd
+    assert "test-env_uploads:/mnt" in cmd
+
+
+@pytest.mark.env
+def test_resolved_volume_name_prefixes_non_external(
+    mocker: MockerFixture,
+) -> None:
+    """Non-external volumes resolve to Compose's default project-scoped
+    name (``<env.tag>_<vol.tag>``), matching what ``docker compose -p
+    envCfg.tag`` actually creates for a volume with no explicit ``name:``.
+    """
+    env_cfg = _make_env_cfg_with_volumes([_named_vol("uploads")])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    assert env._resolved_volume_name(_named_vol("uploads")) == (
+        "test-env_uploads"
+    )
+
+
+@pytest.mark.env
+def test_resolved_volume_name_external_uses_own_name(
+    mocker: MockerFixture,
+) -> None:
+    """External volumes are never prefixed — they use their own name."""
+    env_cfg = _make_env_cfg_with_volumes([])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    assert (
+        env._resolved_volume_name(_external_vol("ext_vol", "prod_db_backup"))
+        == "prod_db_backup"
+    )
 
 
 @pytest.mark.env
@@ -1990,7 +2023,7 @@ def test_remove_local_volumes_named_volume(mocker: MockerFixture) -> None:
 
     mock_run.assert_called_once()
     cmd = mock_run.call_args[0][0]
-    assert cmd == ["docker", "volume", "rm", "--force", "uploads"]
+    assert cmd == ["docker", "volume", "rm", "--force", "test-env_uploads"]
 
 
 @pytest.mark.env
@@ -2028,7 +2061,7 @@ def test_restore_local_volumes_named_volume(
 
     assert mock_run.call_count == 2
     first_cmd = mock_run.call_args_list[0][0][0]
-    assert first_cmd == ["docker", "volume", "create", "uploads"]
+    assert first_cmd == ["docker", "volume", "create", "test-env_uploads"]
     second_cmd = mock_run.call_args_list[1][0][0]
     assert "busybox:stable-glibc" in second_cmd
 

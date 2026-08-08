@@ -120,6 +120,21 @@ class DockerComposeEnv(Environment):
                     return True
         return False
 
+    def _resolved_volume_name(self, vol: VolumeCfg) -> str:
+        """Return the actual Docker volume name for a non-bind-mount volume.
+
+        External volumes use their own explicit name. Volumes shepherd
+        renders itself never carry a `name:` entry in the generated compose
+        YAML, so Compose applies its default project-scoped naming
+        (`<project>_<volume>`) — and every compose invocation in this class
+        runs with `-p envCfg.tag` (see `_run_compose`). Resolving to bare
+        `vol.tag` here would look up a volume Compose never created; Docker
+        would silently auto-vivify an empty one instead of erroring.
+        """
+        if vol.is_external() and vol.name:
+            return vol.name
+        return f"{self.envCfg.tag}_{vol.tag}"
+
     @override
     def get_volume_tar_streams(
         self, allow_sudo: bool = False
@@ -143,9 +158,7 @@ class DockerComposeEnv(Environment):
                     (vol.tag, self._path_tar_stream(device, allow_sudo))
                 )
             else:
-                vol_name = (
-                    vol.name if vol.is_external() and vol.name else vol.tag
-                )
+                vol_name = self._resolved_volume_name(vol)
                 result.append(
                     (vol.tag, self._docker_volume_tar_stream(vol_name))
                 )
@@ -198,9 +211,7 @@ class DockerComposeEnv(Environment):
                 if device:
                     Util.delete_dir(device)
             else:
-                vol_name = (
-                    vol.name if vol.is_external() and vol.name else vol.tag
-                )
+                vol_name = self._resolved_volume_name(vol)
                 subprocess.run(
                     ["docker", "volume", "rm", "--force", vol_name],
                     check=True,
@@ -211,7 +222,7 @@ class DockerComposeEnv(Environment):
         for vol in self.envCfg.volumes or []:
             if _is_bind_mount(vol):
                 continue
-            vol_name = vol.name if vol.is_external() and vol.name else vol.tag
+            vol_name = self._resolved_volume_name(vol)
             src = os.path.join(self.get_path(), "volumes", vol.tag)
             if not os.path.isdir(src):
                 logging.warning(
