@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, TypeAlias
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeAlias
 
 from rich.console import Group
 from rich.live import Live
@@ -24,6 +24,9 @@ from environment.render import (
     build_probe_status_tree,
 )
 from util.util import Util
+
+if TYPE_CHECKING:
+    from environment.environment import PullImageProgress
 
 GroupedStatus: TypeAlias = dict[str, list[list[str]]]
 GateStatus: TypeAlias = dict[str, Optional[bool]]
@@ -41,6 +44,35 @@ MIN_LIVE_REFRESH_PER_SECOND = 8
 MIN_GATE_EVAL_INTERVAL_SECONDS = 1.0
 TRANSITION_FLASH_DURATION_SECONDS = 1.5
 READY_HIGHLIGHT_DURATION_SECONDS = 3.0
+
+
+def _image_basename(image: str) -> str:
+    """Return the short name of a docker image reference (drop registry)."""
+    return image.rsplit("/", 1)[-1]
+
+
+def _render_pull_bar(percent: Optional[int], width: int = 10) -> str:
+    """Render a simple block-character progress bar for a pull percentage."""
+    if percent is None:
+        return ""
+    filled = max(0, min(width, round(width * percent / 100)))
+    bar = "█" * filled + "░" * (width - filled)
+    return f"[dim cyan]{bar}[/dim cyan] {percent}%"
+
+
+def _merge_pull_into_grouped(
+    grouped: GroupedStatus,
+    pull_state: dict[str, "PullImageProgress"],
+) -> GroupedStatus:
+    """Override rows for services that are currently pulling images."""
+    merged = dict(grouped)
+    for image, progress in pull_state.items():
+        bar = _render_pull_bar(progress.percent)
+        status = f"[dim]{progress.status.lower()}[/dim]"
+        suffix = f" {bar}" if bar else ""
+        state = f"{status}{suffix} [dim cyan]({image})[/dim cyan]"
+        merged[progress.service] = [["-", _image_basename(image), state]]
+    return merged
 
 
 def render_moving_shadow_text(
@@ -384,6 +416,17 @@ def wait_for_env_state(
         # Used only when there is not yet a stable table snapshot to render,
         # or when an in-flight action would make an empty snapshot misleading.
         title = f"[white]{env.envCfg.tag}[/white]"
+        pull_state = env.get_pull_state()
+        if pull_state:
+            labels: list[str] = []
+            for image, progress in pull_state.items():
+                pct = (
+                    f" {progress.percent}%"
+                    if progress.percent is not None
+                    else ""
+                )
+                labels.append(f"{image}{pct}")
+            return f"{title} [dim]Pulling {', '.join(labels)}...[/dim]"
         if wait_until_up:
             return f"{title} {starting_suffix(remaining, tick)}"
         if remaining is not None:
@@ -676,12 +719,18 @@ def wait_for_env_state(
                         )
                         return
                 else:
+                    display_grouped = snap_grouped
+                    pull_state = env.get_pull_state()
+                    if pull_state:
+                        display_grouped = _merge_pull_into_grouped(
+                            snap_grouped, pull_state
+                        )
                     show_ready = wait_until_up and condition_met(
                         snap_all_running, snap_any_running, snap_gate_status
                     )
                     live.update(
                         build_status_renderable(
-                            snap_grouped,
+                            display_grouped,
                             remaining=remaining,
                             tick=ui_tick_count,
                             show_ready=show_ready,

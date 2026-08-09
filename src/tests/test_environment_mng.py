@@ -18,7 +18,11 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from environment.environment import EnvironmentMng, ProbeRunResult
+from environment.environment import (
+    EnvironmentMng,
+    ProbeRunResult,
+    PullImageProgress,
+)
 from environment.render import (
     build_env_details_tree,
     build_env_status_tree,
@@ -26,6 +30,9 @@ from environment.render import (
 )
 from environment.status_wait import (
     WaitForEnvStateHooks,
+    _image_basename,
+    _merge_pull_into_grouped,
+    _render_pull_bar,
     render_moving_shadow_text,
     wait_for_env_state,
     watch_probe_state,
@@ -50,6 +57,7 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
 
     status_samples: list[
         tuple[dict[str, list[list[str]]], bool, bool, bool]
@@ -99,6 +107,7 @@ def test_wait_for_env_up_propagates_action_error(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
     mocker.patch.object(
         mng, "_collect_env_status", return_value=({}, False, False, False)
@@ -121,6 +130,7 @@ def test_wait_for_env_up_timeout_calls_print_error(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     fake_console = mocker.Mock()
@@ -145,6 +155,7 @@ def test_wait_for_env_down_timeout_calls_print_error(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     fake_console = mocker.Mock()
@@ -168,6 +179,7 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
     setattr(mng, "_status_poll_seconds", 0.001)
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     fake_console = mocker.Mock()
@@ -225,6 +237,7 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
     setattr(mng, "_status_poll_seconds", 0.001)
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     status_samples: list[
@@ -272,6 +285,7 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
     setattr(mng, "_status_poll_seconds", 0.001)
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     status_samples: list[
@@ -319,6 +333,7 @@ def test_wait_for_env_up_quiet_still_polls_until_running(
     setattr(mng, "_status_poll_seconds", 0.001)
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     status_samples: list[
@@ -363,6 +378,7 @@ def test_wait_for_env_up_quiet_still_enforces_timeout(mocker: MockerFixture):
     setattr(mng, "_status_poll_seconds", 0.001)
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     mocker.patch.object(
@@ -491,6 +507,7 @@ def test_evaluate_gate_status_success_and_exception(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
 
     env.check_probes.return_value = [
         ProbeRunResult(tag="a", exit_code=0, timed_out=False),
@@ -553,6 +570,55 @@ def test_check_probes_renders_probe_status_tree(mocker: MockerFixture):
     assert exit_code == 0
     build_tree.assert_called_once()
     fake_console.print.assert_called_once_with("probe-tree")
+
+
+def test_render_pull_bar_none_percent_is_empty():
+    assert _render_pull_bar(None) == ""
+
+
+def test_render_pull_bar_scales_filled_blocks():
+    bar = _render_pull_bar(50, width=10)
+    assert bar.count("█") == 5
+    assert bar.count("░") == 5
+    assert "50%" in bar
+
+
+def test_image_basename_strips_registry_prefix():
+    assert _image_basename("nginx:latest") == "nginx:latest"
+    assert _image_basename("docker.io/library/postgres:14") == "postgres:14"
+
+
+def test_merge_pull_into_grouped_overrides_pulling_services():
+    grouped = {
+        "web": [["-", "nginx", "[dim]stopped[/dim]"]],
+        "db": [["-", "postgres", "[dim]stopped[/dim]"]],
+    }
+    pull_state = {
+        "nginx:latest": PullImageProgress(
+            service="web",
+            image="nginx:latest",
+            status="Downloading",
+            percent=50,
+        )
+    }
+
+    merged = _merge_pull_into_grouped(grouped, pull_state)
+
+    assert set(merged.keys()) == {"web", "db"}
+    web_row = merged["web"][0]
+    assert "downloading" in web_row[2]
+    assert "50%" in web_row[2]
+    assert "nginx:latest" in web_row[2]
+    assert web_row[1] == "nginx:latest"
+    assert merged["db"] == grouped["db"]
+
+
+def test_merge_pull_into_grouped_noop_when_no_pull_state():
+    grouped = {"web": [["-", "nginx", "[dim]stopped[/dim]"]]}
+
+    merged = _merge_pull_into_grouped(grouped, {})
+
+    assert merged == grouped
 
 
 def test_build_env_status_tree_with_command_log_panel(mocker: MockerFixture):
@@ -864,6 +930,7 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     status_samples: list[
@@ -939,6 +1006,7 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
 
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = []
 
     calls = {"count": 0}
@@ -996,6 +1064,7 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
 ):
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
 
     status_samples: list[
         tuple[dict[str, list[list[str]]], bool, bool, bool]
@@ -1090,6 +1159,7 @@ def test_wait_for_env_up_watch_flashes_ready_badge_briefly(
 ):
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
 
     status_samples: list[
         tuple[dict[str, list[list[str]]], bool, bool, bool]
@@ -1174,6 +1244,7 @@ def test_wait_for_env_up_watch_marks_changed_container_and_probe_for_flash(
 ):
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
 
     status_samples: list[
         tuple[dict[str, list[list[str]]], bool, bool, bool]
@@ -1307,6 +1378,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
 ):
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     status_samples: list[
         tuple[dict[str, list[list[str]]], bool, bool, bool]
     ] = [
@@ -1456,6 +1528,7 @@ def test_build_env_details_tree(mocker: MockerFixture):
     )
     env = mocker.Mock()
     env.envCfg = SimpleNamespace(tag="test-env")
+    env.get_pull_state.return_value = []
     env.get_services.return_value = [svc_1, svc_2]
 
     tree = build_env_details_tree(env)

@@ -122,6 +122,81 @@ def run_compose(
                 logging.debug(f"Failed to remove temp compose file {p}: {e}")
 
 
+def run_compose_pull_stream(
+    yamls: str | Iterable[str],
+    *services: str,
+    project_name: Optional[str] = None,
+    on_line: Optional[Callable[[str], None]] = None,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run `docker compose pull <services>` streaming stdout line-by-line.
+
+    Each decoded line is passed to `on_line` as it arrives, so callers can
+    parse per-image pull progress while the command is still running.
+    """
+    if isinstance(yamls, str):
+        yaml_list = [yamls]
+    else:
+        yaml_list = list(yamls)
+
+    if not yaml_list:
+        raise ValueError(
+            "run_compose_pull_stream: at least one YAML must be provided"
+        )
+
+    tmp_paths: list[Path] = []
+    try:
+        for yml in yaml_list:
+            with tempfile.NamedTemporaryFile(
+                "w", suffix=".yml", delete=False
+            ) as tmp:
+                tmp.write(yml)
+                tmp_paths.append(Path(tmp.name))
+
+        cmd: list[str] = ["docker", "compose"]
+        if project_name:
+            cmd += ["-p", project_name]
+        for p in tmp_paths:
+            cmd += ["-f", str(p)]
+        cmd += ["pull", *services]
+
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
+        lines: list[str] = []
+        assert proc.stdout is not None
+        for raw_line in proc.stdout:
+            line = raw_line.rstrip("\n")
+            lines.append(line)
+            if on_line:
+                try:
+                    on_line(line)
+                except Exception as e:
+                    logging.debug("Failed handling pull progress line: %s", e)
+        returncode = proc.wait()
+
+        logging.debug(
+            f"docker compose pull command run:\n"
+            f"CMD: {' '.join(cmd)}\n"
+            f"with exit code {returncode}\n"
+            f"OUTPUT:\n{chr(10).join(lines)}"
+        )
+
+        return subprocess.CompletedProcess(
+            cmd, returncode=returncode, stdout="\n".join(lines), stderr=""
+        )
+    finally:
+        for p in tmp_paths:
+            try:
+                p.unlink(missing_ok=True)
+            except Exception as e:
+                logging.debug(f"Failed to remove temp compose file {p}: {e}")
+
+
 def build_docker_image(
     dockerfile_path: Path,
     context_path: Path,

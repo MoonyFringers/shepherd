@@ -20,8 +20,12 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
-from docker.docker_compose_env import DockerComposeEnv
-from environment.environment import NonRecoverableStartError, ProbeRunResult
+from docker.docker_compose_env import DockerComposeEnv, _PullProgressTracker
+from environment.environment import (
+    NonRecoverableStartError,
+    ProbeRunResult,
+    PullImageProgress,
+)
 from shepctl import ShepherdMng, cli
 from util import Util
 
@@ -818,6 +822,319 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
     assert "Docker compose start:ungated failed" == err["title"]
     assert "--- stdout ---" in err["body"]
     assert "--- stderr ---" in err["body"]
+
+
+# Captured from a real `docker compose pull` run (compose v5.4.0 / Docker
+# 29.7.1) against a single-image, multi-layer pull. Layer lines are keyed
+# by a short hash, not by service/image -- only the "Image ... Pulling/
+# Pulled" bookends name the image, hence the stateful tracker.
+_REAL_PULL_OUTPUT = [
+    " Image nginx:alpine Pulling ",
+    " 3cd534fe98c6 Pulling fs layer 0B",
+    " 1223f016b4e4 Pulling fs layer 0B",
+    " 3cd534fe98c6 Downloading 32.16kB",
+    " 3cd534fe98c6 Download complete 0B",
+    " 3cd534fe98c6 Extracting 1.891MB",
+    " 3cd534fe98c6 Pull complete 0B",
+    " 1223f016b4e4 Download complete 0B",
+    " 1223f016b4e4 Extracting 627B",
+    " 1223f016b4e4 Pull complete 0B",
+    " Image nginx:alpine Pulled ",
+]
+
+
+def test_pull_progress_tracker_tracks_current_image_bookends() -> None:
+    tracker = _PullProgressTracker()
+
+    assert tracker.parse(" Image nginx:alpine Pulling ") == (
+        "nginx:alpine",
+        "pulling",
+        None,
+    )
+    assert tracker.parse(" Image nginx:alpine Pulled ") == (
+        "nginx:alpine",
+        "pulled",
+        100,
+    )
+
+
+def test_pull_progress_tracker_ignores_layer_lines_before_pulling() -> None:
+    tracker = _PullProgressTracker()
+    assert tracker.parse(" 3cd534fe98c6 Downloading 32.16kB") is None
+
+
+def test_pull_progress_tracker_percent_reflects_completed_layer_fraction() -> (
+    None
+):
+    tracker = _PullProgressTracker()
+    results = [tracker.parse(line) for line in _REAL_PULL_OUTPUT]
+    non_none = [r for r in results if r is not None]
+
+    assert non_none[0] == ("nginx:alpine", "pulling", None)
+    assert non_none[-1] == ("nginx:alpine", "pulled", 100)
+
+    # After the first layer's "Pull complete", 1 of 2 seen layers is done.
+    pull_complete_events = [r for r in non_none if r[1] == "Pull complete"]
+    assert pull_complete_events[0] == ("nginx:alpine", "Pull complete", 50)
+    assert pull_complete_events[1] == ("nginx:alpine", "Pull complete", 100)
+
+
+def test_pull_progress_tracker_ignores_unrecognized_lines() -> None:
+    tracker = _PullProgressTracker()
+    tracker._current_image = "nginx:alpine"
+    assert tracker.parse("[+] Pulling 2/2") is None
+    assert tracker.parse("") is None
+
+
+@pytest.mark.docker
+def test_pull_state_round_trip(mocker: MockerFixture) -> None:
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    assert env.get_pull_state() == {}
+
+    web_progress = PullImageProgress(
+        service="web", image="nginx:latest", status="Pulling", percent=None
+    )
+    env.set_pull_state({"nginx:latest": web_progress})
+    assert env.get_pull_state() == {"nginx:latest": web_progress}
+
+    db_progress = PullImageProgress(
+        service="db", image="postgres:14", status="Downloading", percent=42
+    )
+    env.update_pull_progress("postgres:14", db_progress)
+    assert env.get_pull_state() == {
+        "nginx:latest": web_progress,
+        "postgres:14": db_progress,
+    }
+
+    env.clear_pull_state()
+    assert env.get_pull_state() == {}
+
+
+@pytest.mark.docker
+def test_find_missing_images_returns_absent_images(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="db",
+                containers=[
+                    SimpleNamespace(
+                        image="postgres:14",
+                        run_container_name="db-db-test-env",
+                    )
+                ],
+            )
+        ),
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="cache",
+                containers=[
+                    SimpleNamespace(
+                        image="redis:7",
+                        run_container_name="cache-cache-test-env",
+                    )
+                ],
+            )
+        ),
+    ]
+
+    def fake_inspect(
+        *args: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        cmd = args[0] if args else []
+        image = cmd[-1]
+        returncode = 0 if image == "postgres:14" else 1
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=returncode, stdout="", stderr=""
+        )
+
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run", side_effect=fake_inspect
+    )
+
+    missing = env._find_missing_images()
+
+    assert missing == [("cache", "cache-cache-test-env", "redis:7")]
+
+
+@pytest.mark.docker
+def test_find_missing_images_deduplicates_shared_images(
+    mocker: MockerFixture,
+) -> None:
+    """The same image used by two services is only inspected once."""
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc1",
+                containers=[
+                    SimpleNamespace(
+                        image="nginx:latest",
+                        run_container_name="svc1-svc1-test-env",
+                    )
+                ],
+            )
+        ),
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc2",
+                containers=[
+                    SimpleNamespace(
+                        image="nginx:latest",
+                        run_container_name="svc2-svc2-test-env",
+                    )
+                ],
+            )
+        ),
+    ]
+
+    mock_run = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+
+    missing = env._find_missing_images()
+
+    assert missing == [("svc1", "svc1-svc1-test-env", "nginx:latest")]
+    assert mock_run.call_count == 1
+
+
+@pytest.mark.docker
+def test_start_impl_pulls_missing_images_with_progress_before_up(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(
+        tag="pull-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(
+            rendered_config={
+                "ungated": "name: pull-env\nservices: {}\n",
+            }
+        ),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="web",
+                containers=[
+                    SimpleNamespace(
+                        image="nginx:latest",
+                        run_container_name="nginx-web-pull-env",
+                    )
+                ],
+            )
+        ),
+    ]
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+
+    seen_pull_state: list[dict[str, Any]] = []
+
+    def fake_pull_stream(
+        yamls: Any,
+        *services: str,
+        project_name: Any = None,
+        on_line: Any = None,
+    ) -> subprocess.CompletedProcess[str]:
+        assert services == ("nginx-web-pull-env",)
+        if on_line:
+            on_line(" Image nginx:latest Pulling ")
+            on_line(" abc123 Pulling fs layer 0B")
+            on_line(" abc123 Downloading 10MB")
+            seen_pull_state.append(dict(env.get_pull_state()))
+        return subprocess.CompletedProcess(
+            args=["docker", "compose", "pull", "nginx-web-pull-env"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    mocker.patch(
+        "docker.docker_compose_env.run_compose_pull_stream",
+        side_effect=fake_pull_stream,
+    )
+    mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    env.start_impl(started_gate_keys=set(), probe_results=None)
+
+    assert len(seen_pull_state) == 1
+    progress = seen_pull_state[0]["nginx:latest"]
+    assert progress.service == "web"
+    assert progress.status == "Downloading"
+    assert progress.percent == 0
+    assert env.get_pull_state() == {}
+
+
+@pytest.mark.docker
+def test_start_impl_clears_pull_state_on_pull_failure(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(
+        tag="pull-fail-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(
+            rendered_config={
+                "ungated": "name: pull-fail-env\nservices: {}\n",
+            }
+        ),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="web",
+                containers=[
+                    SimpleNamespace(
+                        image="nginx:latest",
+                        run_container_name="nginx-web-pull-fail-env",
+                    )
+                ],
+            )
+        ),
+    ]
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+    mocker.patch(
+        "docker.docker_compose_env.run_compose_pull_stream",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "pull", "nginx-web-pull-fail-env"],
+            returncode=1,
+            stdout="",
+            stderr="pull failed",
+        ),
+    )
+
+    with pytest.raises(NonRecoverableStartError):
+        env.start_impl(started_gate_keys=set(), probe_results=None)
+
+    assert env.get_pull_state() == {}
 
 
 @pytest.mark.docker

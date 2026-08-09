@@ -59,6 +59,17 @@ class ProbeRunResult:
     timed_out: bool = False
 
 
+@dataclass
+class PullImageProgress:
+    """Streaming pull state for a single image, keyed by image in
+    ``Environment._pull_state``."""
+
+    service: str
+    image: str
+    status: str
+    percent: Optional[int] = None
+
+
 class NonRecoverableStartError(RuntimeError):
     """Raised when environment start cannot continue safely."""
 
@@ -99,6 +110,8 @@ class Environment(ABC):
         self._command_log_lock = threading.Lock()
         self._command_error_lock = threading.Lock()
         self._command_error: Optional[dict[str, str]] = None
+        self._pull_state: dict[str, PullImageProgress] = {}
+        self._pull_state_lock = threading.Lock()
 
     def _is_verbose(self) -> bool:
         return bool(self.cli_flags.get("verbose", False))
@@ -133,6 +146,7 @@ class Environment(ABC):
         """
         self.clear_command_log()
         self.clear_command_error()
+        self.clear_pull_state()
         self.on_start_cycle_begin()
         self.envCfg.status.rendered_config = self.render_target(True)
         self.sync_config()
@@ -229,6 +243,28 @@ class Environment(ABC):
     def clear_command_error(self) -> None:
         with self._command_error_lock:
             self._command_error = None
+
+    def set_pull_state(self, entries: dict[str, PullImageProgress]) -> None:
+        """Replace the current pull state (keyed by image)."""
+        with self._pull_state_lock:
+            self._pull_state = dict(entries)
+
+    def update_pull_progress(
+        self, image: str, progress: PullImageProgress
+    ) -> None:
+        """Update the progress entry for a single image being pulled."""
+        with self._pull_state_lock:
+            self._pull_state[image] = progress
+
+    def get_pull_state(self) -> dict[str, PullImageProgress]:
+        """Return a snapshot of the current pull state."""
+        with self._pull_state_lock:
+            return dict(self._pull_state)
+
+    def clear_pull_state(self) -> None:
+        """Clear the current pull state."""
+        with self._pull_state_lock:
+            self._pull_state = {}
 
     def get_command_error(self) -> Optional[dict[str, str]]:
         with self._command_error_lock:
