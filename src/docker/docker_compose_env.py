@@ -23,6 +23,7 @@ from config.config import InitCfg, ProbeCfg, VolumeCfg
 from environment import Environment
 from environment.environment import (
     NonRecoverableStartError,
+    NonRecoverableStopError,
     ProbeRunResult,
     PullImageProgress,
 )
@@ -535,12 +536,17 @@ class DockerComposeEnv(Environment):
         """Halt the environment."""
         rendered_map = self.envCfg.status.rendered_config
         if rendered_map:
-            self._run_compose(
+            result = self._run_compose(
                 list(rendered_map.values()),
                 "down",
                 capture=not self._is_verbose(),
                 category="stop",
             )
+            if result.returncode != 0:
+                raise NonRecoverableStopError(
+                    f"Failed to halt environment '{self.envCfg.tag}' "
+                    f"(docker compose down exited {result.returncode})."
+                )
 
     @override
     def reload_impl(self):
@@ -1024,11 +1030,27 @@ class DockerComposeEnv(Environment):
             self._log_compose_result(result, category=category)
         if (
             category
-            and category.startswith("start:")
+            and self._is_failure_tracked_category(category)
             and result.returncode != 0
         ):
             self._record_compose_failure(result, category=category)
         return result
+
+    # Categories whose failures are surfaced via `_record_compose_failure`
+    # (command-error panel + a raised exception for the caller to handle).
+    # Exact-match categories go here; categories that carry a per-gate/init
+    # suffix (e.g. `start:ungated`, `start:db-ready|cache-ready`) are matched
+    # by prefix instead. Add new lifecycle categories to one of these two
+    # sets/prefixes rather than growing the condition ad hoc.
+    _FAILURE_TRACKED_EXACT_CATEGORIES = frozenset({"stop"})
+    _FAILURE_TRACKED_CATEGORY_PREFIXES = ("start:",)
+
+    @classmethod
+    def _is_failure_tracked_category(cls, category: str) -> bool:
+        return category in cls._FAILURE_TRACKED_EXACT_CATEGORIES or any(
+            category.startswith(prefix)
+            for prefix in cls._FAILURE_TRACKED_CATEGORY_PREFIXES
+        )
 
     def _log_compose_result(
         self,

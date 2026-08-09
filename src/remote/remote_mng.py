@@ -70,6 +70,16 @@ class RemoteMng:
     - Prune orphan chunks.
     """
 
+    # Single source of truth for which `RemoteCfg.type` values `_build_backend`
+    # handles internally. `PluginRuntimeMng` reads this to reject a plugin
+    # backend registered under a core type_id -- keeping this list in sync
+    # with `_build_backend`'s own branches matters: a plugin allowed to
+    # register under a type_id core already dispatches internally would be
+    # silently unreachable (core's branch returns first).
+    CORE_BACKEND_TYPE_IDS: frozenset[str] = frozenset(
+        {"ftp", "sftp", "registry"}
+    )
+
     def __init__(self, configMng: ConfigMng) -> None:
         self.configMng = configMng
         self._plugin_runtime: Optional[PluginRuntimeMng] = None

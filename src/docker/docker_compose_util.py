@@ -305,9 +305,12 @@ def render_container(
         container_def["container_name"] = cnt.run_container_name
     if cnt.workdir:
         container_def["working_dir"] = cnt.workdir
-    if cnt.volumes:
+    if cnt.command:
+        container_def["command"] = cnt.command
+    all_volumes = (cnt.volumes or []) + (cnt.run_volumes or [])
+    if all_volumes:
         container_def["volumes"] = [
-            Util.translate_volume_binding(volume) for volume in cnt.volumes
+            Util.translate_volume_binding(volume) for volume in all_volumes
         ]
     if cnt.environment:
         container_def["environment"] = cnt.environment
@@ -328,9 +331,39 @@ def render_container(
         if cnt.healthcheck.start_period:
             healthcheck_def["start_period"] = cnt.healthcheck.start_period
         container_def["healthcheck"] = healthcheck_def
-    if labels:
-        container_def["labels"] = labels
+    merged_labels = _merge_labels(labels, cnt.labels, cnt.run_labels)
+    if merged_labels:
+        container_def["labels"] = merged_labels
     return container_def
+
+
+def _merge_labels(
+    service_labels: Optional[list[str]],
+    container_labels: Optional[list[str]],
+    run_labels: Optional[list[str]] = None,
+) -> list[str]:
+    """
+    Merge service-level, container-level, and run (ingress-computed,
+    transient) ``"key=value"`` labels.
+
+    Precedence on key conflict: service < container < run. Container-level
+    labels let a plugin target routing/ingress labels at one container in a
+    multi-container service without labeling the whole service; run labels
+    (``ContainerCfg.run_labels``) win over both since they are computed
+    fresh on every `start()` (e.g. by `Environment._apply_ingress_plan`) and
+    must never be shadowed by a stale declared label of the same key.
+    """
+    merged: dict[str, str] = {}
+    for entry in service_labels or []:
+        key, _, value = entry.partition("=")
+        merged[key] = value
+    for entry in container_labels or []:
+        key, _, value = entry.partition("=")
+        merged[key] = value
+    for entry in run_labels or []:
+        key, _, value = entry.partition("=")
+        merged[key] = value
+    return [f"{key}={value}" for key, value in merged.items()]
 
 
 def build_container(container: ContainerCfg, *, verbose: bool = False) -> None:

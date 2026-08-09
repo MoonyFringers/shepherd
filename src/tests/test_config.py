@@ -13,7 +13,7 @@ from unittest.mock import mock_open
 import pytest
 import yaml
 from pytest_mock import MockerFixture
-from test_util import read_fixture
+from test_util import add_container_field_defaults, read_fixture
 
 from config import (
     Config,
@@ -836,6 +836,7 @@ def test_store_config_with_real_files():
                 item.setdefault("tracking_remote", None)
                 item.setdefault("dehydrated", None)
                 item.setdefault("config", None)
+                item.setdefault("ingress", None)
             for remote in expected.get("remotes") or []:
                 remote.setdefault("host", None)
                 remote.setdefault("port", None)
@@ -845,6 +846,7 @@ def test_store_config_with_real_files():
                 remote.setdefault("identity_file", None)
                 remote.setdefault("local_cache", None)
                 remote.setdefault("properties", None)
+            add_container_field_defaults(expected)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
@@ -1173,6 +1175,8 @@ def test_store_config_with_refs_with_real_files():
                 item.setdefault("tracking_remote", None)
                 item.setdefault("dehydrated", None)
                 item.setdefault("config", None)
+                item.setdefault("ingress", None)
+            add_container_field_defaults(expected)
             y2: str = yaml.dump(expected, sort_keys=True)
             assert y1 == y2
 
@@ -1765,6 +1769,178 @@ def test_render_container_no_healthcheck():
     rendered = render_container(cnt, labels=None)
 
     assert "healthcheck" not in rendered
+
+
+# ---------------------------------------------------------------------------
+# ContainerCfg.labels / ContainerCfg.ingress tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.cfg
+def test_parse_container_labels_and_ingress():
+    """A container's `labels` and `ingress` fields parse from raw yaml/json."""
+    from config.config import _parse_container
+
+    cnt = _parse_container(
+        {
+            "tag": "web",
+            "image": "nginx:stable",
+            "labels": ["com.example.role=frontend"],
+            "ingress": True,
+        }
+    )
+
+    assert cnt.labels == ["com.example.role=frontend"]
+    assert cnt.ingress == "true"
+    assert cnt.is_ingress() is True
+
+
+@pytest.mark.cfg
+def test_parse_container_no_labels_or_ingress():
+    """A container with no `labels`/`ingress` parses to `[]`/unset."""
+    from config.config import _parse_container
+
+    cnt = _parse_container({"tag": "db", "image": "postgres:16-alpine"})
+
+    assert cnt.labels == []
+    assert cnt.ingress is None
+    assert cnt.is_ingress() is False
+
+
+@pytest.mark.cfg
+def test_parse_environment_ingress():
+    """An environment's `ingress:` block parses into `IngressCfg`."""
+    from config.config import _parse_environment
+
+    item = {
+        "template": "default",
+        "factory": "docker-compose",
+        "tag": "test-1",
+        "status": {"active": True},
+        "ingress": {"domain": "sslip.io", "provider": "nginx"},
+    }
+
+    env = _parse_environment(item)
+
+    assert env.ingress is not None
+    assert env.ingress.domain == "sslip.io"
+    assert env.ingress.provider == "nginx"
+
+
+@pytest.mark.cfg
+def test_parse_environment_ingress_defaults_provider_to_traefik():
+    """`provider` defaults to the core built-in when omitted."""
+    from config.config import _parse_environment
+
+    item = {
+        "template": "default",
+        "factory": "docker-compose",
+        "tag": "test-1",
+        "status": {"active": True},
+        "ingress": {"domain": "sslip.io"},
+    }
+
+    env = _parse_environment(item)
+
+    assert env.ingress is not None
+    assert env.ingress.provider == "traefik"
+
+
+@pytest.mark.cfg
+def test_parse_environment_no_ingress():
+    """An environment with no `ingress:` block parses `ingress` as `None`."""
+    from config.config import _parse_environment
+
+    item = {
+        "template": "default",
+        "factory": "docker-compose",
+        "tag": "test-1",
+        "status": {"active": True},
+    }
+
+    env = _parse_environment(item)
+
+    assert env.ingress is None
+
+
+@pytest.mark.docker
+def test_render_container_merges_service_and_container_labels():
+    """render_container unions service-level and container-level labels,
+    with the container's own labels winning on key conflict."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="web",
+        image="nginx:stable",
+        run_hostname="web",
+        labels=[
+            "traefik.enable=true",
+            "com.example.role=frontend",
+        ],
+    )
+
+    rendered = render_container(
+        cnt,
+        labels=["traefik.enable=false", "com.example.team=platform"],
+    )
+
+    assert rendered["labels"] == [
+        "traefik.enable=true",
+        "com.example.team=platform",
+        "com.example.role=frontend",
+    ]
+
+
+@pytest.mark.docker
+def test_render_container_labels_service_only():
+    """render_container falls back to service-level labels when the
+    container declares none of its own."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(tag="web", image="nginx:stable", run_hostname="web")
+
+    rendered = render_container(cnt, labels=["com.example.role=frontend"])
+
+    assert rendered["labels"] == ["com.example.role=frontend"]
+
+
+@pytest.mark.docker
+def test_render_container_no_labels():
+    """render_container omits `labels` entirely when neither service nor
+    container declare any."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(tag="web", image="nginx:stable", run_hostname="web")
+
+    rendered = render_container(cnt, labels=None)
+
+    assert "labels" not in rendered
+
+
+@pytest.mark.docker
+def test_render_container_merges_volumes_and_run_volumes():
+    """render_container unions declared `volumes` with render-time-injected
+    `run_volumes` (e.g. the CA mount `Environment._apply_ingress_plan`
+    adds to probe containers)."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="db-ready",
+        image="postgres:17-3.5",
+        volumes=["/declared:/declared:ro"],
+        run_volumes=["/ca.crt:/etc/shepherd/ca.crt:ro"],
+    )
+
+    rendered = render_container(cnt, labels=None)
+
+    assert rendered["volumes"] == [
+        "/declared:/declared:ro",
+        "/ca.crt:/etc/shepherd/ca.crt:ro",
+    ]
 
 
 # ---------------------------------------------------------------------------

@@ -527,6 +527,7 @@ class ContainerCfg(Resolvable):
         default=None, metadata={"transient": True}
     )
     workdir: Optional[str] = None
+    command: Optional[list[str]] = None
     volumes: Optional[list[str]] = None
     environment: Optional[list[str]] = None
     ports: Optional[list[str]] = None
@@ -535,6 +536,27 @@ class ContainerCfg(Resolvable):
     build: Optional[BuildCfg] = None
     inits: Optional[list[InitCfg]] = None
     healthcheck: Optional[HealthcheckCfg] = None
+    labels: Optional[list[str]] = None
+    ingress: Optional[str] = field(default=None, metadata={"boolify": True})
+    # Ingress-provider-computed labels (routing rules, TLS flags, ...),
+    # distinct from user-declared `labels`. Transient like `run_hostname`/
+    # `run_container_name`: computed fresh by `Environment._apply_ingress_plan`
+    # on every `start()`, never persisted -- mutating declared `labels` in
+    # place would silently survive into `.shpd.yaml` and go stale after a
+    # rename (old router names never get cleaned up).
+    run_labels: Optional[list[str]] = field(
+        default=None, metadata={"transient": True}
+    )
+    # Render-time-injected volume mounts (e.g. the local CA certificate for
+    # probes to trust HTTPS ingress -- see `Environment._apply_ingress_plan`),
+    # additive to declared `volumes`. Transient for the same reason as
+    # `run_labels`: computed fresh on every `start()`, never persisted.
+    run_volumes: Optional[list[str]] = field(
+        default=None, metadata={"transient": True}
+    )
+
+    def is_ingress(self) -> bool:
+        return self.ingress is not None and str_to_bool(self.ingress)
 
 
 @dataclass
@@ -736,6 +758,22 @@ class EnvironmentTemplateCfg(Resolvable):
 
 
 @dataclass
+class IngressCfg(Resolvable):
+    """
+    Opts an environment into HTTPS ingress for its `ingress: true`-flagged
+    containers (see `ContainerCfg.ingress`). `provider` is an
+    `IngressProvider` type_id -- `"traefik"` (core built-in) or a
+    plugin-registered one. `domain` is the DNS domain hostnames are
+    generated under; it must be a domain the provider's `IngressProvider`
+    implementation is prepared to certify (see `tls.CertificateAuthorityMng`
+    -- the CA's `NameConstraints` are scoped to it).
+    """
+
+    domain: str
+    provider: str = "traefik"
+
+
+@dataclass
 class EnvironmentCfg(Resolvable):
     """
     Represents an environment configuration.
@@ -753,6 +791,7 @@ class EnvironmentCfg(Resolvable):
     dehydrated: Optional[bool] = None
     status: EntityStatus = field(default_factory=EntityStatus)
     config: Optional[dict[str, Any]] = None
+    ingress: Optional[IngressCfg] = None
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -1020,6 +1059,7 @@ def _parse_container(item: Any) -> ContainerCfg:
         hostname=item.get("hostname"),
         container_name=item.get("container_name"),
         workdir=item.get("workdir"),
+        command=item.get("command", []),
         volumes=item.get("volumes", []),
         environment=item.get("environment", []),
         ports=item.get("ports", []),
@@ -1031,6 +1071,12 @@ def _parse_container(item: Any) -> ContainerCfg:
             _parse_healthcheck(item["healthcheck"])
             if item.get("healthcheck")
             else None
+        ),
+        labels=item.get("labels", []),
+        ingress=(
+            bool_to_str(item["ingress"])
+            if isinstance(item.get("ingress"), bool)
+            else item.get("ingress")
         ),
     )
 
@@ -1287,6 +1333,13 @@ def _parse_remote(item: Any) -> RemoteCfg:
     )
 
 
+def _parse_ingress(item: Any) -> IngressCfg:
+    return IngressCfg(
+        domain=item["domain"],
+        provider=item.get("provider", "traefik"),
+    )
+
+
 def _parse_environment(item: Any) -> EnvironmentCfg:
     services_data = cast(list[dict[str, Any]], item.get("services") or [])
     probes_data = cast(list[dict[str, Any]], item.get("probes") or [])
@@ -1305,6 +1358,9 @@ def _parse_environment(item: Any) -> EnvironmentCfg:
         dehydrated=item.get("dehydrated"),
         status=_parse_status(item["status"]),
         config=item.get("config"),
+        ingress=(
+            _parse_ingress(item["ingress"]) if item.get("ingress") else None
+        ),
     )
 
 

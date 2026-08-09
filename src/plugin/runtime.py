@@ -34,10 +34,12 @@ from config import (
 )
 from config.config import RemoteCfg
 from environment import EnvironmentFactory, EnvironmentMng
+from ingress import CORE_INGRESS_PROVIDER_TYPE_IDS, IngressProvider
 from plugin.api import (
     PluginCommandSpec,
     PluginCompletionSpec,
     PluginEnvFactorySpec,
+    PluginIngressProviderSpec,
     PluginRemoteBackendSpec,
     PluginSvcFactorySpec,
     ShepherdPlugin,
@@ -95,6 +97,11 @@ def _remote_backend_registry() -> dict[str, "PluginRemoteBackendSpec"]:
     return {}
 
 
+def _ingress_provider_registry() -> dict[str, "PluginIngressProviderSpec"]:
+    """Create a typed default for ingress provider registrations."""
+    return {}
+
+
 def _fragment_registry() -> dict[str, EnvTemplateFragmentCfg]:
     """Create a typed default for fragment registrations."""
     return {}
@@ -146,6 +153,9 @@ class PluginRegistry:
     )
     remote_backends: dict[str, PluginRemoteBackendSpec] = field(
         default_factory=_remote_backend_registry
+    )
+    ingress_providers: dict[str, PluginIngressProviderSpec] = field(
+        default_factory=_ingress_provider_registry
     )
 
 
@@ -551,6 +561,7 @@ class PluginRuntimeMng:
         env_factories = loaded.instance.get_env_factories()
         svc_factories = loaded.instance.get_service_factories()
         remote_backends = loaded.instance.get_remote_backends()
+        ingress_providers = loaded.instance.get_ingress_providers()
 
         self._check_capabilities(
             loaded,
@@ -559,6 +570,7 @@ class PluginRuntimeMng:
             env_factories,
             svc_factories,
             remote_backends,
+            ingress_providers,
         )
 
         self.registry.plugins[plugin_id] = loaded
@@ -568,6 +580,7 @@ class PluginRuntimeMng:
         self._register_env_factories(plugin_id, env_factories)
         self._register_svc_factories(plugin_id, svc_factories)
         self._register_remote_backends(plugin_id, remote_backends)
+        self._register_ingress_providers(plugin_id, ingress_providers)
 
     def _check_capabilities(
         self,
@@ -577,6 +590,7 @@ class PluginRuntimeMng:
         env_factories: Sequence[PluginEnvFactorySpec],
         svc_factories: Sequence[PluginSvcFactorySpec],
         remote_backends: Sequence[PluginRemoteBackendSpec],
+        ingress_providers: Sequence[PluginIngressProviderSpec],
     ) -> None:
         """Reject plugins that contribute to undeclared capability areas.
 
@@ -606,6 +620,7 @@ class PluginRuntimeMng:
             ("env_factories", bool(env_factories)),
             ("svc_factories", bool(svc_factories)),
             ("remote_backends", bool(remote_backends)),
+            ("ingress_providers", bool(ingress_providers)),
         ]
         for area, has_contributions in checks:
             if has_contributions and not caps.get(area, False):
@@ -987,8 +1002,6 @@ class PluginRuntimeMng:
         """Return whether the svc factory provider can be materialized."""
         return isinstance(provider, ServiceFactory) or callable(provider)
 
-    _CORE_BACKEND_TYPE_IDS: frozenset[str] = frozenset({"ftp", "sftp"})
-
     def _register_remote_backends(
         self,
         plugin_id: str,
@@ -996,7 +1009,7 @@ class PluginRuntimeMng:
     ) -> None:
         """Register plugin-contributed remote backend transports."""
         for backend in backends:
-            if backend.type_id in self._CORE_BACKEND_TYPE_IDS:
+            if backend.type_id in RemoteMng.CORE_BACKEND_TYPE_IDS:
                 Util.print_error_and_die(
                     f"Plugin '{plugin_id}' remote backend type_id "
                     f"'{backend.type_id}' collides with a core built-in."
@@ -1040,6 +1053,62 @@ class PluginRuntimeMng:
                 ) from exc
         raise ValueError(
             f"Plugin remote backend '{type_id}' provider is invalid."
+        )
+
+    def _register_ingress_providers(
+        self,
+        plugin_id: str,
+        providers: Sequence[PluginIngressProviderSpec],
+    ) -> None:
+        """Register plugin-contributed ingress/reverse-proxy providers."""
+        for provider_spec in providers:
+            if provider_spec.type_id in CORE_INGRESS_PROVIDER_TYPE_IDS:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' ingress provider type_id "
+                    f"'{provider_spec.type_id}' collides with a core "
+                    "built-in."
+                )
+            if provider_spec.type_id in self.registry.ingress_providers:
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' declares duplicate ingress "
+                    f"provider type_id '{provider_spec.type_id}'."
+                )
+            if not self._is_ingress_provider_provider(provider_spec.provider):
+                Util.print_error_and_die(
+                    f"Plugin '{plugin_id}' ingress provider "
+                    f"'{provider_spec.type_id}' must provide an "
+                    "IngressProvider instance or a zero-argument factory "
+                    "callable."
+                )
+            self.registry.ingress_providers[provider_spec.type_id] = (
+                provider_spec
+            )
+
+    def _is_ingress_provider_provider(self, provider: Any) -> bool:
+        """Return whether the ingress provider provider can be
+        materialized."""
+        return isinstance(provider, IngressProvider) or callable(provider)
+
+    def build_ingress_provider(self, type_id: str) -> IngressProvider | None:
+        """Return a plugin-owned IngressProvider for *type_id*, or None."""
+        spec = self.registry.ingress_providers.get(type_id)
+        if spec is None:
+            return None
+        provider = spec.provider
+        if isinstance(provider, IngressProvider):
+            return provider
+        if callable(provider):
+            try:
+                return provider()
+            except TypeError as exc:
+                raise ValueError(
+                    f"Plugin ingress provider '{type_id}' provider raised "
+                    f"TypeError when called with no arguments. Ensure the "
+                    f"provider accepts zero arguments, or supply a "
+                    f"pre-built instance instead: {exc}"
+                ) from exc
+        raise ValueError(
+            f"Plugin ingress provider '{type_id}' provider is invalid."
         )
 
     def get_environment_template(

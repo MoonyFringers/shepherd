@@ -24,6 +24,44 @@ def read_fixture(*parts: str) -> str:
     return (fixtures_dir.joinpath(*parts)).read_text(encoding="utf-8")
 
 
+def add_container_field_defaults(node: object) -> None:
+    """
+    Recursively add default values for `ContainerCfg` fields that older
+    fixture literals/files predate (e.g. `labels`, `ingress`), wherever a
+    `containers:` list or a single `container:` mapping appears, at any
+    nesting depth. Keeps fixture-comparison tests from having to be
+    hand-edited every time an optional `ContainerCfg` field is added.
+
+    This is deliberately separate from the flat, per-call-site
+    `expected.setdefault("field", None)` calls used elsewhere for top-level
+    scalar fields (e.g. `ready`, `tracking_remote`): those apply once at a
+    known key path, while `ContainerCfg` fields recur at arbitrary nesting
+    depth (services -> containers, probes -> container, ...), so a single
+    flat `setdefault` per comparison site can't cover them. Prefer this
+    helper specifically for new optional `ContainerCfg` fields; keep using
+    flat `setdefault` calls for new top-level/service-level scalar fields.
+    """
+    defaults: dict[str, object] = {
+        "labels": [],
+        "ingress": None,
+        "command": [],
+    }
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "containers" and isinstance(value, list):
+                for container in value:
+                    if isinstance(container, dict):
+                        for field_name, default in defaults.items():
+                            container.setdefault(field_name, default)
+            if key == "container" and isinstance(value, dict):
+                for field_name, default in defaults.items():
+                    value.setdefault(field_name, default)
+            add_container_field_defaults(value)
+    elif isinstance(node, list):
+        for item in node:
+            add_container_field_defaults(item)
+
+
 def test_print_error_and_die_uses_minimal_error_prefix(
     mocker: MockerFixture,
 ):

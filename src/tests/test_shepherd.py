@@ -2317,3 +2317,116 @@ def test_cli_env_hydrate_no_active_env_error(
 
     assert result.exit_code != 0
     assert "No environment checked out" in result.output
+
+
+# ------------------------------------------------------------------
+# tls
+# ------------------------------------------------------------------
+
+
+@pytest.mark.shpd
+def test_cli_tls_fingerprint_not_initialized(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls fingerprint' with no CA yet fails with a helpful error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["tls", "fingerprint"])
+
+    assert result.exit_code != 0
+    assert "No local CA found" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_tls_rotate_requires_domain(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls rotate' without --domain is rejected as a usage error."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["-y", "tls", "rotate"])
+
+    assert result.exit_code != 0
+
+
+@pytest.mark.shpd
+def test_cli_tls_rotate_and_fingerprint(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls rotate' generates a CA; 'tls fingerprint' then reports it."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["-y", "tls", "rotate", "--domain", "sslip.io"])
+    assert result.exit_code == 0, result.output
+    rotated_fingerprint = result.output.strip()
+    assert rotated_fingerprint
+
+    result = runner.invoke(cli, ["tls", "fingerprint"])
+    assert result.exit_code == 0, result.output
+    assert result.output.strip() == rotated_fingerprint
+
+
+@pytest.mark.shpd
+def test_cli_tls_rotate_aborted_without_yes(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls rotate' without -y prompts for confirmation; declining aborts
+    without generating a CA."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(
+        cli, ["tls", "rotate", "--domain", "sslip.io"], input="n\n"
+    )
+
+    assert result.exit_code == 0, result.output
+    assert "Aborted" in result.output
+
+    result = runner.invoke(cli, ["tls", "fingerprint"])
+    assert result.exit_code != 0
+
+
+@pytest.mark.shpd
+def test_cli_tls_list_empty(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls list' with no leaf certificates issued prints an empty table."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["tls", "list"])
+
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.shpd
+def test_cli_tls_remove(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+) -> None:
+    """'tls remove' deletes the CA; a subsequent fingerprint lookup fails."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_yaml.write_text(read_fixture("shpd", "shpd.yaml"))
+
+    result = runner.invoke(cli, ["-y", "tls", "rotate", "--domain", "sslip.io"])
+    assert result.exit_code == 0, result.output
+
+    result = runner.invoke(cli, ["-y", "tls", "remove"])
+    assert result.exit_code == 0, result.output
+
+    result = runner.invoke(cli, ["tls", "fingerprint"])
+    assert result.exit_code != 0

@@ -140,6 +140,7 @@ capabilities:
   env_factories: true
   svc_factories: true
   remote_backends: true
+  ingress_providers: true
 default_config:
   region: eu-west-1
 depends_on:
@@ -774,6 +775,84 @@ class MyPlugin(ShepherdPlugin):
 `list_envs(remote_name=None)` returns `(RemoteCfg, IndexCatalogue)`.
 `list_snapshots(env_name, remote_name=None)` returns
 `(RemoteCfg, list[SnapshotManifest])`.
+
+## Plugin-Contributed Ingress Providers
+
+Plugins can register alternative reverse-proxy/ingress engines — nginx,
+caddy, or anything that can route HTTPS traffic to labeled containers —
+without modifying core Shepherd code. Core ships a default `"traefik"`
+provider (`ingress.TraefikIngressProvider`); see ADR-0008 for the full
+design rationale (why `IngressProvider` is a desired-state reconciler
+rather than shaped like `RemoteBackend`).
+
+`Environment.start()` calls `_apply_ingress_plan()` before every render:
+for an environment with `ingress:` configured (`EnvironmentCfg.ingress`,
+an `IngressCfg` with `domain` + `provider` type_id), it resolves your
+provider (the core `"traefik"` built-in, or yours by `type_id`),
+calls `plan()`, issues/refreshes the TLS certificate for the returned
+SANs, and appends the proxy as a real environment service. `apply()` is
+called once the proxy's gate is up. See ADR-0008 for the full design.
+
+### Descriptor capability flag for ingress providers
+
+```yaml
+capabilities:
+  ingress_providers: true
+```
+
+### Implementing `IngressProvider`
+
+Subclass `IngressProvider` (importable from `ingress`) and implement three
+methods:
+
+- **`plan(env_cfg, ingress_containers) -> IngressPlan`** — a pure function
+  of `env_cfg`'s *declared* config (never of which containers are
+  currently running — see ADR-0008 on why deriving from running state
+  causes reissue storms across a gated multi-cycle `env up`). Returns the
+  computed hostname/labels per ingress-flagged container, the resulting
+  SAN list (core hands this to
+  `tls.CertificateAuthorityMng.issue_leaf_cert(env_tag, plan.sans)`
+  unchanged), and an `IngressProxySpec` describing the proxy's own
+  container (image/command/ports/volumes/labels) — a config-model-free
+  description; core translates it into a real `ServiceCfg`, since only
+  core knows the factory/template ids that need. Don't construct
+  `ServiceCfg`/`ContainerCfg` yourself.
+- **`apply(plan) -> None`** — make a freshly computed plan true against the
+  running environment. Must be idempotent. Core calls this once, after the
+  proxy's gate comes up.
+- **`reload(plan) -> None`** — re-apply a plan that changed.
+
+```python
+from ingress import (
+    IngressContainerRef,
+    IngressPlan,
+    IngressProvider,
+    IngressProxySpec,
+)
+from plugin import ShepherdPlugin, PluginIngressProviderSpec
+
+
+class MyNginxProvider(IngressProvider):
+    def plan(self, env_cfg, ingress_containers) -> IngressPlan:
+        ...  # compute hostnames/labels, build an IngressProxySpec,
+        ...  # return an IngressPlan
+
+    def apply(self, plan: IngressPlan) -> None:
+        ...  # e.g. write an nginx vhost file and reload the process
+
+    def reload(self, plan: IngressPlan) -> None:
+        self.apply(plan)
+
+
+class MyIngressPlugin(ShepherdPlugin):
+    def get_ingress_providers(self):
+        return [
+            PluginIngressProviderSpec(type_id="nginx", provider=MyNginxProvider)
+        ]
+```
+
+`type_id` must not collide with the core built-in identifier `"traefik"` —
+Shepherd rejects any plugin that tries to claim it.
 
 ## Example Plugins
 
