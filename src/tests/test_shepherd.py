@@ -882,6 +882,54 @@ def test_cli_logs_svc(
 
 
 @pytest.mark.shpd
+def test_cli_logs_svc_flags(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_logs = mocker.patch.object(ServiceMng, "logs_svc")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(
+        cli,
+        [
+            "svc",
+            "logs",
+            "service_tag",
+            "--follow",
+            "--tail",
+            "50",
+            "--since",
+            "10m",
+        ],
+    )
+    assert result.exit_code == 0
+    mock_logs.assert_called_once_with(
+        mocker.ANY, "service_tag", None, follow=True, tail=50, since="10m"
+    )
+
+
+@pytest.mark.shpd
+def test_cli_logs_env(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    mock_logs = mocker.patch.object(EnvironmentMng, "logs_env")
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "logs"])
+    assert result.exit_code == 0
+    mock_logs.assert_called_once_with(
+        mocker.ANY, follow=False, tail=None, since=None
+    )
+
+
+@pytest.mark.shpd
 def test_cli_shell_svc(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):

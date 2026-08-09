@@ -117,9 +117,17 @@ class Service(ABC):
         """Reload the service."""
         return self.reload_impl(cnt_tag)
 
-    def get_stdout(self, cnt_tag: Optional[str] = None):
-        """Show the service stdout."""
-        return self.get_stdout_impl(cnt_tag)
+    def get_logs(
+        self,
+        cnt_tag: Optional[str] = None,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """Show the service logs (combined stdout+stderr)."""
+        return self.get_logs_impl(
+            cnt_tag, follow=follow, tail=tail, since=since
+        )
 
     def get_shell(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
@@ -153,8 +161,14 @@ class Service(ABC):
         pass
 
     @abstractmethod
-    def get_stdout_impl(self, cnt_tag: Optional[str] = None):
-        """Show the service stdout."""
+    def get_logs_impl(
+        self,
+        cnt_tag: Optional[str] = None,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """Show the service logs (combined stdout+stderr)."""
         pass
 
     @abstractmethod
@@ -347,11 +361,14 @@ class ServiceMng:
         envCfg: EnvironmentCfg,
         svc_tag: str,
         cnt_tag: Optional[str] = None,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
     ):
-        """Get service stdout."""
+        """Get service logs (combined stdout+stderr)."""
         service = self.get_service(envCfg, svc_tag)
         if service:
-            service.get_stdout(cnt_tag)
+            service.get_logs(cnt_tag, follow=follow, tail=tail, since=since)
 
     def shell_svc(
         self,

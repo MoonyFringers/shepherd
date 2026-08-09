@@ -16,7 +16,12 @@ from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from service import Service
 from util import Util
 
-from .docker_compose_util import build_container, render_container, run_compose
+from .docker_compose_util import (
+    build_container,
+    logs_compose_args,
+    render_container,
+    run_compose,
+)
 
 
 class DockerComposeSvc(Service):
@@ -205,15 +210,25 @@ class DockerComposeSvc(Service):
             )
 
     @override
-    def get_stdout_impl(self, cnt_tag: Optional[str] = None):
+    def get_logs_impl(
+        self,
+        cnt_tag: Optional[str] = None,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
         """
-        Show container logs for this service.
+        Show container logs (combined stdout+stderr) for this service.
 
         If the service has multiple containers, caller must specify `cnt_tag`
-        to avoid ambiguous output streams.
+        to avoid ambiguous output streams. `docker compose logs` does not
+        separate stdout from stderr, so both are interleaved as docker's log
+        driver produced them.
         """
         rendered_stack = self._get_rendered_compose_stack()
-        capture = self._is_quiet() and not self._is_verbose()
+        # `follow` blocks and streams live, so it is never buffered/captured.
+        capture = self._is_quiet() and not self._is_verbose() and not follow
+        log_args = logs_compose_args(follow=follow, tail=tail, since=since)
 
         if rendered_stack:
             if cnt_tag:
@@ -227,6 +242,7 @@ class DockerComposeSvc(Service):
                     run_compose(
                         rendered_stack,
                         "logs",
+                        *log_args,
                         container.run_container_name or "",
                         project_name=self.envCfg.tag,
                         capture=capture,
@@ -235,6 +251,7 @@ class DockerComposeSvc(Service):
                 run_compose(
                     rendered_stack,
                     "logs",
+                    *log_args,
                     self.svcCfg.containers[0].run_container_name or "",
                     project_name=self.envCfg.tag,
                     capture=capture,

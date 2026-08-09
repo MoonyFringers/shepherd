@@ -278,6 +278,16 @@ class Environment(ABC):
         """Reload the environment."""
         return self.reload_impl()
 
+    def get_logs(
+        self,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """Show logs (combined stdout+stderr) for every service/container in
+        the environment."""
+        return self.get_logs_impl(follow=follow, tail=tail, since=since)
+
     def render(self, resolved: bool) -> str:
         """Render the environment configuration."""
         return self.envCfg.get_yaml(resolved)
@@ -457,6 +467,17 @@ class Environment(ABC):
     @abstractmethod
     def reload_impl(self):
         """Reload the environment."""
+        pass
+
+    @abstractmethod
+    def get_logs_impl(
+        self,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """Show logs (combined stdout+stderr) for every service/container in
+        the environment."""
         pass
 
     @abstractmethod
@@ -909,6 +930,22 @@ class EnvironmentMng:
                 watch_after=True,
             )
         Util.print(env.envCfg.tag)
+
+    def logs_env(
+        self,
+        envCfg: EnvironmentCfg,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """Show logs (combined stdout+stderr) for every service in an
+        environment."""
+        env = self.get_environment_from_cfg(envCfg)
+        if not env.is_running():
+            Util.print_error_and_die(
+                f"Environment '{env.envCfg.tag}' is not started."
+            )
+        env.get_logs(follow=follow, tail=tail, since=since)
 
     def render_env(
         self,

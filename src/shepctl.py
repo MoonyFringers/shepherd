@@ -585,6 +585,37 @@ def status_env(
     shepherd.environmentMng.status_env(envCfg, watch=watch)
 
 
+@env.command(name="logs")
+@click.option(
+    "-f", "--follow", is_flag=True, help="Follow log output as it's produced."
+)
+@click.option(
+    "--tail",
+    type=int,
+    default=None,
+    help="Number of lines to show from the end of the logs.",
+)
+@click.option(
+    "--since",
+    default=None,
+    help="Show logs since timestamp or relative duration (e.g. 10m, 1h).",
+)
+@click.pass_obj
+@require_hydrated_env
+def logs_env(
+    shepherd: ShepherdMng,
+    envCfg: EnvironmentCfg,
+    follow: bool = False,
+    tail: Optional[int] = None,
+    since: Optional[str] = None,
+):
+    """Show logs for every service in the environment (combined
+    stdout+stderr, interleaved and prefixed by service name)."""
+    shepherd.environmentMng.logs_env(
+        envCfg, follow=follow, tail=tail, since=since
+    )
+
+
 def _resolve_env_tag(shepherd: ShepherdMng, env_tag: Optional[str]) -> str:
     if env_tag:
         return env_tag
@@ -856,6 +887,20 @@ def build(
 @svc.command(name="logs")
 @click.argument("svc_tag", required=True)
 @click.argument("cnt_tag", required=False)
+@click.option(
+    "-f", "--follow", is_flag=True, help="Follow log output as it's produced."
+)
+@click.option(
+    "--tail",
+    type=int,
+    default=None,
+    help="Number of lines to show from the end of the logs.",
+)
+@click.option(
+    "--since",
+    default=None,
+    help="Show logs since timestamp or relative duration (e.g. 10m, 1h).",
+)
 @click.pass_obj
 @require_active_env
 def logs(
@@ -863,9 +908,14 @@ def logs(
     envCfg: EnvironmentCfg,
     svc_tag: str,
     cnt_tag: Optional[str] = None,
+    follow: bool = False,
+    tail: Optional[int] = None,
+    since: Optional[str] = None,
 ):
-    """Show service logs."""
-    shepherd.serviceMng.logs_svc(envCfg, svc_tag, cnt_tag)
+    """Show service logs (combined stdout+stderr)."""
+    shepherd.serviceMng.logs_svc(
+        envCfg, svc_tag, cnt_tag, follow=follow, tail=tail, since=since
+    )
 
 
 @svc.command(name="shell")
