@@ -18,16 +18,25 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import read_fixture
+from test_util import add_container_field_defaults, read_fixture
 
+from config.config import (
+    ContainerCfg,
+    EnvironmentCfg,
+    IngressCfg,
+    ProbeCfg,
+    ServiceCfg,
+)
 from docker.docker_compose_env import DockerComposeEnv, _PullProgressTracker
 from environment.environment import (
+    PROBE_CA_CERT_MOUNT_PATH,
     NonRecoverableStartError,
     ProbeRunResult,
     PullImageProgress,
 )
 from shepctl import ShepherdMng, cli
 from util import Util
+from util.constants import Constants
 
 docker_compose_ps_output = """
 {"Command":"\\\"docker-entrypoint.s…\\\"","CreatedAt":"2025-09-08 12:22:01 +0200 CEST","ExitCode":0,"Health":"","ID":"cc1200024a2a","Image":"postgres:14","Labels":"com.docker.compose.oneoff=False","LocalVolumes":"1","Mounts":"beppe_postgres","Name":"db-instance","Names":"db-instance","Networks":"beppe_beppe","Ports":"0.0.0.0:5432-\u003e5432/tcp, [::]:5432-\u003e5432/tcp","Project":"beppe","Publishers":[{"URL":"0.0.0.0","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"},{"URL":"::","TargetPort":5432,"PublishedPort":5432,"Protocol":"tcp"}],"RunningFor":"About a minute ago","Service":"test-1-test-1","Size":"0B","State":"running","Status":"Up About a minute"}
@@ -275,6 +284,8 @@ status:
     expected_obj.setdefault("tracking_remote", None)
     expected_obj.setdefault("dehydrated", None)
     expected_obj.setdefault("config", None)
+    expected_obj.setdefault("ingress", None)
+    add_container_field_defaults(expected_obj)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
@@ -432,6 +443,8 @@ status:
     expected_obj.setdefault("tracking_remote", None)
     expected_obj.setdefault("dehydrated", None)
     expected_obj.setdefault("config", None)
+    expected_obj.setdefault("ingress", None)
+    add_container_field_defaults(expected_obj)
     y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
@@ -1724,6 +1737,286 @@ def test_stop_env(
 
 
 @pytest.mark.docker
+def test_stop_env_failure_keeps_rendered_config(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """A failed `docker compose down` must be reported as an error and must
+    not discard `rendered_config`, otherwise a retried `env halt` silently
+    no-ops instead of retrying the teardown."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+
+    result = runner.invoke(cli, ["env", "up"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    env_before = sm.configMng.get_environment("test-1")
+    assert env_before
+    rendered_config_before = env_before.status.rendered_config
+    assert rendered_config_before
+
+    mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "down"],
+            returncode=1,
+            stdout="",
+            stderr="network has active endpoints",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "halt"])
+    assert result.exit_code != 0
+
+    sm = ShepherdMng()
+    env_after = sm.configMng.get_environment("test-1")
+    assert env_after
+    assert env_after.status.rendered_config == rendered_config_before
+
+
+@pytest.mark.docker
+def test_env_up_wires_ingress_proxy(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """`env up` on an environment declaring `ingress:` issues a TLS
+    certificate, writes the proxy's dynamic TLS config, renders the proxy
+    as a real service, and never persists it back into `.shpd.yaml`."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+
+    shpd_config = yaml.safe_load(read_fixture("env_docker", "shpd.yaml"))
+    env = shpd_config["envs"][0]
+    assert env["tag"] == "test-1"
+    env["ingress"] = {"domain": "sslip.io"}
+    svc = env["services"][0]
+    assert svc["tag"] == "test-1"
+    svc["containers"][0]["ingress"] = True
+    shpd_yaml.write_text(yaml.dump(shpd_config, sort_keys=False))
+
+    running_ps_output = test_env_running_ps_output + (
+        '{"Service":"proxy-ingress-test-1","State":"running"}\n'
+    )
+
+    def fake_run(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        cmd = args[0] if args else []
+        if "ps" in cmd:
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout=running_ps_output, stderr=""
+            )
+        return subprocess.CompletedProcess(
+            args=cmd,
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        )
+
+    mocker.patch(
+        "docker.docker_compose_util.subprocess.run", side_effect=fake_run
+    )
+
+    result = runner.invoke(cli, ["env", "up"])
+    assert result.exit_code == 0, result.output
+
+    ca_dir = shpd_path / "ca"
+    assert (ca_dir / "ca.crt").exists()
+    leaf_dir = ca_dir / "leaf" / "test-1"
+    assert (leaf_dir / "leaf.crt").exists()
+    assert (leaf_dir / "leaf.key").exists()
+
+    dynamic_config_path = (
+        shpd_path / "envs" / "test-1" / "ingress" / "dynamic.yml"
+    )
+    assert dynamic_config_path.exists()
+    dynamic_config = yaml.safe_load(dynamic_config_path.read_text())
+    assert dynamic_config["tls"]["certificates"][0]["certFile"] == (
+        "/certs/leaf.crt"
+    )
+
+    sm = ShepherdMng()
+    env_after = sm.configMng.get_environment("test-1")
+    assert env_after
+    rendered = env_after.status.rendered_config or {}
+    assert "proxy-ingress-test-1" in rendered.get("ungated", "")
+    assert "traefik.enable=true" in rendered.get("ungated", "")
+    assert "container-1-test-1-test-1" in rendered.get(
+        "ungated", ""
+    ), "the declared ingress-flagged container must still render"
+
+    # The synthetic proxy service must never be persisted into the
+    # declared config -- it is recomputed fresh on every `start()`.
+    persisted_service_tags = {svc.tag for svc in env_after.services or []}
+    assert persisted_service_tags == {"test-1", "test-2"}
+
+
+@pytest.mark.docker
+def test_apply_ingress_plan_mounts_ca_into_probes(
+    tmp_path: Path, mocker: MockerFixture
+):
+    """A probe that curls an ingress-fronted HTTPS endpoint has no CA to
+    trust otherwise (`compose run --rm` probes see no host trust store):
+    `_apply_ingress_plan` must mount the local CA into every probe's
+    container, additive to its own declared `volumes`, without persisting
+    the mount into declared config (`run_volumes` is transient)."""
+
+    class FakeConfigMng:
+        pass
+
+    configMng = FakeConfigMng()
+    configMng.constants = Constants(
+        SHPD_CONFIG_VALUES_FILE=str(tmp_path / ".shpd.conf"),
+        SHPD_PATH=str(tmp_path),
+        LOG_FILE=str(tmp_path / "log"),
+        LOG_LEVEL="INFO",
+        RAW_LOG_STDOUT="false",
+        LOG_FORMAT="%(message)s",
+    )
+    configMng.pluginRuntimeMng = None
+    configMng.config = SimpleNamespace(envs_path=str(tmp_path / "envs"))
+
+    envCfg = EnvironmentCfg(
+        template="default",
+        factory="docker-compose",
+        tag="test-1",
+        services=[
+            ServiceCfg(
+                tag="web",
+                factory="docker",
+                template="default",
+                containers=[
+                    ContainerCfg(
+                        tag="app", image="nginx:stable", ingress="true"
+                    )
+                ],
+            )
+        ],
+        probes=[
+            ProbeCfg(
+                tag="db-ready",
+                container=ContainerCfg(
+                    tag="db-ready",
+                    image="postgres:17-3.5",
+                    volumes=["/declared:/declared:ro"],
+                ),
+                script="true",
+            )
+        ],
+        networks=None,
+        volumes=None,
+        ingress=IngressCfg(domain="sslip.io"),
+    )
+
+    env = DockerComposeEnv(configMng, mocker.Mock(), envCfg, cli_flags={})
+    result = env._apply_ingress_plan()
+    assert result is not None
+
+    probe_container = envCfg.probes[0].container
+    assert probe_container is not None
+    assert probe_container.run_volumes is not None
+    ca_mount = probe_container.run_volumes[0]
+    assert ca_mount.endswith(f":{PROBE_CA_CERT_MOUNT_PATH}:ro")
+    assert ca_mount.startswith(str(tmp_path))
+    # Declared volumes are untouched -- the CA mount is additive.
+    assert probe_container.volumes == ["/declared:/declared:ro"]
+
+    rendered_probes = env.render_probes_target(probe_tag=None, resolved=True)
+    assert rendered_probes is not None
+    assert PROBE_CA_CERT_MOUNT_PATH in rendered_probes
+    assert "/declared:/declared:ro" in rendered_probes
+
+
+def _fake_config_mng_for_ingress(tmp_path: Path):
+    class FakeConfigMng:
+        pass
+
+    configMng = FakeConfigMng()
+    configMng.constants = Constants(
+        SHPD_CONFIG_VALUES_FILE=str(tmp_path / ".shpd.conf"),
+        SHPD_PATH=str(tmp_path),
+        LOG_FILE=str(tmp_path / "log"),
+        LOG_LEVEL="INFO",
+        RAW_LOG_STDOUT="false",
+        LOG_FORMAT="%(message)s",
+    )
+    configMng.pluginRuntimeMng = None
+    configMng.config = SimpleNamespace(envs_path=str(tmp_path / "envs"))
+    return configMng
+
+
+def _ingress_env_cfg(tag: str) -> EnvironmentCfg:
+    return EnvironmentCfg(
+        template="default",
+        factory="docker-compose",
+        tag=tag,
+        services=[
+            ServiceCfg(
+                tag="web",
+                factory="docker",
+                template="default",
+                containers=[
+                    ContainerCfg(
+                        tag="app", image="nginx:stable", ingress="true"
+                    )
+                ],
+            )
+        ],
+        probes=None,
+        networks=None,
+        volumes=None,
+        ingress=IngressCfg(domain="sslip.io"),
+    )
+
+
+@pytest.mark.docker
+def test_apply_ingress_plan_uses_deterministic_per_env_ports(
+    tmp_path: Path, mocker: MockerFixture
+):
+    """Two environments both running ingress must not collide on the
+    conventional :80/:443 -- `_resolve_ingress_provider` must actually
+    call `ingress.allocate_ports` (previously built and unit-tested, but
+    never wired in, so every environment silently used the traefik
+    defaults)."""
+    from ingress import allocate_ports
+
+    env_a = DockerComposeEnv(
+        _fake_config_mng_for_ingress(tmp_path / "a"),
+        mocker.Mock(),
+        _ingress_env_cfg("env-a"),
+        cli_flags={},
+    )
+    env_b = DockerComposeEnv(
+        _fake_config_mng_for_ingress(tmp_path / "b"),
+        mocker.Mock(),
+        _ingress_env_cfg("env-b"),
+        cli_flags={},
+    )
+
+    result_a = env_a._apply_ingress_plan()
+    result_b = env_b._apply_ingress_plan()
+    assert result_a is not None
+    assert result_b is not None
+
+    http_a, https_a = allocate_ports("env-a")
+    http_b, https_b = allocate_ports("env-b")
+    assert (http_a, https_a) != (80, 443)
+
+    ports_a = result_a[1].proxy_spec.ports
+    ports_b = result_b[1].proxy_spec.ports
+    assert ports_a == (f"{http_a}:80", f"{https_a}:443")
+    assert ports_b == (f"{http_b}:80", f"{https_b}:443")
+    assert ports_a != ports_b
+
+
+@pytest.mark.docker
 def test_reload_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -1939,7 +2232,9 @@ probes:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    add_container_field_defaults(expected_obj)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
@@ -1981,7 +2276,9 @@ probes:
 """
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    add_container_field_defaults(expected_obj)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 

@@ -23,7 +23,17 @@ from typing import IO, Any, Callable, Optional
 import yaml
 
 from config import ConfigMng, EnvironmentCfg, EnvironmentTemplateCfg
+from config.config import ContainerCfg, ServiceCfg, StartCfg
+from ingress import (
+    CORE_INGRESS_PROVIDER_TYPE_IDS,
+    IngressContainerRef,
+    IngressPlan,
+    IngressProvider,
+    TraefikIngressProvider,
+    allocate_ports,
+)
 from service import Service, ServiceFactory
+from tls import CertificateAuthorityMng
 from util import Util
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
@@ -47,6 +57,13 @@ from .status_wait import (
 )
 
 DEFAULT_STATUS_POLL_SECONDS = 1.0
+
+# Fixed, documented mount path for the local CA certificate inside every
+# probe container of an ingress-enabled environment (see
+# `Environment._apply_ingress_plan`). A probe script trusts HTTPS ingress
+# by pointing its HTTP client at this path (e.g. `curl --cacert
+# /etc/shepherd/ca.crt ...`).
+PROBE_CA_CERT_MOUNT_PATH = "/etc/shepherd/ca.crt"
 
 
 @dataclass
@@ -72,6 +89,10 @@ class PullImageProgress:
 
 class NonRecoverableStartError(RuntimeError):
     """Raised when environment start cannot continue safely."""
+
+
+class NonRecoverableStopError(RuntimeError):
+    """Raised when environment teardown (``docker compose down``) fails."""
 
 
 class Environment(ABC):
@@ -148,6 +169,7 @@ class Environment(ABC):
         self.clear_command_error()
         self.clear_pull_state()
         self.on_start_cycle_begin()
+        ingress = self._apply_ingress_plan()
         self.envCfg.status.rendered_config = self.render_target(True)
         self.sync_config()
         self.ensure_resources()
@@ -168,6 +190,15 @@ class Environment(ABC):
                 started_gate_keys=started_gate_keys,
                 probe_results=None,
             )
+            if ingress is not None and "ungated" in started_gate_keys:
+                # The proxy is always planned into the `ungated` gate (see
+                # `_apply_ingress_plan`), which always starts in this first
+                # cycle -- so `apply()` belongs here, not in the gated loop
+                # below. Must be idempotent per the `IngressProvider`
+                # contract; this call site only ever fires once per
+                # `start()`.
+                ingress_provider, ingress_plan = ingress
+                ingress_provider.apply(ingress_plan)
 
             started_at = time.monotonic()
             while pending_gate_keys:
@@ -208,6 +239,177 @@ class Environment(ABC):
                     self.envCfg.tag,
                 )
             raise
+
+    def _apply_ingress_plan(
+        self,
+    ) -> Optional[tuple[IngressProvider, IngressPlan]]:
+        """
+        Wire ingress for this `start()`, if `self.envCfg.ingress` opts in.
+
+        Computes the plan from *declared* config (never running state, to
+        stay idempotent across the gated startup loop -- see ADR-0008),
+        issues/refreshes the environment's TLS certificate to cover exactly
+        the planned SANs, writes the proxy's dynamic TLS config to disk,
+        merges routing labels into the matching containers via the
+        transient `ContainerCfg.run_labels` (never the declared `labels`,
+        which would otherwise persist stale routes after a rename), and
+        appends the proxy as a real, transient `Service`.
+
+        Called once, before the render freeze -- returns `(provider, plan)`
+        for the caller to `apply()` once the proxy's gate is up, or `None`
+        when there is nothing to do (no `ingress:` config, or no container
+        declares `ingress: true`).
+        """
+        # `getattr` rather than direct attribute access: unit tests widely
+        # build lightweight `SimpleNamespace` doubles for `EnvironmentCfg`
+        # that only set the fields their scenario touches. A real
+        # `EnvironmentCfg` always has `ingress` (default `None`).
+        ingress_cfg = getattr(self.envCfg, "ingress", None)
+        if ingress_cfg is None:
+            return None
+
+        ingress_containers = [
+            IngressContainerRef(service_tag=svcCfg.tag, container=container)
+            for svcCfg in self.envCfg.services or []
+            for container in svcCfg.containers or []
+            if getattr(container, "is_ingress", lambda: False)()
+        ]
+        if not ingress_containers:
+            return None
+
+        ca_mng = CertificateAuthorityMng(self.configMng)
+        cert_path, key_path = ca_mng.leaf_cert_paths(self.envCfg.tag)
+        dynamic_config_path = os.path.join(
+            self.get_path(), "ingress", "dynamic.yml"
+        )
+
+        provider = self._resolve_ingress_provider(
+            ingress_cfg.provider,
+            domain=ingress_cfg.domain,
+            cert_path=cert_path,
+            key_path=key_path,
+            dynamic_config_path=dynamic_config_path,
+        )
+        plan = provider.plan(self.envCfg, ingress_containers)
+
+        ca_mng.ensure_ca([ingress_cfg.domain])
+        ca_mng.issue_leaf_cert(self.envCfg.tag, list(plan.sans))
+
+        if plan.proxy_dynamic_config is not None:
+            os.makedirs(os.path.dirname(dynamic_config_path), exist_ok=True)
+            with open(dynamic_config_path, "w", encoding="utf-8") as f:
+                f.write(plan.proxy_dynamic_config)
+
+        # Probes run as one-off `docker compose run --rm` containers with
+        # no access to the host's trust store, so a probe script that
+        # curls an ingress-fronted HTTPS endpoint has no CA to validate
+        # against. Mount the CA certificate into every probe's container
+        # at a fixed, documented path -- automatic, not something a probe
+        # author has to know to declare, and cheap since it only happens
+        # when this environment actually has ingress configured.
+        for probe in self.envCfg.probes or []:
+            if probe.container is not None:
+                probe.container.run_volumes = [
+                    f"{ca_mng.ca_cert_path()}:{PROBE_CA_CERT_MOUNT_PATH}:ro"
+                ]
+
+        containers_by_key = {
+            (svcCfg.tag, container.tag): container
+            for svcCfg in self.envCfg.services or []
+            for container in svcCfg.containers or []
+        }
+        for container_plan in plan.container_plans:
+            key = (container_plan.service_tag, container_plan.container_tag)
+            container = containers_by_key.get(key)
+            if container is not None:
+                container.run_labels = list(container_plan.labels)
+
+        proxy_svc_cfg = self._build_ingress_proxy_svc_cfg(plan)
+        proxy_svc = self.svcFactory.new_service_from_cfg(
+            self.envCfg, proxy_svc_cfg, cli_flags=self.cli_flags
+        )
+        # Never persisted: `to_config()` filters services carrying this
+        # marker back out before writing `.shpd.yaml`, since this
+        # `ServiceCfg` is recomputed fresh on every `start()` and was never
+        # part of the environment's declared config.
+        setattr(proxy_svc, "_shepherd_ingress_transient", True)
+        self.services.append(proxy_svc)
+
+        return provider, plan
+
+    def _resolve_ingress_provider(
+        self,
+        type_id: str,
+        *,
+        domain: str,
+        cert_path: str,
+        key_path: str,
+        dynamic_config_path: str,
+    ) -> IngressProvider:
+        """Resolve `type_id` to an `IngressProvider` instance: the core
+        `"traefik"` built-in (constructed directly, mirroring how
+        `RemoteMng._build_backend` handles its own built-ins before falling
+        through to the plugin registry), or a plugin-registered provider
+        via `self.configMng.pluginRuntimeMng` -- the same late-bound
+        attachment point `factory/shpd_env_factory.py` and
+        `factory/shpd_svc_factory.py` already use to resolve plugin
+        factories, so no `Environment.__init__` change is needed to reach
+        it. Plugin providers are constructed with no arguments (see
+        `IngressProviderFactory`); a plugin wanting the core-computed cert
+        paths must fetch them itself via `CertificateAuthorityMng`.
+        """
+        if type_id in CORE_INGRESS_PROVIDER_TYPE_IDS:
+            # Deterministic, env-tag-scoped host ports -- two environments
+            # both running ingress must not collide on the conventional
+            # :80/:443 (see `ingress.allocate_ports`).
+            http_port, https_port = allocate_ports(self.envCfg.tag)
+            return TraefikIngressProvider(
+                domain=domain,
+                http_port=http_port,
+                https_port=https_port,
+                tls_cert_path=cert_path,
+                tls_key_path=key_path,
+                dynamic_config_host_path=dynamic_config_path,
+            )
+        plugin_runtime_mng = self.configMng.pluginRuntimeMng
+        if plugin_runtime_mng is not None:
+            provider = plugin_runtime_mng.build_ingress_provider(type_id)
+            if provider is not None:
+                return provider
+        Util.print_error_and_die(
+            f"Unknown ingress provider '{type_id}' for environment "
+            f"'{self.envCfg.tag}'."
+        )
+        raise SystemExit(1)  # unreachable: print_error_and_die exits above
+
+    def _build_ingress_proxy_svc_cfg(self, plan: IngressPlan) -> ServiceCfg:
+        """Translate `plan.proxy_spec` (a config-model-free description --
+        see `ingress.IngressProxySpec`) into a real `ServiceCfg`. Providers
+        never construct `ServiceCfg`/`ContainerCfg` themselves: only core
+        knows the factory/template ids a `ServiceCfg` needs to dispatch
+        correctly (`ConfigMng.is_core_svc_factory_id`)."""
+        spec = plan.proxy_spec
+        start_cfg = (
+            None
+            if plan.proxy_gate == "ungated"
+            else StartCfg(when_probes=plan.proxy_gate.split("|"))
+        )
+        proxy_container = ContainerCfg(
+            tag=spec.container_tag,
+            image=spec.image,
+            command=list(spec.command) or None,
+            volumes=list(spec.volumes) or None,
+            environment=list(spec.environment) or None,
+            ports=list(spec.ports) or None,
+            labels=list(spec.labels) or None,
+        )
+        return ServiceCfg(
+            tag=spec.service_tag,
+            factory=self.configMng.constants.SVC_FACTORY_DEFAULT,
+            template="ingress-proxy",
+            containers=[proxy_container],
+            start=start_cfg,
+        )
 
     def add_command_log(self, command: str) -> None:
         """Add a command entry to the environment log."""
@@ -393,7 +595,16 @@ class Environment(ABC):
 
     def to_config(self) -> EnvironmentCfg:
         """To config"""
-        self.envCfg.services = [svc.svcCfg for svc in self.services]
+        # Exclude services `_apply_ingress_plan` appended transiently: they
+        # are recomputed fresh on every `start()` from `envCfg.ingress` and
+        # were never part of the declared config, so persisting one would
+        # leave a "ghost" service in `.shpd.yaml` that duplicates on the
+        # next `start()`.
+        self.envCfg.services = [
+            svc.svcCfg
+            for svc in self.services
+            if not getattr(svc, "_shepherd_ingress_transient", False)
+        ]
         return self.envCfg
 
     def get_path(self) -> str:
@@ -544,9 +755,19 @@ class Environment(ABC):
 
     def move_to(self, dst_env_tag: str):
         """Move the environment to a new tag."""
+        old_tag = self.envCfg.tag
         Util.move_dir(self.get_path(), self.get_path_for_tag(dst_env_tag))
         self.configMng.remove_environment(self.envCfg.tag)
         self.envCfg.tag = dst_env_tag
+        # `rendered_config` and any issued leaf certificate are keyed by
+        # the old tag (router names, SANs) and go stale on rename: clear
+        # the former so a subsequent `start()` re-renders under the new
+        # tag, and drop the latter so ingress (if configured) reissues a
+        # fresh certificate instead of serving a certificate for a
+        # hostname that no longer resolves to this environment.
+        self.envCfg.status.rendered_config = None
+        if self.envCfg.ingress is not None:
+            CertificateAuthorityMng(self.configMng).remove_leaf_cert(old_tag)
         self.sync_config()
 
     def sync_config(self):
@@ -752,6 +973,10 @@ class EnvironmentMng:
             env = self.envFactory.new_environment_cfg(envCfg)
             self._delete_environment_dir(env.get_path())
             self.configMng.remove_environment(env.envCfg.tag)
+            if envCfg.ingress is not None:
+                CertificateAuthorityMng(self.configMng).remove_leaf_cert(
+                    env.envCfg.tag
+                )
             Util.print(env.envCfg.tag)
 
     def _delete_environment_dir(self, env_dir: str) -> None:
@@ -905,10 +1130,18 @@ class EnvironmentMng:
     def stop_env(self, envCfg: EnvironmentCfg, wait: bool = True):
         """Halt an environment."""
         env = self.get_environment_from_cfg(envCfg)
-        if wait:
-            self.wait_for_env_down(env, stop_action=env.stop)
-        else:
-            env.stop()
+        try:
+            if wait:
+                self.wait_for_env_down(env, stop_action=env.stop)
+            else:
+                env.stop()
+        except NonRecoverableStopError as e:
+            # Teardown failed: keep `rendered_config` so a retried `env halt`
+            # can still target the same compose files instead of silently
+            # no-op'ing.
+            message = str(e) or "Environment teardown failed."
+            Util.print_error_and_die(message)
+            return
         env.envCfg.status.rendered_config = None
         env.sync_config()
         Util.print(env.envCfg.tag)

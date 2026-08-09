@@ -57,4 +57,5 @@ markers = [
   "integration",
   "storage",
   "remote",
+  "tls",
 ]

@@ -29,6 +29,7 @@ from remote.remote_progress import (
     run_push_with_progress,
 )
 from service import ServiceMng
+from tls import CaNotInitializedError, CertificateAuthorityMng
 from util import Util, setup_logging
 from util.constants import DEFAULT_COMPOSE_COMMAND_LOG_LIMIT
 
@@ -83,6 +84,7 @@ class ShepherdMng:
             self.cli_flags, self.configMng, self.svcFactory
         )
         self.remoteMng = RemoteMng(self.configMng)
+        self.tlsMng = CertificateAuthorityMng(self.configMng)
         self.pluginRuntimeMng = plugin_runtime_mng
         if self.pluginRuntimeMng is None and load_runtime_plugins:
             self.pluginRuntimeMng = PluginRuntimeMng(
@@ -1369,6 +1371,80 @@ def prune_remote(
 ) -> None:
     """Delete orphan chunks on a remote."""
     shepherd.remoteMng.prune(remote_name, dry_run=dry_run)
+
+
+# =====================================================
+# TLS
+# =====================================================
+@cli.group(cls=PluginScopeGroup)
+def tls():
+    """Manage the local certificate authority used for HTTPS ingress."""
+    pass
+
+
+@tls.command(name="fingerprint")
+@click.pass_obj
+def fingerprint_tls(shepherd: ShepherdMng) -> None:
+    """Show the local CA's SHA-256 fingerprint."""
+    try:
+        fingerprint = shepherd.tlsMng.fingerprint()
+    except CaNotInitializedError as exc:
+        Util.print_error_and_die(str(exc))
+        return
+    Util.print(fingerprint)
+
+
+@tls.command(name="rotate")
+@click.option(
+    "--domain",
+    "domains",
+    multiple=True,
+    required=True,
+    help="DNS domain the CA is permitted to certify (repeatable).",
+)
+@click.pass_obj
+def rotate_tls(shepherd: ShepherdMng, domains: tuple[str, ...]) -> None:
+    """Regenerate the local CA, invalidating every issued certificate.
+
+    Every environment's leaf certificate was signed by the old CA and no
+    longer validates once the new one is trusted; each is reissued lazily
+    the next time it's needed."""
+    if not shepherd.cli_flags.get("yes"):
+        if not Util.confirm(
+            "This regenerates the local CA and invalidates every "
+            "certificate issued from it. Continue?"
+        ):
+            Util.console.print("Aborted.", style="yellow")
+            return
+    info = shepherd.tlsMng.rotate(list(domains))
+    Util.print(info.fingerprint_sha256)
+
+
+@tls.command(name="remove")
+@click.pass_obj
+def remove_tls(shepherd: ShepherdMng) -> None:
+    """Remove the local CA and every issued certificate."""
+    if not shepherd.cli_flags.get("yes"):
+        if not Util.confirm(
+            "This removes the local CA and every certificate issued "
+            "from it. Continue?"
+        ):
+            Util.console.print("Aborted.", style="yellow")
+            return
+    shepherd.tlsMng.remove()
+    Util.print("Local CA removed.")
+
+
+@tls.command(name="list")
+@click.pass_obj
+def list_tls(shepherd: ShepherdMng) -> None:
+    """List environments with a live leaf certificate."""
+    env_tags = shepherd.tlsMng.list_envs()
+    Util.render_table(
+        title=None,
+        columns=[{"header": "Environment", "style": "cyan"}],
+        rows=[[tag] for tag in env_tags],
+    )
 
 
 if __name__ == "__main__":

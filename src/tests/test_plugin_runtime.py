@@ -1082,6 +1082,52 @@ def test_plugin_remote_backend_rejects_core_type_id(
 
 
 @pytest.mark.shpd
+def test_plugin_remote_backend_rejects_registry_type_id(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """A plugin using the core 'registry' type_id is rejected too.
+
+    Regression test: 'registry' is handled internally by
+    `RemoteMng._build_backend` alongside 'ftp'/'sftp', but was previously
+    missing from the reserved-id set, so a plugin registering under it
+    would pass this check yet never actually be reachable (core's
+    `_build_backend` branch for 'registry' returns before ever consulting
+    the plugin registry) -- a silent no-op instead of a clear rejection.
+    """
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(
+        shpd_path,
+        main_content=(
+            "from config.config import RemoteCfg\n"
+            "from remote import RemoteBackend\n"
+            "from plugin import PluginRemoteBackendSpec, ShepherdPlugin\n\n"
+            "class FakeBackend(RemoteBackend):\n"
+            "    def __init__(self, cfg: RemoteCfg) -> None: pass\n"
+            "    def exists(self, p): return False\n"
+            "    def upload(self, p, d): pass\n"
+            "    def download(self, p): return b''\n"
+            "    def list_prefix(self, p): return []\n"
+            "    def delete(self, p): pass\n"
+            "    def close(self): pass\n\n"
+            "class RuntimeFixturePlugin(ShepherdPlugin):\n"
+            "    def get_remote_backends(self):\n"
+            "        return [PluginRemoteBackendSpec("
+            "type_id='registry', provider=FakeBackend)]\n"
+        ),
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
 def test_plugin_remote_backend_rejects_duplicate_type_id(
     shpd_conf: tuple[Path, Path], mocker: MockerFixture
 ):
@@ -1090,6 +1136,144 @@ def test_plugin_remote_backend_rejects_duplicate_type_id(
     shpd_yaml = shpd_path / ".shpd.yaml"
     _install_fixture_plugin(shpd_path, plugin_id="runtime-plugin")
     _install_fixture_plugin(shpd_path, plugin_id="collision-plugin")
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {"id": "runtime-plugin", "enabled": True, "version": "1.0.0"},
+            {"id": "collision-plugin", "enabled": True, "version": "1.0.0"},
+        ],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# Ingress provider registration tests
+# ---------------------------------------------------------------------------
+
+_INGRESS_PROVIDER_MAIN = (
+    "from ingress import IngressProvider\n"
+    "from plugin import PluginIngressProviderSpec, ShepherdPlugin\n\n"
+    "class FakeIngressProvider(IngressProvider):\n"
+    "    def plan(self, env_cfg, ingress_containers):\n"
+    "        raise NotImplementedError\n"
+    "    def apply(self, plan):\n"
+    "        pass\n"
+    "    def reload(self, plan):\n"
+    "        pass\n\n"
+    "class RuntimeFixturePlugin(ShepherdPlugin):\n"
+    "    def get_ingress_providers(self):\n"
+    "        return [PluginIngressProviderSpec("
+    "type_id='{type_id}', provider=FakeIngressProvider)]\n"
+)
+
+
+@pytest.mark.shpd
+def test_plugin_ingress_provider_lands_in_registry(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """PluginIngressProviderSpec is registered and build_ingress_provider
+    works."""
+    from ingress import IngressProvider
+
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    plugin_dir = _install_fixture_plugin(
+        shpd_path,
+        main_content=_INGRESS_PROVIDER_MAIN.format(type_id="fake-nginx"),
+    )
+    _patch_capabilities(
+        plugin_dir,
+        {
+            "commands": True,
+            "completion": True,
+            "templates": True,
+            "env_factories": True,
+            "svc_factories": True,
+            "remote_backends": True,
+            "ingress_providers": True,
+        },
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    shepherd = ShepherdMng()
+
+    assert shepherd.pluginRuntimeMng is not None
+    registry = shepherd.pluginRuntimeMng.registry
+    assert "fake-nginx" in registry.ingress_providers
+
+    provider = shepherd.pluginRuntimeMng.build_ingress_provider("fake-nginx")
+    assert isinstance(provider, IngressProvider)
+
+    assert shepherd.pluginRuntimeMng.build_ingress_provider("unknown") is None
+
+
+@pytest.mark.shpd
+def test_plugin_ingress_provider_rejects_core_type_id(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """A plugin using the core type_id ('traefik') is rejected."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    plugin_dir = _install_fixture_plugin(
+        shpd_path,
+        main_content=_INGRESS_PROVIDER_MAIN.format(type_id="traefik"),
+    )
+    _patch_capabilities(
+        plugin_dir,
+        {
+            "commands": True,
+            "completion": True,
+            "templates": True,
+            "env_factories": True,
+            "svc_factories": True,
+            "remote_backends": True,
+            "ingress_providers": True,
+        },
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [{"id": "runtime-plugin", "enabled": True, "version": "1.0.0"}],
+    )
+
+    with pytest.raises(SystemExit) as excinfo:
+        ShepherdMng()
+
+    assert excinfo.value.code == 1
+
+
+@pytest.mark.shpd
+def test_plugin_ingress_provider_rejects_duplicate_type_id(
+    shpd_conf: tuple[Path, Path], mocker: MockerFixture
+):
+    """Two plugins registering the same ingress type_id cause a hard
+    failure."""
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    main_content = _INGRESS_PROVIDER_MAIN.format(type_id="fake-nginx")
+    caps = {
+        "commands": True,
+        "completion": True,
+        "templates": True,
+        "env_factories": True,
+        "svc_factories": True,
+        "remote_backends": True,
+        "ingress_providers": True,
+    }
+    plugin_dir_1 = _install_fixture_plugin(
+        shpd_path, plugin_id="runtime-plugin", main_content=main_content
+    )
+    _patch_capabilities(plugin_dir_1, caps)
+    plugin_dir_2 = _install_fixture_plugin(
+        shpd_path, plugin_id="collision-plugin", main_content=main_content
+    )
+    _patch_capabilities(plugin_dir_2, caps)
     _write_plugin_inventory(
         shpd_yaml,
         [

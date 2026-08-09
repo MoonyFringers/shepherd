@@ -8,3 +8,4 @@ fastcdc
 zstandard
 paramiko
 requests
+cryptography

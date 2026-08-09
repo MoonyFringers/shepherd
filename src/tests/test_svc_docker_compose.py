@@ -15,7 +15,7 @@ import pytest
 import yaml
 from click.testing import CliRunner
 from pytest_mock import MockerFixture
-from test_util import read_fixture
+from test_util import add_container_field_defaults, read_fixture
 
 from shepctl import cli
 from util import Util
@@ -142,7 +142,9 @@ def test_svc_render_default_compose_service(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    add_container_field_defaults(expected_obj)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 
@@ -202,7 +204,9 @@ def test_svc_render_default_compose_service_resolved(
     )
 
     y1: str = yaml.dump(yaml.safe_load(result.output), sort_keys=True)
-    y2: str = yaml.dump(yaml.safe_load(expected), sort_keys=True)
+    expected_obj = yaml.safe_load(expected)
+    add_container_field_defaults(expected_obj)
+    y2: str = yaml.dump(expected_obj, sort_keys=True)
     assert y1 == y2
 
 

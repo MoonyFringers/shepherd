@@ -459,8 +459,16 @@ def wait_for_env_state(
             )
             if not has_containers or not grouped:
                 if not in_action():
+                    # `in_action()` can flip to False (and `action_error` get
+                    # set) in the instant between the `raise_action_error()`
+                    # call at the top of this iteration and this check --
+                    # re-check right before declaring success so a
+                    # just-completed failure isn't reported as a clean
+                    # halt/start.
+                    raise_action_error()
                     return
             elif condition_met(all_running, any_running, current_gate_status):
+                raise_action_error()
                 return
 
             if (
@@ -511,12 +519,18 @@ def wait_for_env_state(
 
             if not has_containers or not grouped:
                 if not in_action():
+                    # See the matching comment in the quiet-mode loop above:
+                    # re-check right before declaring success so a
+                    # just-completed failure isn't reported as a clean
+                    # halt/start.
+                    raise_action_error()
                     Util.console.print(
                         f"[yellow]No services found for "
                         f"environment '{env.envCfg.tag}'[/yellow]"
                     )
                     return
             elif condition_met(all_running, any_running, current_gate_status):
+                raise_action_error()
                 Util.console.print(
                     build_status_renderable(
                         grouped,
@@ -710,6 +724,12 @@ def wait_for_env_state(
                             render_progress_text(remaining, ui_tick_count)
                         )
                     else:
+                        # Re-check right before declaring success:
+                        # `action_error` can be set in the instant between
+                        # the top-of-loop check and this point, and must not
+                        # be reported as a clean halt/start.
+                        if action_error is not None:
+                            continue
                         # Once the action is finished, an empty snapshot means
                         # there is nothing left to render as a table.
                         live.stop()
@@ -740,6 +760,11 @@ def wait_for_env_state(
                 if condition_met(
                     snap_all_running, snap_any_running, snap_gate_status
                 ):
+                    # Re-check right before declaring success: `action_error`
+                    # can be set in the instant between the top-of-loop check
+                    # and this point (see the matching comment above).
+                    if action_error is not None:
+                        continue
                     logging.debug(
                         "wait_for_env_%s complete env='%s'",
                         phase,

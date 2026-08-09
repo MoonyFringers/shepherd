@@ -23,6 +23,7 @@ import click
 from config import ConfigMng
 from config.config import RemoteCfg
 from environment import EnvironmentFactory
+from ingress import IngressProvider
 from plugin.context import PluginContext
 from remote import RemoteBackend
 from service import ServiceFactory
@@ -97,6 +98,18 @@ it with the resolved :class:`~config.config.RemoteCfg` to produce the
 instance.  Read plugin-specific connection parameters from
 ``cfg.properties``.  A pre-built ``RemoteBackend`` instance is also
 accepted (no factory call is made in that case).
+"""
+
+IngressProviderFactory: TypeAlias = (
+    IngressProvider | Callable[[], IngressProvider]
+)
+"""
+Accepted value for :attr:`PluginIngressProviderSpec.provider`.
+
+Pass the **class** of your ``IngressProvider`` subclass (called with no
+arguments — configure it via a zero-argument closure/factory instead if it
+needs constructor parameters), or a pre-built instance (no factory call is
+made in that case).
 """
 
 
@@ -178,6 +191,22 @@ class PluginRemoteBackendSpec:
     provider: RemoteBackendProvider
 
 
+@dataclass(frozen=True)
+class PluginIngressProviderSpec:
+    """One ingress/reverse-proxy provider contributed by a plugin.
+
+    ``type_id`` selects this provider (e.g. ``"nginx"`` or ``"caddy"``). It
+    must not collide with the core built-in ``"traefik"``.
+
+    ``provider`` must satisfy :data:`IngressProviderFactory` -- either the
+    **class** of your ``IngressProvider`` subclass (called with no
+    arguments) or a pre-built instance.
+    """
+
+    type_id: str
+    provider: IngressProviderFactory
+
+
 class ShepherdPlugin(ABC):
     """
     Root runtime interface implemented by external plugins.
@@ -219,4 +248,8 @@ class ShepherdPlugin(ABC):
 
     def get_remote_backends(self) -> Sequence[PluginRemoteBackendSpec]:
         """Return remote storage backend transport contributions."""
+        return ()
+
+    def get_ingress_providers(self) -> Sequence[PluginIngressProviderSpec]:
+        """Return ingress/reverse-proxy provider contributions."""
         return ()

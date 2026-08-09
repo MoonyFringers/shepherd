@@ -18,7 +18,9 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
+from config.config import IngressCfg
 from shepctl import ShepherdMng, cli
+from tls import CertificateAuthorityMng
 
 
 @pytest.fixture
@@ -122,6 +124,53 @@ def test_rename_env(
 
 
 @pytest.mark.env
+def test_rename_env_removes_old_leaf_cert(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """Renaming an ingress-enabled environment removes the old tag's leaf
+    certificate and clears the stale `rendered_config` -- both are keyed
+    by the old tag and would otherwise reference a hostname that no
+    longer resolves to this environment."""
+    result = runner.invoke(
+        cli, ["env", "add", "default", "test-ingress-rename-1"]
+    )
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    ca_mng = CertificateAuthorityMng(sm.configMng)
+    ca_mng.ensure_ca(["sslip.io"])
+    ca_mng.issue_leaf_cert(
+        "test-ingress-rename-1", ["app-web-test-ingress-rename-1.sslip.io"]
+    )
+    envCfg = sm.configMng.get_environment("test-ingress-rename-1")
+    assert envCfg
+    envCfg.ingress = IngressCfg(domain="sslip.io")
+    envCfg.status.rendered_config = {"ungated": "services: {}"}
+    sm.configMng.add_or_set_environment("test-ingress-rename-1", envCfg)
+
+    assert ca_mng.list_envs() == ["test-ingress-rename-1"]
+
+    result = runner.invoke(
+        cli,
+        [
+            "env",
+            "rename",
+            "test-ingress-rename-1",
+            "test-ingress-rename-2",
+        ],
+    )
+    assert result.exit_code == 0, result.output
+
+    assert ca_mng.list_envs() == []
+    sm2 = ShepherdMng()
+    renamed = sm2.configMng.get_environment("test-ingress-rename-2")
+    assert renamed
+    assert renamed.status.rendered_config is None
+
+
+@pytest.mark.env
 def test_checkout_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,
@@ -218,6 +267,39 @@ def test_delete_env_yes(
     assert not os.path.exists(
         env_dir
     ), f"directory {env_dir} still exists after delete."
+
+
+@pytest.mark.env
+def test_delete_env_removes_leaf_cert(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """Deleting an ingress-enabled environment removes its leaf
+    certificate too -- otherwise the key material leaks forever, since
+    nothing else ever revisits `${SHPD_PATH}/ca/` for a deleted env."""
+    result = runner.invoke(
+        cli, ["env", "add", "default", "test-ingress-delete-1"]
+    )
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    ca_mng = CertificateAuthorityMng(sm.configMng)
+    ca_mng.ensure_ca(["sslip.io"])
+    ca_mng.issue_leaf_cert(
+        "test-ingress-delete-1", ["app-web-test-ingress-delete-1.sslip.io"]
+    )
+    envCfg = sm.configMng.get_environment("test-ingress-delete-1")
+    assert envCfg
+    envCfg.ingress = IngressCfg(domain="sslip.io")
+    sm.configMng.add_or_set_environment("test-ingress-delete-1", envCfg)
+    assert ca_mng.list_envs() == ["test-ingress-delete-1"]
+
+    mocker.patch("builtins.input", return_value="y")
+    result = runner.invoke(cli, ["env", "delete", "test-ingress-delete-1"])
+    assert result.exit_code == 0, result.output
+
+    assert ca_mng.list_envs() == []
 
 
 @pytest.mark.env

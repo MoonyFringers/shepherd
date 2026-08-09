@@ -59,6 +59,7 @@ class CompletionMng(AbstractCompletionMng):
         "svc": ["get", "add", "up", "halt", "reload", "build", "logs", "shell"],
         "probe": ["get", "check"],
         "remote": ["add", "list", "delete", "modify", "envs", "get", "prune"],
+        "tls": ["fingerprint", "rotate", "remove", "list"],
     }
     SCOPE_VERBS = CORE_SCOPE_VERBS
 

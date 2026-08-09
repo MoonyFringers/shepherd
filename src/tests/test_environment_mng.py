@@ -20,6 +20,7 @@ from rich.tree import Tree
 
 from environment.environment import (
     EnvironmentMng,
+    NonRecoverableStopError,
     ProbeRunResult,
     PullImageProgress,
 )
@@ -228,6 +229,28 @@ def test_stop_env_no_wait_skips_wait_for_down(mocker: MockerFixture):
     env.stop.assert_called_once_with()
     env.sync_config.assert_called_once_with()
     assert env.envCfg.status.rendered_config is None
+
+
+def test_stop_env_failure_keeps_rendered_config(mocker: MockerFixture):
+    mng = _new_environment_mng(mocker)
+    rendered_config = {"ungated": "services: {}"}
+    env_cfg = SimpleNamespace(
+        tag="test-env", status=SimpleNamespace(rendered_config=rendered_config)
+    )
+    env = mocker.Mock()
+    env.envCfg = env_cfg
+    env.stop.side_effect = NonRecoverableStopError("docker compose down failed")
+    mocker.patch.object(mng, "get_environment_from_cfg", return_value=env)
+    print_error = mocker.patch.object(
+        Util, "print_error_and_die", side_effect=SystemExit(1)
+    )
+
+    with pytest.raises(SystemExit):
+        mng.stop_env(env_cfg, wait=False)
+
+    print_error.assert_called_once()
+    env.sync_config.assert_not_called()
+    assert env.envCfg.status.rendered_config is rendered_config
 
 
 def test_wait_for_env_up_non_terminal_waits_for_running_state(

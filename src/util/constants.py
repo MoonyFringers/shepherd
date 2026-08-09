@@ -30,6 +30,10 @@ class Constants:
     def SHPD_PLUGINS_DIR(self) -> str:
         return os.path.join(self.SHPD_PATH, "plugins")
 
+    @property
+    def SHPD_CA_DIR(self) -> str:
+        return os.path.join(self.SHPD_PATH, "ca")
+
     # Logging configuration
 
     LOG_FILE: str
