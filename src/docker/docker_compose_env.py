@@ -35,60 +35,57 @@ from .docker_compose_util import (
     run_compose_pull_stream,
 )
 
-_PULL_LINE_RE = re.compile(
-    r"^\s*(?P<service>[\w.\-]+)\s+"
-    r"(?P<status>Pulling|Waiting|Downloading|Verifying Checksum|"
-    r"Download complete|Extracting|Pull complete|Pulled|Already exists)"
-    r"(?:\s+\[[^\]]*\]\s*(?P<current>[\d.]+\s*\w+)\s*/\s*"
-    r"(?P<total>[\d.]+\s*\w+))?"
+# `docker compose pull` output has no per-line service attribution: layer
+# lines are keyed by a short layer hash, not by service or image. Each
+# image's layers are bracketed by summary lines ("Image <ref> Pulling" /
+# "Image <ref> Pulled"), and compose pulls images sequentially, so we track
+# a "current image" and attribute layer lines to it on a best-effort basis.
+_PULL_IMAGE_LINE_RE = re.compile(
+    r"^\s*Image\s+(?P<image>\S+)\s+(?P<status>Pulling|Pulled)\s*$"
+)
+_PULL_LAYER_LINE_RE = re.compile(
+    r"^\s*(?P<layer>[0-9a-fA-F]{6,})\s+"
+    r"(?P<status>Pulling fs layer|Waiting|Downloading|"
+    r"Verifying Checksum|Download complete|Extracting|"
+    r"Pull complete|Already exists)"
 )
 
-_SIZE_RE = re.compile(r"^([\d.]+)\s*([a-zA-Z]+)$")
-_SIZE_UNITS = {
-    "b": 1,
-    "kb": 1_000,
-    "mb": 1_000_000,
-    "gb": 1_000_000_000,
-    "tb": 1_000_000_000_000,
-}
 
+class _PullProgressTracker:
+    """Stateful, best-effort parser for `docker compose pull` output."""
 
-def _parse_size(text: str) -> Optional[float]:
-    """Parse a docker-style size string (e.g. "12.3MB") into bytes."""
-    match = _SIZE_RE.match(text.strip())
-    if not match:
-        return None
-    value, unit = match.groups()
-    multiplier = _SIZE_UNITS.get(unit.lower())
-    if multiplier is None:
-        return None
-    return float(value) * multiplier
+    def __init__(self) -> None:
+        self._current_image: Optional[str] = None
+        self._layers_seen: set[str] = set()
+        self._layers_done: set[str] = set()
 
+    def parse(self, line: str) -> Optional[tuple[str, str, Optional[int]]]:
+        """Feed one output line; returns (image, status, percent) or
+        None if the line carries no attributable progress."""
+        image_match = _PULL_IMAGE_LINE_RE.match(line)
+        if image_match:
+            image = image_match.group("image")
+            status = image_match.group("status")
+            if status == "Pulling":
+                self._current_image = image
+                self._layers_seen = set()
+                self._layers_done = set()
+                return image, "pulling", None
+            self._current_image = None
+            return image, "pulled", 100
 
-def _parse_pull_progress_line(
-    line: str,
-) -> Optional[tuple[str, str, Optional[int]]]:
-    """Parse one line of `docker compose pull` output.
-
-    Returns (service, status, percent) or None if the line isn't a
-    recognized pull-progress line.
-    """
-    match = _PULL_LINE_RE.match(line)
-    if not match:
-        return None
-    service = match.group("service")
-    status = match.group("status")
-    percent: Optional[int] = None
-    current_raw = match.group("current")
-    total_raw = match.group("total")
-    if current_raw and total_raw:
-        current = _parse_size(current_raw)
-        total = _parse_size(total_raw)
-        if current is not None and total:
-            percent = max(0, min(100, round(current / total * 100)))
-    elif status in ("Pull complete", "Pulled", "Already exists"):
-        percent = 100
-    return service, status, percent
+        if not self._current_image:
+            return None
+        layer_match = _PULL_LAYER_LINE_RE.match(line)
+        if not layer_match:
+            return None
+        layer = layer_match.group("layer")
+        status = layer_match.group("status")
+        self._layers_seen.add(layer)
+        if status in ("Pull complete", "Already exists"):
+            self._layers_done.add(layer)
+        percent = round(len(self._layers_done) / len(self._layers_seen) * 100)
+        return self._current_image, status, percent
 
 
 def _is_bind_mount(vol: VolumeCfg) -> bool:
@@ -889,9 +886,16 @@ class DockerComposeEnv(Environment):
         )
         return services
 
-    def _find_missing_images(self) -> list[tuple[str, str]]:
-        """Return (service_tag, image) pairs for images absent locally."""
-        entries: list[tuple[str, str]] = []
+    def _find_missing_images(self) -> list[tuple[str, str, str]]:
+        """Return (service_tag, compose_service_key, image) triples for
+        images absent locally.
+
+        `compose_service_key` is `container.run_container_name`, the key
+        under which the container appears in the rendered compose YAML
+        (and therefore the argument `docker compose pull` expects) --
+        this is not the same as the shepherd service tag.
+        """
+        entries: list[tuple[str, str, str]] = []
         seen_images: set[str] = set()
         for svc in self.services:
             for container in svc.svcCfg.containers or []:
@@ -912,33 +916,39 @@ class DockerComposeEnv(Environment):
                     text=True,
                 )
                 if result.returncode != 0:
-                    entries.append((svc.svcCfg.tag, img))
+                    compose_service_key = container.run_container_name
+                    if not compose_service_key:
+                        continue
+                    entries.append((svc.svcCfg.tag, compose_service_key, img))
         return entries
 
     def _run_compose_pull_streaming(
         self,
         compose_stack: list[str],
-        missing: list[tuple[str, str]],
+        missing: list[tuple[str, str, str]],
         *,
         category: str,
     ) -> subprocess.CompletedProcess[str]:
         """Run `docker compose pull` for *missing* services, updating
         structured per-image pull progress as output streams in."""
-        service_to_image = {service: image for service, image in missing}
-        services = list(service_to_image.keys())
+        image_to_tag = {image: svc_tag for svc_tag, _, image in missing}
+        services = [
+            compose_service_key for _, compose_service_key, _ in missing
+        ]
+        tracker = _PullProgressTracker()
 
         def on_line(line: str) -> None:
-            parsed = _parse_pull_progress_line(line)
+            parsed = tracker.parse(line)
             if not parsed:
                 return
-            service, status, percent = parsed
-            image = service_to_image.get(service)
-            if not image:
+            image, status, percent = parsed
+            svc_tag = image_to_tag.get(image)
+            if not svc_tag:
                 return
             self.update_pull_progress(
                 image,
                 PullImageProgress(
-                    service=service,
+                    service=svc_tag,
                     image=image,
                     status=status,
                     percent=percent,
