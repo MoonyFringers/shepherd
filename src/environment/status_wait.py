@@ -43,6 +43,23 @@ TRANSITION_FLASH_DURATION_SECONDS = 1.5
 READY_HIGHLIGHT_DURATION_SECONDS = 3.0
 
 
+def _image_basename(image: str) -> str:
+    """Return the short name of a docker image reference (drop registry)."""
+    return image.rsplit("/", 1)[-1]
+
+
+def _merge_pull_into_grouped(
+    grouped: GroupedStatus,
+    pull_state: list[tuple[str, str]],
+) -> GroupedStatus:
+    """Override rows for services that are currently pulling images."""
+    merged = dict(grouped)
+    for service, image in pull_state:
+        state = f"[dim]pulling[/dim] [dim cyan]({image})[/dim cyan]"
+        merged[service] = [["-", _image_basename(image), state]]
+    return merged
+
+
 def render_moving_shadow_text(
     phrase: str,
     tick: int,
@@ -384,6 +401,10 @@ def wait_for_env_state(
         # Used only when there is not yet a stable table snapshot to render,
         # or when an in-flight action would make an empty snapshot misleading.
         title = f"[white]{env.envCfg.tag}[/white]"
+        pull_state = env.get_pull_state()
+        if pull_state:
+            images = ", ".join(image for _, image in pull_state)
+            return f"{title} [dim]Pulling {images}...[/dim]"
         if wait_until_up:
             return f"{title} {starting_suffix(remaining, tick)}"
         if remaining is not None:
@@ -676,12 +697,18 @@ def wait_for_env_state(
                         )
                         return
                 else:
+                    display_grouped = snap_grouped
+                    pull_state = env.get_pull_state()
+                    if pull_state:
+                        display_grouped = _merge_pull_into_grouped(
+                            snap_grouped, pull_state
+                        )
                     show_ready = wait_until_up and condition_met(
                         snap_all_running, snap_any_running, snap_gate_status
                     )
                     live.update(
                         build_status_renderable(
-                            snap_grouped,
+                            display_grouped,
                             remaining=remaining,
                             tick=ui_tick_count,
                             show_ready=show_ready,

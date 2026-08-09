@@ -315,13 +315,19 @@ class DockerComposeEnv(Environment):
                 for k in rendered_map.keys()
                 if k in started_gate_keys or k == gate_key
             ]
-            cp = self._run_compose(
-                compose_stack,
-                "up",
-                "-d",
-                capture=not self._is_verbose(),
-                category=f"start:{gate_key}",
-            )
+            missing = self._find_missing_images()
+            if missing:
+                self.set_pull_state(missing)
+            try:
+                cp = self._run_compose(
+                    compose_stack,
+                    "up",
+                    "-d",
+                    capture=not self._is_verbose(),
+                    category=f"start:{gate_key}",
+                )
+            finally:
+                self.clear_pull_state()
             if cp.returncode != 0:
                 raise NonRecoverableStartError(
                     f"Failed to start gate '{gate_key}' "
@@ -809,6 +815,32 @@ class DockerComposeEnv(Environment):
             self.envCfg.tag,
         )
         return services
+
+    def _find_missing_images(self) -> list[tuple[str, str]]:
+        """Return (service_tag, image) pairs for images absent locally."""
+        entries: list[tuple[str, str]] = []
+        seen_images: set[str] = set()
+        for svc in self.services:
+            for container in svc.svcCfg.containers or []:
+                img = getattr(container, "image", None)
+                if not img or img in seen_images:
+                    continue
+                seen_images.add(img)
+                result = subprocess.run(
+                    [
+                        "docker",
+                        "image",
+                        "inspect",
+                        "--format",
+                        "{{.Id}}",
+                        img,
+                    ],
+                    capture_output=True,
+                    text=True,
+                )
+                if result.returncode != 0:
+                    entries.append((svc.svcCfg.tag, img))
+        return entries
 
     def _run_compose(
         self,

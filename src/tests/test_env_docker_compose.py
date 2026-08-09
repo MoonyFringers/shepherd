@@ -821,6 +821,196 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
 
 
 @pytest.mark.docker
+def test_pull_state_round_trip(mocker: MockerFixture) -> None:
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+
+    assert env.get_pull_state() == []
+
+    env.set_pull_state([("web", "nginx:latest"), ("db", "postgres:14")])
+    assert env.get_pull_state() == [
+        ("web", "nginx:latest"),
+        ("db", "postgres:14"),
+    ]
+
+    env.clear_pull_state()
+    assert env.get_pull_state() == []
+
+
+@pytest.mark.docker
+def test_find_missing_images_returns_absent_images(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="db",
+                containers=[SimpleNamespace(image="postgres:14")],
+            )
+        ),
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="cache",
+                containers=[SimpleNamespace(image="redis:7")],
+            )
+        ),
+    ]
+
+    def fake_inspect(
+        *args: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        cmd = args[0] if args else []
+        image = cmd[-1]
+        returncode = 0 if image == "postgres:14" else 1
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=returncode, stdout="", stderr=""
+        )
+
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run", side_effect=fake_inspect
+    )
+
+    missing = env._find_missing_images()
+
+    assert missing == [("cache", "redis:7")]
+
+
+@pytest.mark.docker
+def test_find_missing_images_deduplicates_shared_images(
+    mocker: MockerFixture,
+) -> None:
+    """The same image used by two services is only inspected once."""
+    env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc1",
+                containers=[SimpleNamespace(image="nginx:latest")],
+            )
+        ),
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="svc2",
+                containers=[SimpleNamespace(image="nginx:latest")],
+            )
+        ),
+    ]
+
+    mock_run = mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+
+    missing = env._find_missing_images()
+
+    assert missing == [("svc1", "nginx:latest")]
+    assert mock_run.call_count == 1
+
+
+@pytest.mark.docker
+def test_start_impl_sets_and_clears_pull_state_on_success(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(
+        tag="pull-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(
+            rendered_config={
+                "ungated": "name: pull-env\nservices: {}\n",
+            }
+        ),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="web",
+                containers=[SimpleNamespace(image="nginx:latest")],
+            )
+        ),
+    ]
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+
+    seen_pull_state: list[tuple[str, str]] = []
+
+    def fake_run_compose(
+        *args: Any, **kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        seen_pull_state.extend(env.get_pull_state())
+        return subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        )
+
+    mocker.patch(
+        "docker.docker_compose_env.run_compose", side_effect=fake_run_compose
+    )
+
+    env.start_impl(started_gate_keys=set(), probe_results=None)
+
+    assert seen_pull_state == [("web", "nginx:latest")]
+    assert env.get_pull_state() == []
+
+
+@pytest.mark.docker
+def test_start_impl_clears_pull_state_on_failure(
+    mocker: MockerFixture,
+) -> None:
+    env_cfg = SimpleNamespace(
+        tag="pull-fail-env",
+        services=[],
+        volumes=[],
+        status=SimpleNamespace(
+            rendered_config={
+                "ungated": "name: pull-fail-env\nservices: {}\n",
+            }
+        ),
+    )
+    env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
+    env.services = [
+        SimpleNamespace(
+            svcCfg=SimpleNamespace(
+                tag="web",
+                containers=[SimpleNamespace(image="nginx:latest")],
+            )
+        ),
+    ]
+    mocker.patch(
+        "docker.docker_compose_env.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=[], returncode=1, stdout="", stderr=""
+        ),
+    )
+    mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=1,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    with pytest.raises(NonRecoverableStartError):
+        env.start_impl(started_gate_keys=set(), probe_results=None)
+
+    assert env.get_pull_state() == []
+
+
+@pytest.mark.docker
 def test_start_rolls_back_with_stop_on_non_recoverable_gate_failure(
     mocker: MockerFixture,
 ):

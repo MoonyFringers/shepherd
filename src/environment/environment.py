@@ -99,6 +99,8 @@ class Environment(ABC):
         self._command_log_lock = threading.Lock()
         self._command_error_lock = threading.Lock()
         self._command_error: Optional[dict[str, str]] = None
+        self._pull_state: list[tuple[str, str]] = []
+        self._pull_state_lock = threading.Lock()
 
     def _is_verbose(self) -> bool:
         return bool(self.cli_flags.get("verbose", False))
@@ -133,6 +135,7 @@ class Environment(ABC):
         """
         self.clear_command_log()
         self.clear_command_error()
+        self.clear_pull_state()
         self.on_start_cycle_begin()
         self.envCfg.status.rendered_config = self.render_target(True)
         self.sync_config()
@@ -229,6 +232,21 @@ class Environment(ABC):
     def clear_command_error(self) -> None:
         with self._command_error_lock:
             self._command_error = None
+
+    def set_pull_state(self, entries: list[tuple[str, str]]) -> None:
+        """Record (service, image) pairs currently being pulled."""
+        with self._pull_state_lock:
+            self._pull_state = list(entries)
+
+    def get_pull_state(self) -> list[tuple[str, str]]:
+        """Return a snapshot of the current pull state."""
+        with self._pull_state_lock:
+            return list(self._pull_state)
+
+    def clear_pull_state(self) -> None:
+        """Clear the current pull state."""
+        with self._pull_state_lock:
+            self._pull_state = []
 
     def get_command_error(self) -> Optional[dict[str, str]]:
         with self._command_error_lock:
