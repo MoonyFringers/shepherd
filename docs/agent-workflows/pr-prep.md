@@ -46,6 +46,8 @@ Commit format
 - A commit-message template is available at `docs/commit-template`; copy
   it to `~/.commit-template` and set `git config init.templateDir
   ~/.commit-template` to use it by default.
+- No `Co-Authored-By` trailer (or similar attribution footer) for any
+  AI agent, on any commit.
 
 Before every commit
 ---------------------
