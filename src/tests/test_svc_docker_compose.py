@@ -503,6 +503,46 @@ def test_logs_svc_cnt_2(
 
 
 @pytest.mark.docker
+def test_logs_svc_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+
+    result = runner.invoke(cli, ["env", "up"])
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "logs", "test-test-1"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(
+        cli,
+        ["svc", "logs", "test", "--follow", "--tail", "50", "--since", "10m"],
+    )
+    assert result.exit_code == 0
+    mock_subproc.assert_called_once()
+    logs_cmd = mock_subproc.call_args.args[0]
+    assert "--follow" in logs_cmd
+    assert "--tail" in logs_cmd
+    assert "50" in logs_cmd
+    assert "--since" in logs_cmd
+    assert "10m" in logs_cmd
+
+
+@pytest.mark.docker
 def test_shell_svc(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,

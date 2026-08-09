@@ -1781,6 +1781,100 @@ def test_reload_env_env_not_started(
 
 
 @pytest.mark.docker
+def test_env_logs(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+
+    result = runner.invoke(cli, ["env", "up"])
+
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "mocked docker compose output"
+    )
+
+    result = runner.invoke(cli, ["env", "logs"])
+    assert result.exit_code == 0
+    mock_subproc.assert_called()
+    assert any(
+        "logs" in (call.args[0] if call.args else [])
+        for call in mock_subproc.call_args_list
+    )
+
+
+@pytest.mark.docker
+def test_env_logs_flags(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+
+    result = runner.invoke(cli, ["env", "up"])
+
+    mock_subproc = mock_subprocess_running_ps_and(
+        mocker, "mocked docker compose output"
+    )
+
+    result = runner.invoke(
+        cli, ["env", "logs", "--follow", "--tail", "50", "--since", "10m"]
+    )
+    assert result.exit_code == 0
+
+    logs_calls = [
+        call.args[0]
+        for call in mock_subproc.call_args_list
+        if call.args and "logs" in call.args[0]
+    ]
+    assert logs_calls, "Expected a 'docker compose logs' invocation"
+    logs_cmd = logs_calls[0]
+    assert "--follow" in logs_cmd
+    assert "--tail" in logs_cmd
+    assert "50" in logs_cmd
+    assert "--since" in logs_cmd
+    assert "10m" in logs_cmd
+
+
+@pytest.mark.docker
+def test_env_logs_env_not_started(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("env_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "logs"],
+            returncode=0,
+            stdout="mocked docker compose output",
+            stderr="",
+        ),
+    )
+
+    result = runner.invoke(cli, ["env", "logs"])
+    assert result.exit_code != 0
+
+
+@pytest.mark.docker
 def test_status_env(
     shpd_conf: tuple[Path, Path],
     runner: CliRunner,

@@ -197,6 +197,26 @@ def run_compose_pull_stream(
                 logging.debug(f"Failed to remove temp compose file {p}: {e}")
 
 
+def logs_compose_args(
+    *,
+    follow: bool = False,
+    tail: Optional[int] = None,
+    since: Optional[str] = None,
+) -> list[str]:
+    """
+    Build the `docker compose logs` flag list shared by service- and
+    environment-level log commands.
+    """
+    args: list[str] = []
+    if follow:
+        args.append("--follow")
+    if tail is not None:
+        args += ["--tail", str(tail)]
+    if since:
+        args += ["--since", since]
+    return args
+
+
 def build_docker_image(
     dockerfile_path: Path,
     context_path: Path,

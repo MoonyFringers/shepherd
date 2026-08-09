@@ -192,8 +192,12 @@ class PluginServiceView(Protocol):
         envCfg: EnvironmentCfg,
         svc_tag: str,
         cnt_tag: Optional[str] = None,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
     ) -> None:
-        """Stream stdout of the service (or one of its containers)."""
+        """Stream logs (combined stdout+stderr) of the service (or one of
+        its containers)."""
         ...
 
     def shell_svc(

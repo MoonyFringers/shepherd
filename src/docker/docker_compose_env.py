@@ -30,6 +30,7 @@ from service import ServiceFactory
 from util.util import Util
 
 from .docker_compose_util import (
+    logs_compose_args,
     render_container,
     run_compose,
     run_compose_pull_stream,
@@ -552,6 +553,35 @@ class DockerComposeEnv(Environment):
                 capture=not self._is_verbose(),
                 category="reload",
             )
+
+    @override
+    def get_logs_impl(
+        self,
+        follow: bool = False,
+        tail: Optional[int] = None,
+        since: Optional[str] = None,
+    ):
+        """
+        Show logs (combined stdout+stderr) for every service/container in the
+        environment, interleaved and prefixed by service name — the same
+        behavior as running `docker compose logs` with no service argument.
+        """
+        rendered_map = self.envCfg.status.rendered_config
+        if not rendered_map:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
+            return
+        log_args = logs_compose_args(follow=follow, tail=tail, since=since)
+        # `follow` blocks and streams live, so it is never buffered/captured.
+        capture = not self._is_verbose() and not follow
+        self._run_compose(
+            list(rendered_map.values()),
+            "logs",
+            *log_args,
+            capture=capture,
+            category="logs",
+        )
 
     @override
     def render_target_impl(self, resolved: bool = False) -> dict[str, str]:
