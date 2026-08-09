@@ -79,3 +79,71 @@ tag) assembled from those chunk blobs, so `docker pull`/`crane` see a
 real artifact instead of one tag per chunk. This is a
 transport-internal change only — `RemoteMng` and the chunking
 algorithm itself are unaffected. Details: [docs/remote.md](../remote.md).
+
+## Ingress, TLS, DNS (ADR-0008 — proposed, wired end-to-end)
+
+**Status: proposed, fully implemented at the core level.** Opened 2026-08-09 while
+scoping core gaps ahead of a downstream platform plugin. Landed: `src/tls/`
+(`CertificateAuthorityMng` — CA generation with `NameConstraints`,
+idempotent leaf-cert issuance keyed on a SAN-set/expiry hash,
+cross-process `flock`ing, a `shepctl tls` CLI scope, and a
+deterministic `leaf_cert_paths(env_tag)` path calculator usable before
+issuance); `ContainerCfg.labels`/`ingress`/`run_labels`/`command`
+fields plus a three-way service/container/run label-merge rule (run —
+ingress-computed, transient — wins); `EnvironmentCfg.ingress`
+(`IngressCfg`: `domain` + `provider` type_id, default `"traefik"`);
+`src/ingress/` (`IngressProvider` ABC as a desired-state
+`plan()`/`apply()`/`reload()` reconciler — not `RemoteBackend`-shaped,
+see the ADR for why — `IngressProxySpec` as the config-model-free proxy
+description a provider returns, `TraefikIngressProvider` default, and
+plugin registration mirroring `RemoteBackend`'s pattern, including a
+fix to a real pre-existing bug in that pattern:
+`RemoteMng.CORE_BACKEND_TYPE_IDS` was missing `"registry"`).
+
+**Wired into `Environment.start()`** via `_apply_ingress_plan()`,
+called once before the render freeze: resolves the provider
+(`"traefik"` built in, or via `configMng.pluginRuntimeMng` — no
+`Environment.__init__` signature change needed, reusing the same
+late-bound attachment point `factory/shpd_env_factory.py` already
+uses), issues/refreshes the leaf certificate, writes the proxy's
+dynamic TLS config to `<env_dir>/ingress/dynamic.yml`, merges routing
+labels via the transient `run_labels` (never the declared `labels`,
+which would otherwise persist stale routes after a rename), and
+appends the proxy as a real, transient `Service` — excluded from
+`to_config()` so it's never persisted into `.shpd.yaml` and is instead
+recomputed fresh on every `start()`. `provider.apply()` is called once
+the proxy's `ungated` gate is up. Two environments running ingress
+concurrently get distinct, deterministic host ports (`allocate_ports`)
+instead of colliding on :80/:443. `delete_env` and `rename_env` both
+remove the (old-tag) leaf certificate; rename also clears the stale
+`rendered_config`. Verified with a full `env up` integration test
+(cert files land on disk, dynamic config is written, the proxy renders
+into the compose stack with real traefik labels, and the proxy is
+absent from the persisted config).
+
+**Probe CA trust — closed.** `_apply_ingress_plan` mounts the CA
+certificate (`CertificateAuthorityMng.ca_cert_path()`) into every
+probe's container at a fixed path (`environment.PROBE_CA_CERT_MOUNT_PATH`,
+`/etc/shepherd/ca.crt`) via a new `ContainerCfg.run_volumes` transient
+field (additive to declared `volumes`, mirroring `run_labels` — never
+persisted). Automatic: a probe author references the fixed path in
+their script (e.g. `curl --cacert /etc/shepherd/ca.crt ...`); no
+config authoring needed beyond that. This was the last open item in
+this ADR's Confirmation checklist — the whole ingress/TLS design is
+now implemented end-to-end at the core level.
+
+## Environment teardown failure visibility (ADR-0009 — proposed, not decided)
+
+**Status: proposed, unresolved.** Opened 2026-08-09 alongside ADR-0008.
+`stop_impl` (`docker_compose_env.py`) never checks `docker compose
+down`'s return code, so a failed teardown is reported as a successful
+halt, and a retried `env halt` silently no-ops since `stop_env` blanks
+`rendered_config` regardless of outcome. Surfaced by a service pattern
+(Docker-outside-of-Docker: a container spawning sibling containers via
+a mounted `/var/run/docker.sock`) that causes Compose-owned networks
+to fail removal when foreign container endpoints are still attached.
+ADR-0009 proposes fixing the return-code check in core
+(unconditional, benefits every environment) while keeping
+sibling-container sweep/teardown ordering as a plugin-level
+`stop_impl` override rather than a core-level sweep, per the
+plugin/core boundary in ADR-0004.
