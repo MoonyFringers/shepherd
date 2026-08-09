@@ -20,8 +20,15 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import read_fixture
 
-from docker.docker_compose_env import DockerComposeEnv
-from environment.environment import NonRecoverableStartError, ProbeRunResult
+from docker.docker_compose_env import (
+    DockerComposeEnv,
+    _parse_pull_progress_line,
+)
+from environment.environment import (
+    NonRecoverableStartError,
+    ProbeRunResult,
+    PullImageProgress,
+)
 from shepctl import ShepherdMng, cli
 from util import Util
 
@@ -820,21 +827,60 @@ def test_start_impl_records_compose_failure_output(mocker: MockerFixture):
     assert "--- stderr ---" in err["body"]
 
 
+def test_parse_pull_progress_line_extracts_percent_from_size() -> None:
+    parsed = _parse_pull_progress_line(
+        "web Downloading [====>          ]  10MB/40MB"
+    )
+    assert parsed == ("web", "Downloading", 25)
+
+
+def test_parse_pull_progress_line_without_size_has_no_percent() -> None:
+    parsed = _parse_pull_progress_line("web Pulling")
+    assert parsed == ("web", "Pulling", None)
+
+
+def test_parse_pull_progress_line_terminal_status_is_100_percent() -> None:
+    assert _parse_pull_progress_line("web Pull complete") == (
+        "web",
+        "Pull complete",
+        100,
+    )
+    assert _parse_pull_progress_line("web Already exists") == (
+        "web",
+        "Already exists",
+        100,
+    )
+
+
+def test_parse_pull_progress_line_ignores_unrecognized_lines() -> None:
+    assert _parse_pull_progress_line("[+] Pulling 2/2") is None
+    assert _parse_pull_progress_line("") is None
+
+
 @pytest.mark.docker
 def test_pull_state_round_trip(mocker: MockerFixture) -> None:
     env_cfg = SimpleNamespace(tag="test-env", services=[], volumes=[])
     env = DockerComposeEnv(mocker.Mock(), mocker.Mock(), env_cfg)
 
-    assert env.get_pull_state() == []
+    assert env.get_pull_state() == {}
 
-    env.set_pull_state([("web", "nginx:latest"), ("db", "postgres:14")])
-    assert env.get_pull_state() == [
-        ("web", "nginx:latest"),
-        ("db", "postgres:14"),
-    ]
+    web_progress = PullImageProgress(
+        service="web", image="nginx:latest", status="Pulling", percent=None
+    )
+    env.set_pull_state({"nginx:latest": web_progress})
+    assert env.get_pull_state() == {"nginx:latest": web_progress}
+
+    db_progress = PullImageProgress(
+        service="db", image="postgres:14", status="Downloading", percent=42
+    )
+    env.update_pull_progress("postgres:14", db_progress)
+    assert env.get_pull_state() == {
+        "nginx:latest": web_progress,
+        "postgres:14": db_progress,
+    }
 
     env.clear_pull_state()
-    assert env.get_pull_state() == []
+    assert env.get_pull_state() == {}
 
 
 @pytest.mark.docker
@@ -913,7 +959,7 @@ def test_find_missing_images_deduplicates_shared_images(
 
 
 @pytest.mark.docker
-def test_start_impl_sets_and_clears_pull_state_on_success(
+def test_start_impl_pulls_missing_images_with_progress_before_up(
     mocker: MockerFixture,
 ) -> None:
     env_cfg = SimpleNamespace(
@@ -942,31 +988,51 @@ def test_start_impl_sets_and_clears_pull_state_on_success(
         ),
     )
 
-    seen_pull_state: list[tuple[str, str]] = []
+    seen_pull_state: list[dict[str, Any]] = []
 
-    def fake_run_compose(
-        *args: Any, **kwargs: Any
+    def fake_pull_stream(
+        yamls: Any,
+        *services: str,
+        project_name: Any = None,
+        on_line: Any = None,
     ) -> subprocess.CompletedProcess[str]:
-        seen_pull_state.extend(env.get_pull_state())
+        assert services == ("web",)
+        if on_line:
+            on_line("web Downloading [==========>                ]  10MB/20MB")
+            seen_pull_state.append(dict(env.get_pull_state()))
         return subprocess.CompletedProcess(
-            args=["docker", "compose", "up", "-d"],
+            args=["docker", "compose", "pull", "web"],
             returncode=0,
             stdout="",
             stderr="",
         )
 
     mocker.patch(
-        "docker.docker_compose_env.run_compose", side_effect=fake_run_compose
+        "docker.docker_compose_env.run_compose_pull_stream",
+        side_effect=fake_pull_stream,
+    )
+    mocker.patch(
+        "docker.docker_compose_env.run_compose",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "up", "-d"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
     )
 
     env.start_impl(started_gate_keys=set(), probe_results=None)
 
-    assert seen_pull_state == [("web", "nginx:latest")]
-    assert env.get_pull_state() == []
+    assert len(seen_pull_state) == 1
+    progress = seen_pull_state[0]["nginx:latest"]
+    assert progress.service == "web"
+    assert progress.status == "Downloading"
+    assert progress.percent == 50
+    assert env.get_pull_state() == {}
 
 
 @pytest.mark.docker
-def test_start_impl_clears_pull_state_on_failure(
+def test_start_impl_clears_pull_state_on_pull_failure(
     mocker: MockerFixture,
 ) -> None:
     env_cfg = SimpleNamespace(
@@ -995,19 +1061,19 @@ def test_start_impl_clears_pull_state_on_failure(
         ),
     )
     mocker.patch(
-        "docker.docker_compose_env.run_compose",
+        "docker.docker_compose_env.run_compose_pull_stream",
         return_value=subprocess.CompletedProcess(
-            args=["docker", "compose", "up", "-d"],
+            args=["docker", "compose", "pull", "web"],
             returncode=1,
             stdout="",
-            stderr="",
+            stderr="pull failed",
         ),
     )
 
     with pytest.raises(NonRecoverableStartError):
         env.start_impl(started_gate_keys=set(), probe_results=None)
 
-    assert env.get_pull_state() == []
+    assert env.get_pull_state() == {}
 
 
 @pytest.mark.docker

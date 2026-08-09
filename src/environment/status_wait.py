@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, TypeAlias
+from typing import TYPE_CHECKING, Any, Callable, Optional, TypeAlias
 
 from rich.console import Group
 from rich.live import Live
@@ -24,6 +24,9 @@ from environment.render import (
     build_probe_status_tree,
 )
 from util.util import Util
+
+if TYPE_CHECKING:
+    from environment.environment import PullImageProgress
 
 GroupedStatus: TypeAlias = dict[str, list[list[str]]]
 GateStatus: TypeAlias = dict[str, Optional[bool]]
@@ -48,15 +51,27 @@ def _image_basename(image: str) -> str:
     return image.rsplit("/", 1)[-1]
 
 
+def _render_pull_bar(percent: Optional[int], width: int = 10) -> str:
+    """Render a simple block-character progress bar for a pull percentage."""
+    if percent is None:
+        return ""
+    filled = max(0, min(width, round(width * percent / 100)))
+    bar = "█" * filled + "░" * (width - filled)
+    return f"[dim cyan]{bar}[/dim cyan] {percent}%"
+
+
 def _merge_pull_into_grouped(
     grouped: GroupedStatus,
-    pull_state: list[tuple[str, str]],
+    pull_state: dict[str, "PullImageProgress"],
 ) -> GroupedStatus:
     """Override rows for services that are currently pulling images."""
     merged = dict(grouped)
-    for service, image in pull_state:
-        state = f"[dim]pulling[/dim] [dim cyan]({image})[/dim cyan]"
-        merged[service] = [["-", _image_basename(image), state]]
+    for image, progress in pull_state.items():
+        bar = _render_pull_bar(progress.percent)
+        status = f"[dim]{progress.status.lower()}[/dim]"
+        suffix = f" {bar}" if bar else ""
+        state = f"{status}{suffix} [dim cyan]({image})[/dim cyan]"
+        merged[progress.service] = [["-", _image_basename(image), state]]
     return merged
 
 
@@ -403,8 +418,15 @@ def wait_for_env_state(
         title = f"[white]{env.envCfg.tag}[/white]"
         pull_state = env.get_pull_state()
         if pull_state:
-            images = ", ".join(image for _, image in pull_state)
-            return f"{title} [dim]Pulling {images}...[/dim]"
+            labels: list[str] = []
+            for image, progress in pull_state.items():
+                pct = (
+                    f" {progress.percent}%"
+                    if progress.percent is not None
+                    else ""
+                )
+                labels.append(f"{image}{pct}")
+            return f"{title} [dim]Pulling {', '.join(labels)}...[/dim]"
         if wait_until_up:
             return f"{title} {starting_suffix(remaining, tick)}"
         if remaining is not None:

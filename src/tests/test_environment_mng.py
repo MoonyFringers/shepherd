@@ -18,7 +18,11 @@ from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
 
-from environment.environment import EnvironmentMng, ProbeRunResult
+from environment.environment import (
+    EnvironmentMng,
+    ProbeRunResult,
+    PullImageProgress,
+)
 from environment.render import (
     build_env_details_tree,
     build_env_status_tree,
@@ -28,6 +32,7 @@ from environment.status_wait import (
     WaitForEnvStateHooks,
     _image_basename,
     _merge_pull_into_grouped,
+    _render_pull_bar,
     render_moving_shadow_text,
     wait_for_env_state,
     watch_probe_state,
@@ -567,6 +572,17 @@ def test_check_probes_renders_probe_status_tree(mocker: MockerFixture):
     fake_console.print.assert_called_once_with("probe-tree")
 
 
+def test_render_pull_bar_none_percent_is_empty():
+    assert _render_pull_bar(None) == ""
+
+
+def test_render_pull_bar_scales_filled_blocks():
+    bar = _render_pull_bar(50, width=10)
+    assert bar.count("█") == 5
+    assert bar.count("░") == 5
+    assert "50%" in bar
+
+
 def test_image_basename_strips_registry_prefix():
     assert _image_basename("nginx:latest") == "nginx:latest"
     assert _image_basename("docker.io/library/postgres:14") == "postgres:14"
@@ -577,12 +593,21 @@ def test_merge_pull_into_grouped_overrides_pulling_services():
         "web": [["-", "nginx", "[dim]stopped[/dim]"]],
         "db": [["-", "postgres", "[dim]stopped[/dim]"]],
     }
+    pull_state = {
+        "nginx:latest": PullImageProgress(
+            service="web",
+            image="nginx:latest",
+            status="Downloading",
+            percent=50,
+        )
+    }
 
-    merged = _merge_pull_into_grouped(grouped, [("web", "nginx:latest")])
+    merged = _merge_pull_into_grouped(grouped, pull_state)
 
     assert set(merged.keys()) == {"web", "db"}
     web_row = merged["web"][0]
-    assert "pulling" in web_row[2]
+    assert "downloading" in web_row[2]
+    assert "50%" in web_row[2]
     assert "nginx:latest" in web_row[2]
     assert web_row[1] == "nginx:latest"
     assert merged["db"] == grouped["db"]
@@ -591,7 +616,7 @@ def test_merge_pull_into_grouped_overrides_pulling_services():
 def test_merge_pull_into_grouped_noop_when_no_pull_state():
     grouped = {"web": [["-", "nginx", "[dim]stopped[/dim]"]]}
 
-    merged = _merge_pull_into_grouped(grouped, [])
+    merged = _merge_pull_into_grouped(grouped, {})
 
     assert merged == grouped
 

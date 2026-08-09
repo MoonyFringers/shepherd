@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import subprocess
 import time
 from typing import IO, Any, Optional, cast, override
@@ -20,11 +21,74 @@ import yaml
 from config import ConfigMng, EnvironmentCfg
 from config.config import InitCfg, ProbeCfg, VolumeCfg
 from environment import Environment
-from environment.environment import NonRecoverableStartError, ProbeRunResult
+from environment.environment import (
+    NonRecoverableStartError,
+    ProbeRunResult,
+    PullImageProgress,
+)
 from service import ServiceFactory
 from util.util import Util
 
-from .docker_compose_util import render_container, run_compose
+from .docker_compose_util import (
+    render_container,
+    run_compose,
+    run_compose_pull_stream,
+)
+
+_PULL_LINE_RE = re.compile(
+    r"^\s*(?P<service>[\w.\-]+)\s+"
+    r"(?P<status>Pulling|Waiting|Downloading|Verifying Checksum|"
+    r"Download complete|Extracting|Pull complete|Pulled|Already exists)"
+    r"(?:\s+\[[^\]]*\]\s*(?P<current>[\d.]+\s*\w+)\s*/\s*"
+    r"(?P<total>[\d.]+\s*\w+))?"
+)
+
+_SIZE_RE = re.compile(r"^([\d.]+)\s*([a-zA-Z]+)$")
+_SIZE_UNITS = {
+    "b": 1,
+    "kb": 1_000,
+    "mb": 1_000_000,
+    "gb": 1_000_000_000,
+    "tb": 1_000_000_000_000,
+}
+
+
+def _parse_size(text: str) -> Optional[float]:
+    """Parse a docker-style size string (e.g. "12.3MB") into bytes."""
+    match = _SIZE_RE.match(text.strip())
+    if not match:
+        return None
+    value, unit = match.groups()
+    multiplier = _SIZE_UNITS.get(unit.lower())
+    if multiplier is None:
+        return None
+    return float(value) * multiplier
+
+
+def _parse_pull_progress_line(
+    line: str,
+) -> Optional[tuple[str, str, Optional[int]]]:
+    """Parse one line of `docker compose pull` output.
+
+    Returns (service, status, percent) or None if the line isn't a
+    recognized pull-progress line.
+    """
+    match = _PULL_LINE_RE.match(line)
+    if not match:
+        return None
+    service = match.group("service")
+    status = match.group("status")
+    percent: Optional[int] = None
+    current_raw = match.group("current")
+    total_raw = match.group("total")
+    if current_raw and total_raw:
+        current = _parse_size(current_raw)
+        total = _parse_size(total_raw)
+        if current is not None and total:
+            percent = max(0, min(100, round(current / total * 100)))
+    elif status in ("Pull complete", "Pulled", "Already exists"):
+        percent = 100
+    return service, status, percent
 
 
 def _is_bind_mount(vol: VolumeCfg) -> bool:
@@ -317,17 +381,26 @@ class DockerComposeEnv(Environment):
             ]
             missing = self._find_missing_images()
             if missing:
-                self.set_pull_state(missing)
-            try:
-                cp = self._run_compose(
-                    compose_stack,
-                    "up",
-                    "-d",
-                    capture=not self._is_verbose(),
-                    category=f"start:{gate_key}",
-                )
-            finally:
-                self.clear_pull_state()
+                try:
+                    pull_result = self._run_compose_pull_streaming(
+                        compose_stack,
+                        missing,
+                        category=f"pull:{gate_key}",
+                    )
+                finally:
+                    self.clear_pull_state()
+                if pull_result.returncode != 0:
+                    raise NonRecoverableStartError(
+                        f"Failed to pull images for gate '{gate_key}' "
+                        f"for environment '{self.envCfg.tag}'."
+                    )
+            cp = self._run_compose(
+                compose_stack,
+                "up",
+                "-d",
+                capture=not self._is_verbose(),
+                category=f"start:{gate_key}",
+            )
             if cp.returncode != 0:
                 raise NonRecoverableStartError(
                     f"Failed to start gate '{gate_key}' "
@@ -841,6 +914,49 @@ class DockerComposeEnv(Environment):
                 if result.returncode != 0:
                     entries.append((svc.svcCfg.tag, img))
         return entries
+
+    def _run_compose_pull_streaming(
+        self,
+        compose_stack: list[str],
+        missing: list[tuple[str, str]],
+        *,
+        category: str,
+    ) -> subprocess.CompletedProcess[str]:
+        """Run `docker compose pull` for *missing* services, updating
+        structured per-image pull progress as output streams in."""
+        service_to_image = {service: image for service, image in missing}
+        services = list(service_to_image.keys())
+
+        def on_line(line: str) -> None:
+            parsed = _parse_pull_progress_line(line)
+            if not parsed:
+                return
+            service, status, percent = parsed
+            image = service_to_image.get(service)
+            if not image:
+                return
+            self.update_pull_progress(
+                image,
+                PullImageProgress(
+                    service=service,
+                    image=image,
+                    status=status,
+                    percent=percent,
+                ),
+            )
+
+        should_log = self.is_command_log_enabled()
+        result = run_compose_pull_stream(
+            compose_stack,
+            *services,
+            project_name=self.envCfg.tag,
+            on_line=on_line,
+        )
+        if should_log:
+            self._log_compose_result(result, category=category)
+        if result.returncode != 0:
+            self._record_compose_failure(result, category=category)
+        return result
 
     def _run_compose(
         self,
