@@ -316,10 +316,30 @@ def render_container(
         container_def["environment"] = cnt.environment
     if cnt.ports:
         container_def["ports"] = cnt.ports
+    if cnt.networks and cnt.network_mode:
+        raise ValueError(
+            f"container '{cnt.tag}': 'networks' and 'network_mode' are "
+            "mutually exclusive in Docker Compose -- set only one."
+        )
     if cnt.networks:
         container_def["networks"] = cnt.networks
+    if cnt.network_mode:
+        container_def["network_mode"] = cnt.network_mode
     if cnt.extra_hosts:
         container_def["extra_hosts"] = cnt.extra_hosts
+    if cnt.user:
+        container_def["user"] = cnt.user
+    if cnt.group_add:
+        container_def["group_add"] = cnt.group_add
+    if cnt.cpuset:
+        container_def["cpuset"] = cnt.cpuset
+    if cnt.cpus or cnt.memory:
+        limits: dict[str, Any] = {}
+        if cnt.cpus:
+            limits["cpus"] = cnt.cpus
+        if cnt.memory:
+            limits["memory"] = cnt.memory
+        container_def["deploy"] = {"resources": {"limits": limits}}
     if cnt.healthcheck:
         healthcheck_def: dict[str, Any] = {"test": cnt.healthcheck.test}
         if cnt.healthcheck.interval:

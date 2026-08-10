@@ -324,7 +324,9 @@ class Environment(ABC):
             if container is not None:
                 container.run_labels = list(container_plan.labels)
 
-        proxy_svc_cfg = self._build_ingress_proxy_svc_cfg(plan)
+        proxy_svc_cfg = self._build_ingress_proxy_svc_cfg(
+            plan, ingress_containers
+        )
         proxy_svc = self.svcFactory.new_service_from_cfg(
             self.envCfg, proxy_svc_cfg, cli_flags=self.cli_flags
         )
@@ -382,7 +384,11 @@ class Environment(ABC):
         )
         raise SystemExit(1)  # unreachable: print_error_and_die exits above
 
-    def _build_ingress_proxy_svc_cfg(self, plan: IngressPlan) -> ServiceCfg:
+    def _build_ingress_proxy_svc_cfg(
+        self,
+        plan: IngressPlan,
+        ingress_containers: list[IngressContainerRef],
+    ) -> ServiceCfg:
         """Translate `plan.proxy_spec` (a config-model-free description --
         see `ingress.IngressProxySpec`) into a real `ServiceCfg`. Providers
         never construct `ServiceCfg`/`ContainerCfg` themselves: only core
@@ -394,6 +400,35 @@ class Environment(ABC):
             if plan.proxy_gate == "ungated"
             else StartCfg(when_probes=plan.proxy_gate.split("|"))
         )
+        # The proxy must be able to reach every ingress-flagged container,
+        # not just whatever lands on compose's implicit default network. A
+        # container with an explicit `networks:` list only joins those
+        # networks -- not the default one -- so a container on a custom
+        # network is otherwise unreachable by the proxy. `"default"` is
+        # compose's own name for its implicit network; listing it
+        # explicitly alongside custom networks is standard compose
+        # behavior, so it's included whenever any ingress container relies
+        # on the implicit default (i.e. declares no `networks` of its own).
+        proxy_networks: set[str] = set()
+        for ref in ingress_containers:
+            if getattr(ref.container, "network_mode", None):
+                # A `network_mode`-networked container (e.g. `host`) is not
+                # attached to any compose bridge network -- joining it to
+                # "default" (or any network) would not make it reachable by
+                # the proxy the way a normal container is. Routing to such
+                # a container needs a different mechanism entirely (e.g.
+                # the proxy reaching it via the host network), which this
+                # provider does not implement -- fail loudly rather than
+                # silently produce a proxy that can never reach it.
+                raise ValueError(
+                    f"container '{ref.container.tag}': ingress routing to "
+                    "a container with 'network_mode' set is not supported."
+                )
+            container_networks = getattr(ref.container, "networks", None)
+            if container_networks:
+                proxy_networks.update(container_networks)
+            else:
+                proxy_networks.add("default")
         proxy_container = ContainerCfg(
             tag=spec.container_tag,
             image=spec.image,
@@ -401,6 +436,7 @@ class Environment(ABC):
             volumes=list(spec.volumes) or None,
             environment=list(spec.environment) or None,
             ports=list(spec.ports) or None,
+            networks=sorted(proxy_networks) or None,
             labels=list(spec.labels) or None,
         )
         return ServiceCfg(
