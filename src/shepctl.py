@@ -280,6 +280,22 @@ def cli(
                 load_runtime_plugins=load_runtime_plugins,
                 plugin_runtime_mng=preloaded_runtime,
             )
+        # A verb added to an *existing* core scope (e.g. `env doctor`) is
+        # found by Click's normal static lookup at every level up to the
+        # verb itself, so `_load_plugin_runtime_for_click` (which only
+        # runs when `get_command` falls through to the plugin registry)
+        # never fires while resolving the scope -- only later, resolving
+        # the unknown verb under it. Without this, that later call sees no
+        # cached runtime in `ctx.meta` and builds a second, throwaway
+        # `PluginRuntimeMng` with no managers attached, so the plugin
+        # command's `PluginContext.environment`/`.service`/`.remote` stay
+        # `None` despite `attach_managers` having already run on the real
+        # one above. Caching the real, fully-attached instance here closes
+        # that gap -- any later lazy lookup reuses it instead of building
+        # a disconnected one.
+        runtime_mng = getattr(ctx.obj, "pluginRuntimeMng", None)
+        if runtime_mng is not None:
+            ctx.meta["plugin_runtime_mng"] = runtime_mng
 
 
 @cli.command(name="test", hidden=True)
