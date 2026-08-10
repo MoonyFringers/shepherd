@@ -273,6 +273,63 @@ def test_cli_executes_plugin_verb_under_core_scope(
     assert "plugin-doctor:network" in result.output
 
 
+_CONTEXT_CHECKING_DOCTOR_MAIN = """
+import click
+
+from plugin import PluginCommandSpec, ShepherdPlugin
+
+
+class RuntimeFixturePlugin(ShepherdPlugin):
+    def get_commands(self):
+        context = self.context
+
+        @click.command(name="doctor")
+        def doctor():
+            click.echo(f"environment-attached:{context.environment is not None}")
+            click.echo(f"service-attached:{context.service is not None}")
+
+        return [PluginCommandSpec(scope="env", verb="doctor", command=doctor)]
+"""
+
+
+@pytest.mark.shpd
+def test_cli_attaches_managers_for_verb_added_to_existing_scope(
+    shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
+):
+    """A verb a plugin adds to an *existing* core scope (e.g. `env doctor`,
+    the exact example docs/plugins.md itself uses) is found by Click's
+    normal static lookup at every level up to the verb name -- unlike a
+    plugin-owned scope, the plugin registry is only ever consulted once,
+    lazily, resolving that last unknown verb. Regression test for the bug
+    where that lazy lookup built a second, disconnected `PluginRuntimeMng`
+    with no managers attached, leaving `PluginContext.environment`/
+    `.service` `None` in the command handler despite `attach_managers`
+    having already run against the real one built for the CLI invocation.
+    """
+    shpd_path = shpd_conf[0]
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    _install_fixture_plugin(
+        shpd_path, main_content=_CONTEXT_CHECKING_DOCTOR_MAIN
+    )
+    _write_plugin_inventory(
+        shpd_yaml,
+        [
+            {
+                "id": "runtime-plugin",
+                "enabled": True,
+                "version": "1.0.0",
+                "config": None,
+            }
+        ],
+    )
+
+    result = runner.invoke(cli, ["env", "doctor"])
+
+    assert result.exit_code == 0
+    assert "environment-attached:True" in result.output
+    assert "service-attached:True" in result.output
+
+
 @pytest.mark.shpd
 def test_cli_adds_environment_from_plugin_template(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
