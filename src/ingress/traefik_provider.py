@@ -132,6 +132,14 @@ class TraefikIngressProvider(IngressProvider):
         )
         if self._tls_enabled:
             labels += (f"traefik.http.routers.{router}.tls=true",)
+        if ref.container.ingress_port is not None:
+            # Traefik's Docker provider only auto-detects a port when the
+            # container exposes exactly one -- ambiguous otherwise, so any
+            # container declaring `ingress_port` gets it wired explicitly.
+            labels += (
+                f"traefik.http.services.{router}.loadbalancer.server.port="
+                f"{ref.container.ingress_port}",
+            )
         return IngressContainerPlan(
             service_tag=ref.service_tag,
             container_tag=ref.container.tag,

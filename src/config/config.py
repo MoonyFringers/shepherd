@@ -532,12 +532,24 @@ class ContainerCfg(Resolvable):
     environment: Optional[list[str]] = None
     ports: Optional[list[str]] = None
     networks: Optional[list[str]] = None
+    network_mode: Optional[str] = None
     extra_hosts: Optional[list[str]] = None
+    user: Optional[str] = None
+    group_add: Optional[list[str]] = None
+    cpus: Optional[str] = None
+    memory: Optional[str] = None
+    cpuset: Optional[str] = None
     build: Optional[BuildCfg] = None
     inits: Optional[list[InitCfg]] = None
     healthcheck: Optional[HealthcheckCfg] = None
     labels: Optional[list[str]] = None
     ingress: Optional[str] = field(default=None, metadata={"boolify": True})
+    # Target port an ingress provider should route to. Only meaningful when
+    # `ingress` is set. Providers auto-detect a single exposed port, but a
+    # container with more than one exposed port is otherwise ambiguous --
+    # see `TraefikIngressProvider._plan_container`, which emits an explicit
+    # `loadbalancer.server.port` label whenever this is set.
+    ingress_port: Optional[int] = None
     # Ingress-provider-computed labels (routing rules, TLS flags, ...),
     # distinct from user-declared `labels`. Transient like `run_hostname`/
     # `run_container_name`: computed fresh by `Environment._apply_ingress_plan`
@@ -1064,7 +1076,13 @@ def _parse_container(item: Any) -> ContainerCfg:
         environment=item.get("environment", []),
         ports=item.get("ports", []),
         networks=item.get("networks", []),
+        network_mode=item.get("network_mode"),
         extra_hosts=item.get("extra_hosts", []),
+        user=item.get("user"),
+        group_add=item.get("group_add", []),
+        cpus=item.get("cpus"),
+        memory=item.get("memory"),
+        cpuset=item.get("cpuset"),
         build=_parse_build(item["build"]) if item.get("build") else None,
         inits=inits,
         healthcheck=(
@@ -1078,6 +1096,7 @@ def _parse_container(item: Any) -> ContainerCfg:
             if isinstance(item.get("ingress"), bool)
             else item.get("ingress")
         ),
+        ingress_port=item.get("ingress_port"),
     )
 
 

@@ -58,6 +58,36 @@ def test_plan_computes_hostname_and_labels_without_tls():
     assert plan.proxy_dynamic_config is None
 
 
+def test_plan_omits_loadbalancer_port_label_when_ingress_port_unset():
+    provider = TraefikIngressProvider(domain="sslip.io")
+    ref = IngressContainerRef(
+        service_tag="web", container=ContainerCfg(tag="app")
+    )
+
+    plan = provider.plan(_env_cfg(), [ref])
+
+    assert not any(
+        "loadbalancer.server.port" in label
+        for label in plan.container_plans[0].labels
+    )
+
+
+def test_plan_emits_loadbalancer_port_label_when_ingress_port_set():
+    provider = TraefikIngressProvider(domain="sslip.io")
+    ref = IngressContainerRef(
+        service_tag="web",
+        container=ContainerCfg(tag="app", ingress_port=8085),
+    )
+
+    plan = provider.plan(_env_cfg(), [ref])
+
+    labels = plan.container_plans[0].labels
+    assert (
+        "traefik.http.services.app-web-test-1.loadbalancer.server.port=8085"
+        in labels
+    )
+
+
 def test_plan_requires_cert_and_key_together():
     with pytest.raises(ValueError):
         TraefikIngressProvider(domain="sslip.io", tls_cert_path="/x/leaf.crt")

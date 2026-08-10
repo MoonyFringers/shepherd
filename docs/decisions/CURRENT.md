@@ -132,6 +132,31 @@ config authoring needed beyond that. This was the last open item in
 this ADR's Confirmation checklist — the whole ingress/TLS design is
 now implemented end-to-end at the core level.
 
+**Two gaps found and fixed while designing a real plugin against this
+ADR.** (1) `TraefikIngressProvider` only emitted `traefik.enable`/
+`rule`/`entrypoints`/`tls` labels — never `loadbalancer.server.port` —
+so any ingress-flagged container exposing more than one port was
+unroutable (traefik's Docker provider only auto-detects a port when
+exactly one is exposed). Fixed via a new `ContainerCfg.ingress_port`
+field: when set, `_plan_container` emits the port label explicitly.
+(2) The proxy's own `ContainerCfg`, built by
+`_build_ingress_proxy_svc_cfg`, was never attached to any custom
+`networks:` — it only reached compose's implicit default network, so
+an ingress-flagged container declared on a non-default network was
+unreachable by the proxy. Fixed: the proxy now joins the union of
+every ingress-flagged container's `networks` (falling back to the
+literal `"default"` network for any container that declares none of
+its own, since an explicit `networks:` list on the proxy would
+otherwise drop it off the implicit default).
+
+**Also added while auditing `ContainerCfg` for the same plugin:**
+`network_mode`, `user`, `group_add`, and resource limits (`cpus`,
+`memory`, `cpuset`, rendered into compose's `deploy.resources.limits`)
+— none of these Compose fields had any `ContainerCfg` representation
+before, blocking fully declarative config for containers needing host
+networking, non-root docker-socket access, or per-service resource
+caps.
+
 ## Environment teardown failure visibility (ADR-0009 — proposed, not decided)
 
 **Status: proposed, unresolved.** Opened 2026-08-09 alongside ADR-0008.

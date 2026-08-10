@@ -44,7 +44,14 @@ def add_container_field_defaults(node: object) -> None:
     defaults: dict[str, object] = {
         "labels": [],
         "ingress": None,
+        "ingress_port": None,
         "command": [],
+        "network_mode": None,
+        "user": None,
+        "group_add": [],
+        "cpus": None,
+        "memory": None,
+        "cpuset": None,
     }
     if isinstance(node, dict):
         for key, value in node.items():

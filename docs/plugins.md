@@ -816,7 +816,11 @@ methods:
   container (image/command/ports/volumes/labels) — a config-model-free
   description; core translates it into a real `ServiceCfg`, since only
   core knows the factory/template ids that need. Don't construct
-  `ServiceCfg`/`ContainerCfg` yourself.
+  `ServiceCfg`/`ContainerCfg` yourself. The core `traefik` provider's Docker
+  provider only auto-detects a container's port when it exposes exactly
+  one — a container with more than one exposed port must set
+  `ContainerCfg.ingress_port` to an explicit target port, or routing to it
+  is ambiguous.
 - **`apply(plan) -> None`** — make a freshly computed plan true against the
   running environment. Must be idempotent. Core calls this once, after the
   proxy's gate comes up.

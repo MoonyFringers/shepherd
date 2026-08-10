@@ -1808,6 +1808,33 @@ def test_parse_container_no_labels_or_ingress():
 
 
 @pytest.mark.cfg
+def test_parse_container_ingress_port():
+    """A container's `ingress_port` field parses from raw yaml/json."""
+    from config.config import _parse_container
+
+    cnt = _parse_container(
+        {
+            "tag": "loyas",
+            "image": "loyas:latest",
+            "ingress": True,
+            "ingress_port": 8085,
+        }
+    )
+
+    assert cnt.ingress_port == 8085
+
+
+@pytest.mark.cfg
+def test_parse_container_no_ingress_port():
+    """A container with no `ingress_port` parses to unset."""
+    from config.config import _parse_container
+
+    cnt = _parse_container({"tag": "db", "image": "postgres:16-alpine"})
+
+    assert cnt.ingress_port is None
+
+
+@pytest.mark.cfg
 def test_parse_environment_ingress():
     """An environment's `ingress:` block parses into `IngressCfg`."""
     from config.config import _parse_environment
@@ -1941,6 +1968,105 @@ def test_render_container_merges_volumes_and_run_volumes():
         "/declared:/declared:ro",
         "/ca.crt:/etc/shepherd/ca.crt:ro",
     ]
+
+
+@pytest.mark.cfg
+def test_parse_container_network_mode_user_group_add_and_resources():
+    """A container's `network_mode`, `user`, `group_add`, `cpus`, `memory`,
+    and `cpuset` fields parse from raw yaml/json."""
+    from config.config import _parse_container
+
+    cnt = _parse_container(
+        {
+            "tag": "loyas",
+            "image": "loyas:latest",
+            "network_mode": "host",
+            "user": "1000",
+            "group_add": ["docker"],
+            "cpus": "0.5",
+            "memory": "512m",
+            "cpuset": "0-1",
+        }
+    )
+
+    assert cnt.network_mode == "host"
+    assert cnt.user == "1000"
+    assert cnt.group_add == ["docker"]
+    assert cnt.cpus == "0.5"
+    assert cnt.memory == "512m"
+    assert cnt.cpuset == "0-1"
+
+
+@pytest.mark.cfg
+def test_parse_container_no_network_mode_user_group_add_or_resources():
+    """A container with none of these fields parses to unset/empty."""
+    from config.config import _parse_container
+
+    cnt = _parse_container({"tag": "db", "image": "postgres:16-alpine"})
+
+    assert cnt.network_mode is None
+    assert cnt.user is None
+    assert cnt.group_add == []
+    assert cnt.cpus is None
+    assert cnt.memory is None
+    assert cnt.cpuset is None
+
+
+@pytest.mark.cfg
+def test_render_container_network_mode_user_group_add():
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="loyas",
+        image="loyas:latest",
+        network_mode="host",
+        user="1000",
+        group_add=["docker"],
+    )
+
+    rendered = render_container(cnt, labels=None)
+
+    assert rendered["network_mode"] == "host"
+    assert rendered["user"] == "1000"
+    assert rendered["group_add"] == ["docker"]
+
+
+@pytest.mark.cfg
+def test_render_container_resource_limits():
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="loyas",
+        image="loyas:latest",
+        cpus="0.5",
+        memory="512m",
+        cpuset="0-1",
+    )
+
+    rendered = render_container(cnt, labels=None)
+
+    assert rendered["cpuset"] == "0-1"
+    assert rendered["deploy"] == {
+        "resources": {"limits": {"cpus": "0.5", "memory": "512m"}}
+    }
+
+
+@pytest.mark.cfg
+def test_render_container_no_deploy_block_without_resource_limits():
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(tag="loyas", image="loyas:latest")
+
+    rendered = render_container(cnt, labels=None)
+
+    assert "deploy" not in rendered
+    assert "cpuset" not in rendered
+    assert "network_mode" not in rendered
+    assert "user" not in rendered
+    assert "group_add" not in rendered
 
 
 # ---------------------------------------------------------------------------
