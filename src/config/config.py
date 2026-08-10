@@ -754,22 +754,6 @@ class FragmentRefCfg(Resolvable):
 
 
 @dataclass
-class EnvironmentTemplateCfg(Resolvable):
-    """
-    Represents an environment template configuration.
-    """
-
-    tag: str
-    factory: str
-    service_templates: Optional[list[ServiceTemplateRefCfg]]
-    probes: Optional[list[ProbeCfg]]
-    networks: Optional[list[NetworkCfg]]
-    volumes: Optional[list[VolumeCfg]]
-    ready: Optional[ReadyCfg] = None
-    fragments: Optional[list[FragmentRefCfg]] = None
-
-
-@dataclass
 class IngressCfg(Resolvable):
     """
     Opts an environment into HTTPS ingress for its `ingress: true`-flagged
@@ -783,6 +767,27 @@ class IngressCfg(Resolvable):
 
     domain: str
     provider: str = "traefik"
+
+
+@dataclass
+class EnvironmentTemplateCfg(Resolvable):
+    """
+    Represents an environment template configuration.
+    """
+
+    tag: str
+    factory: str
+    service_templates: Optional[list[ServiceTemplateRefCfg]]
+    probes: Optional[list[ProbeCfg]]
+    networks: Optional[list[NetworkCfg]]
+    volumes: Optional[list[VolumeCfg]]
+    ready: Optional[ReadyCfg] = None
+    fragments: Optional[list[FragmentRefCfg]] = None
+    # Templates carry ingress config too, not just realized environments --
+    # `env_cfg_from_tag` copies this onto the `EnvironmentCfg` it builds, so
+    # a plugin's reusable template can declare ingress once instead of every
+    # consumer having to patch it onto each realized environment by hand.
+    ingress: Optional[IngressCfg] = None
 
 
 @dataclass
@@ -1249,6 +1254,9 @@ def _parse_environment_template(item: Any) -> EnvironmentTemplateCfg:
             [_parse_fragment_ref(f) for f in fragments_data]
             if fragments_data
             else None
+        ),
+        ingress=(
+            _parse_ingress(item["ingress"]) if item.get("ingress") else None
         ),
     )
 
@@ -2352,6 +2360,7 @@ class ConfigMng:
             ready=deepcopy(env_tmpl_cfg.ready),
             networks=networks or None,
             volumes=volumes or None,
+            ingress=deepcopy(env_tmpl_cfg.ingress),
         )
 
     def env_cfg_from_other(self, other: EnvironmentCfg):

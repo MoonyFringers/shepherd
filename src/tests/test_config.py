@@ -831,6 +831,7 @@ def test_store_config_with_real_files():
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
                 item.setdefault("fragments", None)
+                item.setdefault("ingress", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
@@ -1170,6 +1171,7 @@ def test_store_config_with_refs_with_real_files():
             for item in expected.get("env_templates", []):
                 item.setdefault("ready", None)
                 item.setdefault("fragments", None)
+                item.setdefault("ingress", None)
             for item in expected.get("envs", []):
                 item.setdefault("ready", None)
                 item.setdefault("tracking_remote", None)
@@ -1888,6 +1890,67 @@ def test_parse_environment_no_ingress():
     env = _parse_environment(item)
 
     assert env.ingress is None
+
+
+@pytest.mark.cfg
+def test_parse_environment_template_ingress():
+    """An environment template's `ingress:` block parses into `IngressCfg`
+    -- templates need this too, not just realized environments, so a
+    plugin's reusable template can declare ingress once (see
+    `env_cfg_from_tag_copies_template_ingress` below for the propagation
+    half of this)."""
+    from config.config import _parse_environment_template
+
+    item = {
+        "tag": "full",
+        "factory": "docker-compose",
+        "ingress": {"domain": "sslip.io", "provider": "nginx"},
+    }
+
+    tmpl = _parse_environment_template(item)
+
+    assert tmpl.ingress is not None
+    assert tmpl.ingress.domain == "sslip.io"
+    assert tmpl.ingress.provider == "nginx"
+
+
+@pytest.mark.cfg
+def test_parse_environment_template_no_ingress():
+    from config.config import _parse_environment_template
+
+    item = {"tag": "full", "factory": "docker-compose"}
+
+    tmpl = _parse_environment_template(item)
+
+    assert tmpl.ingress is None
+
+
+@pytest.mark.cfg
+def test_env_cfg_from_tag_copies_template_ingress(mocker: MockerFixture):
+    """`env add` must carry a template's `ingress:` block onto the
+    realized environment -- otherwise a plugin-declared template's ingress
+    config silently disappears the moment a user instantiates it."""
+    from config.config import ConfigMng, EnvironmentTemplateCfg, IngressCfg
+
+    cMng = ConfigMng.__new__(ConfigMng)
+    mocker.patch.object(
+        ConfigMng, "get_env_template_fragment_registry", return_value={}
+    )
+    mocker.patch.object(ConfigMng, "svc_cfg_from_service_template")
+    tmpl = EnvironmentTemplateCfg(
+        tag="full",
+        factory="docker-compose",
+        service_templates=None,
+        probes=None,
+        networks=None,
+        volumes=None,
+        ingress=IngressCfg(domain="sslip.io"),
+    )
+
+    env = cMng.env_cfg_from_tag(tmpl, "my-env")
+
+    assert env.ingress is not None
+    assert env.ingress.domain == "sslip.io"
 
 
 @pytest.mark.docker
