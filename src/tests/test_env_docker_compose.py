@@ -2036,6 +2036,50 @@ def test_apply_ingress_plan_wires_proxy_onto_ingress_container_networks(
 
 
 @pytest.mark.docker
+def test_apply_ingress_plan_rejects_network_mode_ingress_container(
+    tmp_path: Path, mocker: MockerFixture
+):
+    """A `network_mode`-networked container (e.g. `host`) is not attached
+    to any compose bridge network, so joining the proxy to "default" (the
+    fallback for a container with no explicit `networks`) would not
+    actually make it reachable -- this combination must fail loudly
+    rather than silently produce an unreachable route."""
+    envCfg = EnvironmentCfg(
+        template="default",
+        factory="docker-compose",
+        tag="test-1",
+        services=[
+            ServiceCfg(
+                tag="web",
+                factory="docker",
+                template="default",
+                containers=[
+                    ContainerCfg(
+                        tag="app",
+                        image="nginx:stable",
+                        ingress="true",
+                        network_mode="host",
+                    )
+                ],
+            )
+        ],
+        probes=None,
+        networks=None,
+        volumes=None,
+        ingress=IngressCfg(domain="sslip.io"),
+    )
+    env = DockerComposeEnv(
+        _fake_config_mng_for_ingress(tmp_path),
+        mocker.Mock(),
+        envCfg,
+        cli_flags={},
+    )
+
+    with pytest.raises(ValueError, match="network_mode"):
+        env._apply_ingress_plan()
+
+
+@pytest.mark.docker
 def test_apply_ingress_plan_uses_deterministic_per_env_ports(
     tmp_path: Path, mocker: MockerFixture
 ):

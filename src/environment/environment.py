@@ -411,6 +411,19 @@ class Environment(ABC):
         # on the implicit default (i.e. declares no `networks` of its own).
         proxy_networks: set[str] = set()
         for ref in ingress_containers:
+            if getattr(ref.container, "network_mode", None):
+                # A `network_mode`-networked container (e.g. `host`) is not
+                # attached to any compose bridge network -- joining it to
+                # "default" (or any network) would not make it reachable by
+                # the proxy the way a normal container is. Routing to such
+                # a container needs a different mechanism entirely (e.g.
+                # the proxy reaching it via the host network), which this
+                # provider does not implement -- fail loudly rather than
+                # silently produce a proxy that can never reach it.
+                raise ValueError(
+                    f"container '{ref.container.tag}': ingress routing to "
+                    "a container with 'network_mode' set is not supported."
+                )
             container_networks = getattr(ref.container, "networks", None)
             if container_networks:
                 proxy_networks.update(container_networks)

@@ -316,6 +316,11 @@ def render_container(
         container_def["environment"] = cnt.environment
     if cnt.ports:
         container_def["ports"] = cnt.ports
+    if cnt.networks and cnt.network_mode:
+        raise ValueError(
+            f"container '{cnt.tag}': 'networks' and 'network_mode' are "
+            "mutually exclusive in Docker Compose -- set only one."
+        )
     if cnt.networks:
         container_def["networks"] = cnt.networks
     if cnt.network_mode:

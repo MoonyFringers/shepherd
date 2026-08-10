@@ -2054,6 +2054,25 @@ def test_render_container_resource_limits():
 
 
 @pytest.mark.cfg
+def test_render_container_rejects_networks_and_network_mode_together():
+    """Docker Compose treats `networks` and `network_mode` as mutually
+    exclusive on a service -- catch the conflict at render time rather
+    than letting `docker compose up` fail on invalid generated YAML."""
+    from config.config import ContainerCfg
+    from docker.docker_compose_util import render_container
+
+    cnt = ContainerCfg(
+        tag="loyas",
+        image="loyas:latest",
+        networks=["special-net"],
+        network_mode="host",
+    )
+
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        render_container(cnt, labels=None)
+
+
+@pytest.mark.cfg
 def test_render_container_no_deploy_block_without_resource_limits():
     from config.config import ContainerCfg
     from docker.docker_compose_util import render_container
