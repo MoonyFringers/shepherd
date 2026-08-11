@@ -13,7 +13,7 @@ from typing import Any, Optional, override
 import yaml
 
 from config import ConfigMng, EnvironmentCfg, ServiceCfg
-from service import Service
+from service import ExecResult, Service
 from util import Util
 
 from .docker_compose_util import (
@@ -311,6 +311,57 @@ class DockerComposeSvc(Service):
             Util.print_error_and_die(
                 f"Environment: '{self.envCfg.tag}' is not running."
             )
+
+    @override
+    def exec_impl(
+        self, cmd: list[str], cnt_tag: Optional[str] = None
+    ) -> ExecResult:
+        """
+        Run a command inside a service container and capture its output --
+        the scriptable counterpart to `get_shell_impl` (interactive, no
+        captured output) and `get_logs_impl` (streaming, no exit code).
+
+        `-T` disables pseudo-tty allocation, matching a non-interactive,
+        scripted invocation rather than a shell session.
+        """
+        rendered_stack = self._get_rendered_compose_stack()
+
+        if rendered_stack:
+            container = None
+            if cnt_tag:
+                container = self.svcCfg.get_container_by_tag(cnt_tag)
+                if not container:
+                    Util.print_error_and_die(
+                        f"Service '{self.svcCfg.tag}' does not have a "
+                        f"container named '{cnt_tag}'."
+                    )
+            elif self.svcCfg.containers and len(self.svcCfg.containers) == 1:
+                container = self.svcCfg.containers[0]
+            else:
+                Util.print_error_and_die(
+                    f"Service '{self.svcCfg.tag}' has multiple containers. "
+                    f"Specify a container name."
+                )
+
+            result = run_compose(
+                rendered_stack,
+                "exec",
+                "-T",
+                container.run_container_name or "" if container else "",
+                *cmd,
+                project_name=self.envCfg.tag,
+                capture=True,
+            )
+            return ExecResult(
+                stdout=result.stdout or "",
+                stderr=result.stderr or "",
+                returncode=result.returncode,
+            )
+        else:
+            Util.print_error_and_die(
+                f"Environment: '{self.envCfg.tag}' is not running."
+            )
+            raise AssertionError("unreachable")
 
     def _get_rendered_compose_stack(self) -> Optional[list[str]]:
         """

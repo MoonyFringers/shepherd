@@ -29,7 +29,7 @@ from config import (
 )
 from config.config import RemoteCfg
 from environment import Environment
-from service import Service
+from service import ExecResult, Service
 from storage.snapshot import IndexCatalogue, SnapshotManifest
 
 
@@ -79,6 +79,18 @@ class PluginConfigView(Protocol):
         self, plugin_id: str, key: str, value: str
     ) -> PluginCfg:
         """Set one key in *plugin_id*'s own config dict and persist it."""
+        ...
+
+    def set_environment_config_value(
+        self, env_tag: str, key: str, value: str
+    ) -> EnvironmentCfg:
+        """Set one key in an environment's own config dict and persist it.
+
+        Values set here override the plugin's own config defaults for that
+        environment's ``${VAR}`` template resolution, but are still
+        overridable by ``~/.shpd.values`` or a per-environment values file
+        (see ``docs/plugins.md``'s resolution-precedence section).
+        """
         ...
 
 
@@ -207,6 +219,20 @@ class PluginServiceView(Protocol):
         cnt_tag: Optional[str] = None,
     ) -> None:
         """Open an interactive shell in the service container."""
+        ...
+
+    def exec_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cmd: list[str],
+        cnt_tag: Optional[str] = None,
+    ) -> Optional[ExecResult]:
+        """Run *cmd* inside the service container and capture its output.
+
+        The scriptable counterpart to ``shell_svc`` (interactive, no
+        captured output) and ``logs_svc`` (streaming, no exit code).
+        """
         ...
 
     def render_svc(
