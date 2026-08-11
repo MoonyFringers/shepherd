@@ -1711,9 +1711,29 @@ class ConfigMng:
 
         # Reparse through model constructors to normalize defaults/types.
         config = parse_config(yaml.dump(config_data, sort_keys=False))
-        config.set_resolver(
-            self._build_plugin_resolver(config), self.user_values
-        )
+
+        # `envs_path` itself only references `user_values` (e.g.
+        # `${shpd_path}`), so it can be resolved standalone, ahead of the
+        # real resolver below -- then exposed as `${envs_path}` so
+        # templates can anchor persistent state under shepherd's own
+        # per-environment directory (`${envs_path}/#{env.tag}/...`)
+        # instead of requiring a hand-supplied host path.
+        config.set_resolver({}, self.user_values)
+        resolved_envs_path = config.envs_path
+
+        resolver = self._build_plugin_resolver(config)
+        resolver["envs_path"] = resolved_envs_path
+        # `var_repl` (`_resolve_str`) checks `user_values` before
+        # `resolver`, and a real `~/.shpd.conf` (see
+        # `DEFAULT_SHPD_VALUES_TEMPLATE`) always defines its own
+        # `envs_path` -- raw and not tilde-expanded, since
+        # `os.path.expanduser` only runs for fields literally named
+        # `*_path`. Left alone, that stale entry would shadow the
+        # resolved value above for every *other* field referencing
+        # `${envs_path}` (e.g. a service_template's `volumes`), which
+        # would silently keep a literal `~` in a bind-mount source.
+        self.user_values["envs_path"] = resolved_envs_path
+        config.set_resolver(resolver, self.user_values)
         return config
 
     def load(self):

@@ -282,6 +282,75 @@ service_templates:
 
 
 @pytest.mark.cfg
+def test_envs_path_is_exposed_as_template_var(mocker: MockerFixture):
+    """`${envs_path}` resolves to shepherd's own per-environment root, so a
+    service_template can anchor persistent host state under
+    `${envs_path}/#{env.tag}/...` instead of requiring a hand-supplied
+    absolute host path in an environment's `config:` block."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        volumes:
+          - ${envs_path}/storage:/data
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.envs_path == "/tmp/shpd/envs"
+    assert config.service_templates
+    volumes = config.service_templates[0].containers[0].volumes
+    assert volumes and volumes[0] == "/tmp/shpd/envs/storage:/data"
+
+
+@pytest.mark.cfg
+def test_envs_path_var_not_shadowed_by_stale_user_values(mocker: MockerFixture):
+    """A real `~/.shpd.conf` already defines its own `envs_path` (see
+    `DEFAULT_SHPD_VALUES_TEMPLATE`), raw and never tilde-expanded --
+    `_resolve_str.var_repl` checks `user_values` before the resolver
+    mapping, so that stale, unexpanded entry must not shadow the
+    properly resolved `${envs_path}` this feature exposes."""
+
+    values = (
+        "shpd_path=~/shpd\n"
+        "templates_path=${shpd_path}/templates\n"
+        "envs_path=${shpd_path}/envs\n"
+        "log_file=${shpd_path}/shepctl.log\n"
+        "log_level=WARNING\n"
+        "log_stdout=false\n"
+        "log_format=%(asctime)s - %(levelname)s - %(message)s\n"
+    )
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        volumes:
+          - ${envs_path}/storage:/data
+"""
+    config = _load_config_with_yaml(mocker, config_yaml, values=values)
+    config.set_resolved()
+
+    expected = os.path.expanduser("~/shpd/envs")
+    assert config.envs_path == expected
+    volumes = config.service_templates[0].containers[0].volumes
+    assert volumes and volumes[0] == f"{expected}/storage:/data"
+    assert "~" not in volumes[0]
+
+
+@pytest.mark.cfg
 def test_user_values_override_plugin_config(mocker: MockerFixture):
     """A user_values entry with the same key takes precedence over a
     plugin's `config` value on collision."""
