@@ -960,6 +960,104 @@ def test_cli_add_env(
 
 
 @pytest.mark.shpd
+def test_cli_env_config_set_and_get(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+):
+    """'env config set' persists a key into the checked-out env's own
+    config block; 'env config get' prints it back."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "config", "set", "region", "eu-west-1"])
+    assert result.exit_code == 0, result.output
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env
+    assert env.config == {"region": "eu-west-1"}
+
+    result = runner.invoke(cli, ["env", "config", "get"])
+    assert result.exit_code == 0, result.output
+    assert "region: eu-west-1" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_config_set_explicit_tag(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(
+        cli, ["env", "config", "set", "region", "eu-west-1", "test-1"]
+    )
+    assert result.exit_code == 0, result.output
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env
+    assert env.config == {"region": "eu-west-1"}
+
+
+@pytest.mark.shpd
+def test_cli_env_config_set_unknown_env_errors(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(
+        cli, ["env", "config", "set", "region", "eu-west-1", "does-not-exist"]
+    )
+    assert result.exit_code != 0
+    assert "not found" in result.output
+
+
+@pytest.mark.shpd
+def test_cli_env_config_unset(shpd_conf: tuple[Path, Path], runner: CliRunner):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "config", "set", "region", "eu-west-1"])
+    assert result.exit_code == 0, result.output
+
+    result = runner.invoke(cli, ["env", "config", "unset", "region"])
+    assert result.exit_code == 0, result.output
+
+    sm = ShepherdMng()
+    env = sm.configMng.get_environment("test-1")
+    assert env
+    assert not env.config
+
+
+@pytest.mark.shpd
+def test_cli_env_config_unset_missing_key_errors(
+    shpd_conf: tuple[Path, Path], runner: CliRunner
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("shpd", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    result = runner.invoke(cli, ["env", "config", "unset", "region"])
+    assert result.exit_code != 0
+    assert "not set" in result.output
+
+
+@pytest.mark.shpd
 def test_cli_clone_env(
     shpd_conf: tuple[Path, Path], runner: CliRunner, mocker: MockerFixture
 ):

@@ -14,6 +14,7 @@ import sys
 from typing import Any, Callable, List, Optional
 
 import click
+import yaml
 
 from completion import CompletionMng
 from config import ConfigMng, EnvironmentCfg
@@ -396,6 +397,60 @@ def get_env(
 def add_env(shepherd: ShepherdMng, template: str, tag: str):
     """Add a new environment."""
     shepherd.environmentMng.add_env(template, tag)
+
+
+@env.group(name="config")
+def env_config():
+    """Manage an environment's own `config:` block (${VAR} overrides)."""
+
+
+@env_config.command(name="set")
+@click.argument("key", required=True)
+@click.argument("value", required=True)
+@click.argument("env_tag", required=False)
+@click.pass_obj
+def set_env_config(
+    shepherd: ShepherdMng, key: str, value: str, env_tag: Optional[str]
+):
+    """Set KEY=VALUE in ENV_TAG's (or the checked-out env's) config block.
+
+    Overrides a plugin's own config defaults for that environment's
+    ${VAR} template resolution -- still overridable by ~/.shpd.values or
+    a per-environment values file.
+    """
+    env_tag = _resolve_env_tag(shepherd, env_tag)
+    try:
+        shepherd.configMng.set_environment_config_value(env_tag, key, value)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+
+@env_config.command(name="unset")
+@click.argument("key", required=True)
+@click.argument("env_tag", required=False)
+@click.pass_obj
+def unset_env_config(shepherd: ShepherdMng, key: str, env_tag: Optional[str]):
+    """Remove KEY from ENV_TAG's (or the checked-out env's) config block."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
+    try:
+        shepherd.configMng.remove_environment_config_value(env_tag, key)
+    except ValueError as e:
+        raise click.UsageError(str(e))
+
+
+@env_config.command(name="get")
+@click.argument("env_tag", required=False)
+@click.pass_obj
+def get_env_config(shepherd: ShepherdMng, env_tag: Optional[str]):
+    """Print ENV_TAG's (or the checked-out env's) config block."""
+    env_tag = _resolve_env_tag(shepherd, env_tag)
+    envCfg = shepherd.configMng.get_environment(env_tag)
+    if not envCfg:
+        raise click.UsageError(f"Environment '{env_tag}' not found.")
+    if not envCfg.config:
+        click.echo("{}")
+        return
+    click.echo(yaml.dump(envCfg.config, sort_keys=False))
 
 
 @env.command(name="clone")

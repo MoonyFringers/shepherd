@@ -114,8 +114,27 @@ keep resolving against the plugin default. Resolution precedence for a
 given `${KEY}`, most specific override last:
 
 plugin `config` (default) → environment `config` (per-instance
-override, if set) → `~/.shpd.values` (`user_values`, always wins) →
-process environment variable (final fallback).
+override, if set) → `~/.shpd.values` (`user_values`, always wins over
+`config`) → per-environment values file (below, wins over the global
+`~/.shpd.values` for that environment's subtree only) → process
+environment variable (final fallback).
+
+An environment can also have its own values file, the per-environment
+analogue of `~/.shpd.values`: `envs_path/<tag>/.shpd.values`, same
+`key=value` format. Unlike `config` (which sits *below* the global
+values file), a per-environment values file sits *above* it — it's for
+overriding what `~/.shpd.values` would otherwise apply everywhere,
+scoped to one specific environment, without editing the global file.
+Missing is the common case (most environments have none) and not an
+error. Nothing manages this file for you today — no `plugin install`
+scaffolding, no `env add` prompt, no CLI command to point at it. Create
+it by hand at the path above if you need it, e.g. to give one
+environment a different `${db_password}` than every other environment
+on the same host without touching `~/.shpd.values`.
+
+`shepctl env config set/get/unset` manage an environment's `config`
+block from the CLI directly (no plugin required) — there is currently
+no equivalent CLI surface for the per-environment values file itself.
 
 ## Plugin Descriptor
 

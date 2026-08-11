@@ -11,7 +11,7 @@ import os
 import re
 from copy import copy, deepcopy
 from dataclasses import dataclass, field, fields, is_dataclass
-from typing import Any, Dict, Match, Optional, cast
+from typing import Any, Dict, Iterable, Match, Optional, cast
 
 import yaml
 from glom import glom  # type: ignore[import]
@@ -215,11 +215,13 @@ class Resolvable:
 
         This is the core state-wiring pass used by `set_resolved`,
         `set_unresolved`, and `set_resolver`. `user_values` is the same
-        mapping reference for the whole tree (it always wins in
-        `_resolve_str`, see there); `resolver` is the per-node mapping —
-        an `EnvironmentCfg` with its own `config` dict merges that on top
-        of the incoming `resolver` for itself and its subtree only,
-        leaving sibling subtrees on the unmerged mapping.
+        mapping reference for the whole tree by default (it always wins in
+        `_resolve_str`, see there) -- an `EnvironmentCfg` with its own
+        `env_values` (loaded from `envs_path/<tag>/.shpd.values`, see
+        `ConfigMng.load_config`) merges that on top of `user_values` for
+        itself and its subtree only, the per-environment analogue of how
+        its `config` dict merges into `resolver`; both leave sibling
+        subtrees on the unmerged mapping.
         """
         if obj is None:
             obj = self
@@ -227,17 +229,26 @@ class Resolvable:
         if is_dataclass(obj) and isinstance(obj, Resolvable):
             lRefMap = obj._set_refMap(refMap)
             node_resolver = resolver
-            if isinstance(obj, EnvironmentCfg) and obj.config and resolved:
-                node_resolver = dict(resolver or {})
-                node_resolver.update(
-                    {str(k): str(v) for k, v in obj.config.items()}
-                )
+            node_user_values = user_values
+            if isinstance(obj, EnvironmentCfg) and resolved:
+                if obj.config:
+                    node_resolver = dict(resolver or {})
+                    node_resolver.update(
+                        {str(k): str(v) for k, v in obj.config.items()}
+                    )
+                if obj.env_values:
+                    node_user_values = dict(user_values or {})
+                    node_user_values.update(obj.env_values)
             object.__setattr__(obj, "_resolver", node_resolver or os.environ)
-            object.__setattr__(obj, "_user_values", user_values or {})
+            object.__setattr__(obj, "_user_values", node_user_values or {})
             for f in fields(obj):
                 if fVal := getattr(obj, f.name, None):
                     self._walk_and_set(
-                        node_resolver, resolved, fVal, lRefMap, user_values
+                        node_resolver,
+                        resolved,
+                        fVal,
+                        lRefMap,
+                        node_user_values,
                     )
             object.__setattr__(obj, "_resolved", resolved)
 
@@ -809,6 +820,14 @@ class EnvironmentCfg(Resolvable):
     status: EntityStatus = field(default_factory=EntityStatus)
     config: Optional[dict[str, Any]] = None
     ingress: Optional[IngressCfg] = None
+    # Loaded fresh from `envs_path/<tag>/.shpd.values` on every
+    # `ConfigMng.load_config`, never persisted into `.shpd.yaml` -- the
+    # per-environment analogue of `~/.shpd.values`. See
+    # `Resolvable._walk_and_set`'s `EnvironmentCfg` branch, which layers
+    # this over `user_values` for this environment's subtree only.
+    env_values: Optional[dict[str, str]] = field(
+        default=None, metadata={"transient": True}
+    )
 
     def get_service(self, svcTag: str) -> Optional[ServiceCfg]:
         """
@@ -1629,6 +1648,41 @@ class ConfigMng:
 
         return pattern.sub(replacer, value)
 
+    def _parse_values_lines(
+        self, lines: Iterable[str], seed: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        Parse `key=value` lines (blank lines and `#`-comments ignored),
+        expanding `${VAR}` against *seed* plus keys already parsed earlier
+        in the same file. Returns only this file's own keys, fully
+        expanded -- not merged with *seed*.
+
+        Notes:
+            Expansion is one-pass in file order. A key can reference only
+            *seed*, environment variables, or values already defined
+            above it in the same file.
+        """
+        raw_values: Dict[str, str] = {}
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+
+            if "=" in line:
+                key, value = line.split("=", 1)
+                raw_values[key.strip()] = value.strip()
+            else:
+                raise ValueError(
+                    f"Invalid line format in config file: '{line}'"
+                )
+
+        combined = dict(seed)
+        values: Dict[str, str] = {}
+        for key, raw_value in raw_values.items():
+            combined[key] = self.expand_value(raw_value, combined)
+            values[key] = combined[key]
+        return values
+
     def load_user_values(self) -> Dict[str, str]:
         """
         Loads user-defined configuration values from a file in key=value
@@ -1642,10 +1696,6 @@ class ConfigMng:
 
         :raises FileNotFoundError: If the config file is missing.
         :raises ValueError: If a line is invalid (missing '=' separator).
-
-        Notes:
-            Expansion is one-pass in file order. A key can reference only
-            values already defined above it (plus environment variables).
         """
         user_values: Dict[str, str] = {}
 
@@ -1655,31 +1705,37 @@ class ConfigMng:
             )
 
         try:
-            raw_values: Dict[str, str] = {}
-
             with open(self.file_values_path, "r") as file:
-                for line in file:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-
-                    if "=" in line:
-                        key, value = line.split("=", 1)
-                        raw_values[key.strip()] = value.strip()
-                    else:
-                        raise ValueError(
-                            f"Invalid line format in config file: '{line}'"
-                        )
-
-            # Expand values using previously defined keys and environment
-            # variables
-            for key, raw_value in raw_values.items():
-                user_values[key] = self.expand_value(raw_value, user_values)
-
+                user_values = self._parse_values_lines(file, {})
         except Exception as e:
             Util.print_error_and_die(f"Error reading configuration file: {e}")
 
         return user_values
+
+    def load_env_values(
+        self, values_path: str, seed: Dict[str, str]
+    ) -> Dict[str, str]:
+        """
+        Loads an optional per-environment values file (same `key=value`
+        format as `~/.shpd.values`), expanding `${VAR}` against *seed*
+        (typically the global `user_values`).
+
+        Unlike `load_user_values`, a missing file is normal, not an
+        error -- most environments have none. See `EnvironmentCfg.env_values`
+        and its `Resolvable._walk_and_set` merge into `user_values` for
+        that environment's subtree only.
+        """
+        if not os.path.isfile(values_path):
+            return {}
+
+        try:
+            with open(values_path, "r") as file:
+                return self._parse_values_lines(file, seed)
+        except Exception as e:
+            Util.print_error_and_die(
+                f"Error reading values file '{values_path}': {e}"
+            )
+        return {}
 
     def _build_plugin_resolver(self, config: Config) -> Dict[str, str]:
         """
@@ -1713,26 +1769,44 @@ class ConfigMng:
         config = parse_config(yaml.dump(config_data, sort_keys=False))
 
         # `envs_path` itself only references `user_values` (e.g.
-        # `${shpd_path}`), so it can be resolved standalone, ahead of the
-        # real resolver below -- then exposed as `${envs_path}` so
-        # templates can anchor persistent state under shepherd's own
-        # per-environment directory (`${envs_path}/#{env.tag}/...`)
-        # instead of requiring a hand-supplied host path.
-        config.set_resolver({}, self.user_values)
-        resolved_envs_path = config.envs_path
+        # `${shpd_path}`), so it's resolved directly from the raw YAML
+        # value -- avoids a full-tree `set_resolver` pass just to read one
+        # field. Exposed as `${envs_path}` so templates can anchor
+        # persistent state under shepherd's own per-environment directory
+        # (`${envs_path}/#{env.tag}/...`) instead of requiring a
+        # hand-supplied host path.
+        #
+        # `var_repl` (`_resolve_str`) checks `user_values` before the
+        # `resolver` mapping `_build_plugin_resolver` builds below, and a
+        # real `~/.shpd.conf` (see `DEFAULT_SHPD_VALUES_TEMPLATE`) always
+        # defines its own `envs_path` -- raw and not tilde-expanded, since
+        # `os.path.expanduser` only runs for fields literally named
+        # `*_path`. So it must be set directly on `user_values`, not
+        # merely added to `resolver`, or that stale entry would shadow
+        # this resolved value for every *other* field referencing
+        # `${envs_path}` (e.g. a service_template's `volumes`), silently
+        # keeping a literal `~` in a bind-mount source.
+        resolved_envs_path = os.path.expanduser(
+            self.expand_value(config_data["envs_path"], self.user_values)
+        )
+        self.user_values["envs_path"] = resolved_envs_path
 
         resolver = self._build_plugin_resolver(config)
-        resolver["envs_path"] = resolved_envs_path
-        # `var_repl` (`_resolve_str`) checks `user_values` before
-        # `resolver`, and a real `~/.shpd.conf` (see
-        # `DEFAULT_SHPD_VALUES_TEMPLATE`) always defines its own
-        # `envs_path` -- raw and not tilde-expanded, since
-        # `os.path.expanduser` only runs for fields literally named
-        # `*_path`. Left alone, that stale entry would shadow the
-        # resolved value above for every *other* field referencing
-        # `${envs_path}` (e.g. a service_template's `volumes`), which
-        # would silently keep a literal `~` in a bind-mount source.
-        self.user_values["envs_path"] = resolved_envs_path
+
+        # Per-environment values file (`envs_path/<tag>/.shpd.values`),
+        # the per-environment analogue of `~/.shpd.values` -- an optional
+        # override layer *above* the global values file (not merely the
+        # `config:` block below it), scoped to that environment's
+        # subtree. See `EnvironmentCfg.env_values` and its
+        # `Resolvable._walk_and_set` merge.
+        for env in config.envs or []:
+            values_path = os.path.join(
+                resolved_envs_path, env.tag, ".shpd.values"
+            )
+            env.env_values = (
+                self.load_env_values(values_path, self.user_values) or None
+            )
+
         config.set_resolver(resolver, self.user_values)
         return config
 
@@ -2174,6 +2248,33 @@ class ConfigMng:
                 if env.tag == env_tag:
                     config = dict(env.config or {})
                     config[key] = value
+                    env.config = config
+                    self.store()
+                    return env
+            raise ValueError(f"Environment '{env_tag}' not found.")
+        finally:
+            if was_resolved:
+                self.config.set_resolved()
+            else:
+                self.config.set_unresolved()
+
+    def remove_environment_config_value(
+        self, env_tag: str, key: str
+    ) -> EnvironmentCfg:
+        """Remove one key from an environment's own config dict and
+        persist it. Counterpart to `set_environment_config_value`."""
+        was_resolved = self.config.is_resolved()
+        self.config.set_unresolved()
+        try:
+            for env in self.config.envs:
+                if env.tag == env_tag:
+                    if not env.config or key not in env.config:
+                        raise ValueError(
+                            f"Key '{key}' is not set in environment "
+                            f"'{env_tag}'."
+                        )
+                    config = dict(env.config)
+                    del config[key]
                     env.config = config
                     self.store()
                     return env
