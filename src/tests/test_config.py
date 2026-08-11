@@ -8,6 +8,7 @@
 
 import os
 from copy import deepcopy
+from pathlib import Path
 from unittest.mock import mock_open
 
 import pytest
@@ -279,6 +280,218 @@ service_templates:
     assert build
     assert build.context_path == "eu-west-1"
     assert build.dockerfile_path == "eu-west-1/Dockerfile"
+
+
+@pytest.mark.cfg
+def test_envs_path_is_exposed_as_template_var(mocker: MockerFixture):
+    """`${envs_path}` resolves to shepherd's own per-environment root, so a
+    service_template can anchor persistent host state under
+    `${envs_path}/#{env.tag}/...` instead of requiring a hand-supplied
+    absolute host path in an environment's `config:` block."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        volumes:
+          - ${envs_path}/storage:/data
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.envs_path == "/tmp/shpd/envs"
+    assert config.service_templates
+    volumes = config.service_templates[0].containers[0].volumes
+    assert volumes and volumes[0] == "/tmp/shpd/envs/storage:/data"
+
+
+@pytest.mark.cfg
+def test_envs_path_var_not_shadowed_by_stale_user_values(mocker: MockerFixture):
+    """A real `~/.shpd.conf` already defines its own `envs_path` (see
+    `DEFAULT_SHPD_VALUES_TEMPLATE`), raw and never tilde-expanded --
+    `_resolve_str.var_repl` checks `user_values` before the resolver
+    mapping, so that stale, unexpanded entry must not shadow the
+    properly resolved `${envs_path}` this feature exposes."""
+
+    values = (
+        "shpd_path=~/shpd\n"
+        "templates_path=${shpd_path}/templates\n"
+        "envs_path=${shpd_path}/envs\n"
+        "log_file=${shpd_path}/shepctl.log\n"
+        "log_level=WARNING\n"
+        "log_stdout=false\n"
+        "log_format=%(asctime)s - %(levelname)s - %(message)s\n"
+    )
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        volumes:
+          - ${envs_path}/storage:/data
+"""
+    config = _load_config_with_yaml(mocker, config_yaml, values=values)
+    config.set_resolved()
+
+    expected = os.path.expanduser("~/shpd/envs")
+    assert config.envs_path == expected
+    volumes = config.service_templates[0].containers[0].volumes
+    assert volumes and volumes[0] == f"{expected}/storage:/data"
+    assert "~" not in volumes[0]
+
+
+@pytest.mark.cfg
+def test_env_values_file_overrides_global_user_values(tmp_path: Path):
+    """`envs_path/<tag>/.shpd.values` is the per-environment analogue of
+    `~/.shpd.values` -- an override layer *above* the global values file
+    (not merely the environment's own `config:` block), scoped to that
+    environment's subtree only. Uses real files (no mocking) since the
+    feature is filesystem-driven by design."""
+
+    shpd_path = tmp_path / "shpd"
+    shpd_path.mkdir()
+    (shpd_path / "envs" / "myenv").mkdir(parents=True)
+
+    conf_file = tmp_path / ".shpd.conf"
+    conf_file.write_text(
+        f"shpd_path={shpd_path}\n"
+        "templates_path=${shpd_path}/templates\n"
+        "envs_path=${shpd_path}/envs\n"
+        f"log_file={shpd_path}/shepctl.log\n"
+        "log_level=WARNING\n"
+        "log_stdout=false\n"
+        "log_format=%(asctime)s - %(levelname)s - %(message)s\n"
+        "region=global-region\n"
+    )
+
+    (shpd_path / "envs" / "myenv" / ".shpd.values").write_text(
+        "region=env-region\n"
+    )
+
+    (shpd_path / ".shpd.yaml").write_text("""
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - template: default
+    factory: docker
+    tag: myenv
+    services:
+      - tag: svc
+        factory: docker
+        template: svc
+        containers:
+          - tag: c
+            image: nginx:latest
+            environment:
+              - REGION=${region}
+        status:
+          active: true
+          rendered_config: null
+    status:
+      active: true
+      rendered_config: null
+  - template: default
+    factory: docker
+    tag: other
+    services:
+      - tag: svc
+        factory: docker
+        template: svc
+        containers:
+          - tag: c
+            image: nginx:latest
+            environment:
+              - REGION=${region}
+        status:
+          active: true
+          rendered_config: null
+    status:
+      active: true
+      rendered_config: null
+""")
+
+    cMng = ConfigMng(str(conf_file))
+    config = cMng.load_config()
+    config.set_resolved()
+
+    assert config.envs
+    myenv = next(e for e in config.envs if e.tag == "myenv")
+    other = next(e for e in config.envs if e.tag == "other")
+    assert myenv.services
+    assert other.services
+
+    myenv_env = myenv.services[0].containers[0].environment
+    other_env = other.services[0].containers[0].environment
+    assert myenv_env and myenv_env[0] == "REGION=env-region"
+    assert other_env and other_env[0] == "REGION=global-region"
+
+
+@pytest.mark.cfg
+def test_env_values_file_absent_falls_back_to_global(tmp_path: Path):
+    """No per-environment values file is the common case -- the
+    environment's subtree keeps resolving against the global
+    `~/.shpd.values`."""
+
+    shpd_path = tmp_path / "shpd"
+    shpd_path.mkdir()
+
+    conf_file = tmp_path / ".shpd.conf"
+    conf_file.write_text(
+        f"shpd_path={shpd_path}\n"
+        "templates_path=${shpd_path}/templates\n"
+        "envs_path=${shpd_path}/envs\n"
+        f"log_file={shpd_path}/shepctl.log\n"
+        "log_level=WARNING\n"
+        "log_stdout=false\n"
+        "log_format=%(asctime)s - %(levelname)s - %(message)s\n"
+        "region=global-region\n"
+    )
+
+    (shpd_path / ".shpd.yaml").write_text("""
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - template: default
+    factory: docker
+    tag: myenv
+    services:
+      - tag: svc
+        factory: docker
+        template: svc
+        containers:
+          - tag: c
+            image: nginx:latest
+            environment:
+              - REGION=${region}
+        status:
+          active: true
+          rendered_config: null
+    status:
+      active: true
+      rendered_config: null
+""")
+
+    cMng = ConfigMng(str(conf_file))
+    config = cMng.load_config()
+    config.set_resolved()
+
+    assert config.envs
+    myenv = config.envs[0]
+    assert myenv.env_values is None
+    assert myenv.services
+    environment = myenv.services[0].containers[0].environment
+    assert environment and environment[0] == "REGION=global-region"
 
 
 @pytest.mark.cfg

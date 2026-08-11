@@ -17,7 +17,7 @@ from click.testing import CliRunner
 from pytest_mock import MockerFixture
 from test_util import add_container_field_defaults, read_fixture
 
-from shepctl import cli
+from shepctl import ShepherdMng, cli
 from util import Util
 
 svc_env_running_ps_output = (
@@ -606,6 +606,74 @@ def test_shell_svc_cnt_2(
     result = runner.invoke(cli, ["svc", "shell", "test-1", "container-2"])
     assert result.exit_code == 0
     mock_subproc.assert_called_once()
+
+
+@pytest.mark.docker
+def test_exec_svc_captures_output(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    """The scriptable counterpart to `shell_svc` -- disables `-T` pseudo-tty
+    allocation and returns an ExecResult instead of streaming to the
+    terminal, so plugin code can inspect stdout/stderr/exit code."""
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+    result = runner.invoke(cli, ["env", "up"])
+    assert result.exit_code == 0
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "compose", "exec", "-T", "test-test-1", "id"],
+            returncode=0,
+            stdout="uid=0(root)\n",
+            stderr="",
+        ),
+    )
+
+    sm = ShepherdMng()
+    envCfg = sm.configMng.get_environment("test-1")
+    assert envCfg
+
+    exec_result = sm.serviceMng.exec_svc(envCfg, "test", ["id"])
+
+    assert exec_result is not None
+    assert exec_result.stdout == "uid=0(root)\n"
+    assert exec_result.stderr == ""
+    assert exec_result.returncode == 0
+    mock_subproc.assert_called_once()
+    exec_cmd = mock_subproc.call_args.args[0]
+    assert "-T" in exec_cmd
+    assert "id" in exec_cmd
+
+
+@pytest.mark.docker
+def test_exec_svc_unknown_service_returns_none(
+    shpd_conf: tuple[Path, Path],
+    runner: CliRunner,
+    mocker: MockerFixture,
+):
+    shpd_path = shpd_conf[0]
+    shpd_path.mkdir(parents=True, exist_ok=True)
+    shpd_yaml = shpd_path / ".shpd.yaml"
+    shpd_config = read_fixture("svc_docker", "shpd.yaml")
+    shpd_yaml.write_text(shpd_config)
+
+    mock_subprocess_with_running_ps(mocker)
+    result = runner.invoke(cli, ["env", "up"])
+    assert result.exit_code == 0
+
+    sm = ShepherdMng()
+    envCfg = sm.configMng.get_environment("test-1")
+    assert envCfg
+
+    assert sm.serviceMng.exec_svc(envCfg, "does-not-exist", ["id"]) is None
 
 
 @pytest.mark.docker

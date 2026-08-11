@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from typing import Any, Optional
 
 import yaml
@@ -17,6 +18,17 @@ from config import ConfigMng, EnvironmentCfg, ServiceCfg
 from util import Util
 
 from .render import build_svc_details_tree, render_svc_summary
+
+
+@dataclass
+class ExecResult:
+    """Captured result of a non-interactive `exec` into a service
+    container -- the scriptable counterpart to `get_shell` (interactive)
+    and `get_logs` (streaming, no exit code)."""
+
+    stdout: str
+    stderr: str
+    returncode: int
 
 
 class Service(ABC):
@@ -133,6 +145,10 @@ class Service(ABC):
         """Get a shell session for the service."""
         return self.get_shell_impl(cnt_tag)
 
+    def exec(self, cmd: list[str], cnt_tag: Optional[str] = None) -> ExecResult:
+        """Run a command inside the service container, capturing output."""
+        return self.exec_impl(cmd, cnt_tag)
+
     @abstractmethod
     def render_target_impl(self, resolved: bool) -> str:
         """
@@ -174,6 +190,13 @@ class Service(ABC):
     @abstractmethod
     def get_shell_impl(self, cnt_tag: Optional[str] = None):
         """Get a shell session for the service."""
+        pass
+
+    @abstractmethod
+    def exec_impl(
+        self, cmd: list[str], cnt_tag: Optional[str] = None
+    ) -> ExecResult:
+        """Run a command inside the service container, capturing output."""
         pass
 
     def to_config(self) -> ServiceCfg:
@@ -380,3 +403,16 @@ class ServiceMng:
         service = self.get_service(envCfg, svc_tag)
         if service:
             service.get_shell(cnt_tag)
+
+    def exec_svc(
+        self,
+        envCfg: EnvironmentCfg,
+        svc_tag: str,
+        cmd: list[str],
+        cnt_tag: Optional[str] = None,
+    ) -> Optional[ExecResult]:
+        """Run a command inside a service container, capturing output."""
+        service = self.get_service(envCfg, svc_tag)
+        if service:
+            return service.exec(cmd, cnt_tag)
+        return None

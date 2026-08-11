@@ -6,6 +6,6 @@
 # Commercial: see LICENSE-COMMERCIAL or contact licensing@moonyfringers.net.
 
 
-from .service import Service, ServiceFactory, ServiceMng
+from .service import ExecResult, Service, ServiceFactory, ServiceMng
 
-__all__ = ["Service", "ServiceMng", "ServiceFactory"]
+__all__ = ["ExecResult", "Service", "ServiceMng", "ServiceFactory"]
