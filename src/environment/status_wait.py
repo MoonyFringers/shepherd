@@ -30,7 +30,10 @@ if TYPE_CHECKING:
 
 GroupedStatus: TypeAlias = dict[str, list[list[str]]]
 GateStatus: TypeAlias = dict[str, Optional[bool]]
-CollectStatusResult: TypeAlias = tuple[GroupedStatus, bool, bool, bool]
+EndpointsStatus: TypeAlias = dict[str, list[tuple[str, str]]]
+CollectStatusResult: TypeAlias = tuple[
+    GroupedStatus, bool, bool, bool, EndpointsStatus
+]
 ContainerStateMap: TypeAlias = dict[str, str]
 ProbeStateMap: TypeAlias = dict[tuple[str, str], str]
 SummaryStateMap: TypeAlias = dict[str, str]
@@ -361,6 +364,7 @@ def wait_for_env_state(
         remaining: Optional[int],
         tick: int,
         show_ready: bool = False,
+        endpoints: Optional[EndpointsStatus] = None,
     ) -> Any:
         now = time.monotonic()
         flashing_containers = {
@@ -404,6 +408,7 @@ def wait_for_env_state(
             flashing_containers=flashing_containers,
             flashing_probes=flashing_probes,
             flashing_summary_keys=flashing_summary_keys,
+            endpoints=endpoints,
         )
         if keep_output_hint_active:
             return Group(
@@ -448,7 +453,7 @@ def wait_for_env_state(
         while True:
             raise_action_error()
             current_gate_status = get_gate_status()
-            grouped, all_running, any_running, has_containers = (
+            grouped, all_running, any_running, has_containers, _ = (
                 hooks.collect_env_status(
                     env,
                     current_gate_status,
@@ -497,7 +502,7 @@ def wait_for_env_state(
                         f"'{env.envCfg.tag}' to be {timeout_target}."
                     )
             current_gate_status = get_gate_status()
-            grouped, all_running, any_running, has_containers = (
+            grouped, all_running, any_running, has_containers, endpoints = (
                 hooks.collect_env_status(
                     env,
                     current_gate_status,
@@ -537,6 +542,7 @@ def wait_for_env_state(
                         remaining=remaining,
                         tick=0,
                         show_ready=True,
+                        endpoints=endpoints,
                     )
                 )
                 return
@@ -577,6 +583,7 @@ def wait_for_env_state(
         # are involved.
         latest_gate_status: Optional[GateStatus] = None
         grouped: GroupedStatus = {}
+        endpoints: EndpointsStatus = {}
         all_running = False
         any_running = False
         # `has_containers` means the environment currently resolves to at
@@ -594,6 +601,7 @@ def wait_for_env_state(
             nonlocal next_status_poll_at
             nonlocal latest_gate_status
             nonlocal grouped
+            nonlocal endpoints
             nonlocal all_running
             nonlocal any_running
             nonlocal has_containers
@@ -610,11 +618,13 @@ def wait_for_env_state(
                         poll_grouped,
                         poll_all_running,
                         poll_any_running,
-                        (poll_has_containers),
+                        poll_has_containers,
+                        poll_endpoints,
                     ) = hooks.collect_env_status(env, gate_status_now)
                     with snapshot_lock:
                         latest_gate_status = gate_status_now
                         grouped = poll_grouped
+                        endpoints = poll_endpoints
                         all_running = poll_all_running
                         any_running = poll_any_running
                         has_containers = poll_has_containers
@@ -661,6 +671,7 @@ def wait_for_env_state(
                     snap_has_snapshot = has_snapshot
                     snap_has_containers = has_containers
                     snap_grouped = grouped
+                    snap_endpoints = endpoints
                     snap_all_running = all_running
                     snap_any_running = any_running
                     snap_gate_status = latest_gate_status
@@ -754,6 +765,7 @@ def wait_for_env_state(
                             remaining=remaining,
                             tick=ui_tick_count,
                             show_ready=show_ready,
+                            endpoints=snap_endpoints,
                         )
                     )
 
@@ -778,6 +790,7 @@ def wait_for_env_state(
                                     remaining=remaining,
                                     tick=ui_tick_count,
                                     show_ready=True,
+                                    endpoints=snap_endpoints,
                                 )
                             )
                         return

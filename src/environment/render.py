@@ -83,7 +83,13 @@ def collect_env_status(
     details_enabled: bool,
     gate_status: Optional[dict[str, Optional[bool]]] = None,
     include_gates: bool = True,
-) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+) -> tuple[
+    dict[str, list[list[str]]],
+    bool,
+    bool,
+    bool,
+    dict[str, list[tuple[str, str]]],
+]:
     """
     Build grouped status rows used by table renderers and wait loops.
 
@@ -92,6 +98,11 @@ def collect_env_status(
     - all_running: every discovered container is running
     - any_running: at least one discovered container is running
     - has_containers: at least one container exists in config
+    - endpoints: (label, url) pairs keyed by service tag, collected only
+      from currently-running containers that declare `endpoints:`
+      (`ContainerCfg.endpoints`) -- a stopped container's endpoints
+      aren't reachable, so aren't shown, matching sctl's own
+      `hlp_get_service_is_running` guard around its endpoint table.
     """
     env_status = env.status()
     services = env.get_services()
@@ -100,12 +111,14 @@ def collect_env_status(
     }
 
     grouped: dict[str, list[list[str]]] = {}
+    endpoints: dict[str, list[tuple[str, str]]] = {}
     all_running = True
     any_running = False
     has_containers = False
 
     for svc in services:
         rows: list[list[str]] = []
+        service_endpoints: list[tuple[str, str]] = []
         service_gates = ""
         service_gate_details = ""
         if include_gates:
@@ -128,6 +141,10 @@ def collect_env_status(
             if state == "running":
                 any_running = True
                 state_colored = "[bold green]running[/bold green]"
+                for endpoint in cast(list[Any], container.endpoints) or []:
+                    service_endpoints.append(
+                        (cast(str, endpoint.label), cast(str, endpoint.url))
+                    )
             elif state == "stopped":
                 state_colored = "[dim]stopped[/dim]"
             else:
@@ -144,11 +161,13 @@ def collect_env_status(
 
         if rows:
             grouped[svc.svcCfg.tag] = rows
+        if service_endpoints:
+            endpoints[svc.svcCfg.tag] = service_endpoints
 
     if not has_containers:
         all_running = False
 
-    return grouped, all_running, any_running, has_containers
+    return grouped, all_running, any_running, has_containers, endpoints
 
 
 def render_env_summary(env: Environment) -> None:
@@ -367,6 +386,7 @@ def build_env_status_tree(
     flashing_containers: Optional[set[str]] = None,
     flashing_probes: Optional[set[tuple[str, str]]] = None,
     flashing_summary_keys: Optional[set[str]] = None,
+    endpoints: Optional[dict[str, list[tuple[str, str]]]] = None,
 ) -> Any:
     """Render the environment status as a tree with optional side panels."""
     title = f"[bold white]{env_tag}[/bold white]"
@@ -412,6 +432,14 @@ def build_env_status_tree(
                 else state
             )
             service_node.add(f"[white]{container}[/white]: {rendered_state}")
+
+        service_endpoints = (endpoints or {}).get(service)
+        if service_endpoints:
+            endpoints_node = service_node.add(
+                "[bold green]endpoints[/bold green]"
+            )
+            for label, url in service_endpoints:
+                endpoints_node.add(f"[white]{label}[/white]: {url}")
 
     panels: list[Any] = []
     if command_log is not None and command_log_limit is not None:
