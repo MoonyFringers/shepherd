@@ -7,13 +7,14 @@
 
 from __future__ import annotations
 
+import io
 import time
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
-from rich.console import Group
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
@@ -61,15 +62,22 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     env.get_pull_state.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
-        ({}, False, False, False),
-        ({}, False, False, False),
+        ({}, False, False, False, {}),
+        ({}, False, False, False, {}),
         (
             {"svc": [["cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
+            {},
         ),
     ]
     status_idx = {"value": 0}
@@ -77,7 +85,13 @@ def test_wait_for_env_up_does_not_exit_while_starting(mocker: MockerFixture):
     def collect_status(
         _env: Any,
         gate_status: Any = None,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         idx = min(status_idx["value"], len(status_samples) - 1)
         status_idx["value"] += 1
         return status_samples[idx]
@@ -111,7 +125,7 @@ def test_wait_for_env_up_propagates_action_error(mocker: MockerFixture):
     env.get_pull_state.return_value = []
     env.get_services.return_value = []
     mocker.patch.object(
-        mng, "_collect_env_status", return_value=({}, False, False, False)
+        mng, "_collect_env_status", return_value=({}, False, False, False, {})
     )
 
     fake_console = mocker.Mock()
@@ -203,6 +217,7 @@ def test_wait_for_env_down_hides_gates_column(mocker: MockerFixture):
             False,
             False,
             True,
+            {},
         ),
     )
     build_mock = mocker.patch.object(
@@ -264,19 +279,27 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
     env.get_services.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
@@ -284,7 +307,13 @@ def test_wait_for_env_up_non_terminal_waits_for_running_state(
     def collect_status(
         _env: Any,
         gate_status: Any = None,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         i = min(idx["value"], len(status_samples) - 1)
         idx["value"] += 1
         return status_samples[i]
@@ -312,19 +341,27 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
     env.get_services.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             False,
             True,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
@@ -332,7 +369,13 @@ def test_wait_for_env_down_non_terminal_waits_for_stopped_state(
     def collect_status(
         _env: Any,
         gate_status: Any = None,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         i = min(idx["value"], len(status_samples) - 1)
         idx["value"] += 1
         return status_samples[i]
@@ -360,19 +403,27 @@ def test_wait_for_env_up_quiet_still_polls_until_running(
     env.get_services.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
@@ -380,7 +431,13 @@ def test_wait_for_env_up_quiet_still_polls_until_running(
     def collect_status(
         _env: Any,
         gate_status: Any = None,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         i = min(idx["value"], len(status_samples) - 1)
         idx["value"] += 1
         return status_samples[i]
@@ -412,6 +469,7 @@ def test_wait_for_env_up_quiet_still_enforces_timeout(mocker: MockerFixture):
             False,
             True,
             True,
+            {},
         ),
     )
     fake_console = mocker.Mock()
@@ -466,6 +524,7 @@ def test_status_env_renders_tree(mocker: MockerFixture):
             True,
             True,
             True,
+            {},
         ),
     )
     fake_console = mocker.Mock()
@@ -482,6 +541,86 @@ def test_status_env_renders_tree(mocker: MockerFixture):
     assert str(service_node.label) == "[bold cyan]svc-1[/bold cyan]"
     assert "RUNNING: 1" in summary.plain
     assert "GATES" not in summary.plain
+
+
+def test_collect_and_render_env_status_shows_endpoints_only_when_running(
+    mocker: MockerFixture,
+):
+    """A container's declared `endpoints:` render under its service node
+    only while it's actually running -- a stopped container's endpoints
+    aren't reachable, so mustn't appear (matches sctl's own
+    `hlp_get_service_is_running` guard around its endpoint table)."""
+    mng = _new_environment_mng(mocker)
+
+    endpoint = SimpleNamespace(label="http", url="https://app.example.test")
+    running_container = SimpleNamespace(
+        tag="cnt-a",
+        run_container_name="svc-a-cnt",
+        endpoints=[endpoint],
+    )
+    running_svc = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="svc-a", containers=[running_container], start=None
+        )
+    )
+    stopped_container = SimpleNamespace(
+        tag="cnt-b",
+        run_container_name="svc-b-cnt",
+        endpoints=[endpoint],
+    )
+    stopped_svc = SimpleNamespace(
+        svcCfg=SimpleNamespace(
+            tag="svc-b", containers=[stopped_container], start=None
+        )
+    )
+    env = mocker.Mock()
+    env.status.return_value = [
+        {"Service": "svc-a-cnt", "State": "running"},
+    ]
+    env.get_services.return_value = [running_svc, stopped_svc]
+
+    grouped, _, _, _, endpoints = mng._collect_env_status(env)
+
+    assert endpoints == {"svc-a": [("http", "https://app.example.test")]}
+    assert "svc-b" not in endpoints
+
+    tree = mng._build_env_status_tree("env-1", grouped, endpoints=endpoints)
+    printed_tree = tree.renderables[0]
+    running_node, stopped_node = printed_tree.children
+    endpoints_children = [c.label for c in running_node.children]
+    assert any("endpoints" in str(label) for label in endpoints_children)
+    assert not any("endpoints" in str(c.label) for c in stopped_node.children)
+
+
+def test_build_env_status_tree_escapes_endpoint_rich_markup(
+    mocker: MockerFixture,
+):
+    """An endpoint's label/url come from plugin/user template config, not
+    shepherd's own control -- a label or url shaped like a real Rich tag
+    (e.g. "[bold red]...[/bold red]") would otherwise be interpreted as
+    markup instead of printed literally, letting template config inject
+    arbitrary styling (or, for a malformed tag, raise MarkupError and
+    kill the whole `env status` output). Regression test for a real bug
+    found by review before shepherd#300 merged -- renders through a real
+    Console (not just inspecting the stored markup source) so the
+    assertion reflects what a user actually sees on screen."""
+    mng = _new_environment_mng(mocker)
+
+    endpoints = {"svc-a": [("[bold red]http[/bold red]", "http://x:8080/")]}
+    grouped: dict[str, list[list[str]]] = {
+        "svc-a": [["cnt-a", "cnt-a", "[bold green]running[/bold green]"]]
+    }
+
+    tree = mng._build_env_status_tree("env-1", grouped, endpoints=endpoints)
+
+    buf = io.StringIO()
+    Console(file=buf, force_terminal=False, width=200).print(tree)
+    output = buf.getvalue()
+
+    # Printed literally, not interpreted as a style tag (which would
+    # strip "[bold red]"/"[/bold red]" from the visible output).
+    assert "[bold red]http[/bold red]" in output
+    assert "http://x:8080/" in output
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):
@@ -870,7 +1009,9 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
 ):
     mng = _new_environment_mng(mocker)
 
-    container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
+    container = SimpleNamespace(
+        tag="cnt-a", run_container_name="svc-a-cnt", endpoints=None
+    )
     svc = SimpleNamespace(
         svcCfg=SimpleNamespace(
             tag="svc-a",
@@ -882,7 +1023,7 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, _, _, _ = mng._collect_env_status(
+    grouped, _, _, _, _ = mng._collect_env_status(
         env,
         gate_status={"p1": True, "p2": None},
     )
@@ -893,7 +1034,9 @@ def test_collect_env_status_includes_probe_details_for_tree_view(
 def test_collect_env_status_details_row_shape(mocker: MockerFixture):
     mng = _new_environment_mng(mocker, cli_flags={"details": True})
 
-    container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
+    container = SimpleNamespace(
+        tag="cnt-a", run_container_name="svc-a-cnt", endpoints=None
+    )
     svc = SimpleNamespace(
         svcCfg=SimpleNamespace(
             tag="svc-a",
@@ -905,9 +1048,11 @@ def test_collect_env_status_details_row_shape(mocker: MockerFixture):
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, all_running, any_running, has_containers = mng._collect_env_status(
-        env,
-        gate_status={"p1": True, "p2": None},
+    grouped, all_running, any_running, has_containers, _ = (
+        mng._collect_env_status(
+            env,
+            gate_status={"p1": True, "p2": None},
+        )
     )
     assert all_running is True
     assert any_running is True
@@ -920,7 +1065,9 @@ def test_collect_env_status_details_row_shape(mocker: MockerFixture):
 def test_collect_env_status_can_omit_gate_details(mocker: MockerFixture):
     mng = _new_environment_mng(mocker)
 
-    container = SimpleNamespace(tag="cnt-a", run_container_name="svc-a-cnt")
+    container = SimpleNamespace(
+        tag="cnt-a", run_container_name="svc-a-cnt", endpoints=None
+    )
     svc = SimpleNamespace(
         svcCfg=SimpleNamespace(
             tag="svc-a",
@@ -932,10 +1079,12 @@ def test_collect_env_status_can_omit_gate_details(mocker: MockerFixture):
     env.status.return_value = [{"Service": "svc-a-cnt", "State": "running"}]
     env.get_services.return_value = [svc]
 
-    grouped, all_running, any_running, has_containers = mng._collect_env_status(
-        env,
-        gate_status={"p1": True, "p2": None},
-        include_gates=False,
+    grouped, all_running, any_running, has_containers, _ = (
+        mng._collect_env_status(
+            env,
+            gate_status={"p1": True, "p2": None},
+            include_gates=False,
+        )
     )
 
     assert all_running is True
@@ -957,26 +1106,38 @@ def test_wait_for_env_down_terminal_main_loop(mocker: MockerFixture):
     env.get_services.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             False,
             True,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[dim]stopped[/dim]"]]},
             False,
             False,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
 
-    def collect_status(
-        _env: Any, gate_status: Any = None
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    def collect_status(_env: Any, gate_status: Any = None) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         i = min(idx["value"], len(status_samples) - 1)
         idx["value"] += 1
         return status_samples[i]
@@ -1034,9 +1195,13 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
 
     calls = {"count": 0}
 
-    def collect_status(
-        _env: Any, gate_status: Any = None
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    def collect_status(_env: Any, gate_status: Any = None) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         calls["count"] += 1
         if calls["count"] == 1:
             time.sleep(0.03)
@@ -1045,6 +1210,7 @@ def test_wait_for_env_up_terminal_no_action_waits_for_first_snapshot(
             True,
             True,
             True,
+            {},
         )
 
     fake_console = mocker.Mock()
@@ -1090,32 +1256,45 @@ def test_wait_for_env_up_watch_clears_ready_badge_on_regression(
     env.get_pull_state.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[yellow]starting[/yellow]"]]},
             False,
             True,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[yellow]degraded[/yellow]"]]},
             False,
             True,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
 
-    def collect_status(
-        _env: Any, _gate_status: Any = None
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    def collect_status(_env: Any, _gate_status: Any = None) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         i = min(idx["value"], len(status_samples) - 1)
         idx["value"] += 1
         if idx["value"] > 6:
@@ -1185,26 +1364,38 @@ def test_wait_for_env_up_watch_flashes_ready_badge_briefly(
     env.get_pull_state.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {"svc": [["-", "cnt", "[yellow]starting[/yellow]"]]},
             False,
             True,
             True,
+            {},
         ),
         (
             {"svc": [["-", "cnt", "[bold green]running[/bold green]"]]},
             True,
             True,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
 
-    def collect_status(
-        _env: Any, _gate_status: Any = None
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    def collect_status(_env: Any, _gate_status: Any = None) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         idx["value"] += 1
         if idx["value"] > 130:
             raise RuntimeError("stop-watch")
@@ -1270,7 +1461,13 @@ def test_wait_for_env_up_watch_marks_changed_container_and_probe_for_flash(
     env.get_pull_state.return_value = []
 
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {
@@ -1286,6 +1483,7 @@ def test_wait_for_env_up_watch_marks_changed_container_and_probe_for_flash(
             False,
             True,
             True,
+            {},
         ),
         (
             {
@@ -1301,13 +1499,18 @@ def test_wait_for_env_up_watch_marks_changed_container_and_probe_for_flash(
             True,
             True,
             True,
+            {},
         ),
     ]
     idx = {"value": 0}
 
-    def collect_status(
-        _env: Any, _gate_status: Any = None
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    def collect_status(_env: Any, _gate_status: Any = None) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         idx["value"] += 1
         if idx["value"] > 12:
             raise RuntimeError("stop-watch")
@@ -1403,7 +1606,13 @@ def test_wait_for_env_state_uses_custom_progress_label(
     env.envCfg = SimpleNamespace(tag="test-env")
     env.get_pull_state.return_value = []
     status_samples: list[
-        tuple[dict[str, list[list[str]]], bool, bool, bool]
+        tuple[
+            dict[str, list[list[str]]],
+            bool,
+            bool,
+            bool,
+            dict[str, list[tuple[str, str]]],
+        ]
     ] = [
         (
             {
@@ -1418,6 +1627,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
             False,
             True,
             True,
+            {},
         ),
         (
             {
@@ -1432,6 +1642,7 @@ def test_wait_for_env_state_uses_custom_progress_label(
             True,
             True,
             True,
+            {},
         ),
     ]
     status_idx = {"value": 0}
@@ -1439,7 +1650,13 @@ def test_wait_for_env_state_uses_custom_progress_label(
     def collect_status(
         _env: Any,
         _gate_status: Any = None,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         idx = min(status_idx["value"], len(status_samples) - 1)
         status_idx["value"] += 1
         return status_samples[idx]
