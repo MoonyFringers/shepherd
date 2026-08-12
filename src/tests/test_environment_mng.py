@@ -7,13 +7,14 @@
 
 from __future__ import annotations
 
+import io
 import time
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from pytest_mock import MockerFixture
-from rich.console import Group
+from rich.console import Console, Group
 from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
@@ -589,6 +590,37 @@ def test_collect_and_render_env_status_shows_endpoints_only_when_running(
     endpoints_children = [c.label for c in running_node.children]
     assert any("endpoints" in str(label) for label in endpoints_children)
     assert not any("endpoints" in str(c.label) for c in stopped_node.children)
+
+
+def test_build_env_status_tree_escapes_endpoint_rich_markup(
+    mocker: MockerFixture,
+):
+    """An endpoint's label/url come from plugin/user template config, not
+    shepherd's own control -- a label or url shaped like a real Rich tag
+    (e.g. "[bold red]...[/bold red]") would otherwise be interpreted as
+    markup instead of printed literally, letting template config inject
+    arbitrary styling (or, for a malformed tag, raise MarkupError and
+    kill the whole `env status` output). Regression test for a real bug
+    found by review before shepherd#300 merged -- renders through a real
+    Console (not just inspecting the stored markup source) so the
+    assertion reflects what a user actually sees on screen."""
+    mng = _new_environment_mng(mocker)
+
+    endpoints = {"svc-a": [("[bold red]http[/bold red]", "http://x:8080/")]}
+    grouped: dict[str, list[list[str]]] = {
+        "svc-a": [["cnt-a", "cnt-a", "[bold green]running[/bold green]"]]
+    }
+
+    tree = mng._build_env_status_tree("env-1", grouped, endpoints=endpoints)
+
+    buf = io.StringIO()
+    Console(file=buf, force_terminal=False, width=200).print(tree)
+    output = buf.getvalue()
+
+    # Printed literally, not interpreted as a style tag (which would
+    # strip "[bold red]"/"[/bold red]" from the visible output).
+    assert "[bold red]http[/bold red]" in output
+    assert "http://x:8080/" in output
 
 
 def test_format_service_gate_glyphs_states(mocker: MockerFixture):

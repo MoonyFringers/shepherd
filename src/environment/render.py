@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Optional, Protocol, Sequence, cast
 import yaml
 from rich import box
 from rich.console import Group
+from rich.markup import escape
 from rich.panel import Panel
 from rich.text import Text
 from rich.tree import Tree
@@ -439,7 +440,14 @@ def build_env_status_tree(
                 "[bold green]endpoints[/bold green]"
             )
             for label, url in service_endpoints:
-                endpoints_node.add(f"[white]{label}[/white]: {url}")
+                # label/url come from plugin/user template config, not
+                # shepherd's own control -- a URL containing "[" (e.g. an
+                # IPv6 literal, "http://[::1]:8080/") would otherwise be
+                # parsed as Rich markup, corrupting the render or raising
+                # MarkupError and killing the whole `env status` output.
+                endpoints_node.add(
+                    f"[white]{escape(label)}[/white]: {escape(url)}"
+                )
 
     panels: list[Any] = []
     if command_log is not None and command_log_limit is not None:
