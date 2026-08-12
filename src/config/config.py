@@ -16,6 +16,7 @@ from typing import Any, Dict, Iterable, Match, Optional, cast
 import yaml
 from glom import glom  # type: ignore[import]
 
+from ingress.provider import allocate_ports
 from util import Constants, Util
 
 # Regular expression for variables in .shpd.conf or environment variables
@@ -862,6 +863,31 @@ class EnvironmentCfg(Resolvable):
             if svc.tag == svcTag:
                 return svc
         return None
+
+    @property
+    def ingress_http_port(self) -> str:
+        """The host port shepherd's own *core* (traefik) ingress
+        provider publishes HTTP on for this environment, resolvable as
+        `#{env.ingress_http_port}`. A pure function of `tag`
+        (`ingress.provider.allocate_ports`) -- not a stored/transient
+        value, so it's available to templating without a `start()`
+        having run in this process first (e.g. a fresh `env status` in
+        a new CLI invocation), and always matches whatever
+        `Environment._apply_ingress_plan` allocates when the core
+        provider is selected (`_resolve_ingress_provider`'s
+        `CORE_INGRESS_PROVIDER_TYPE_IDS` branch), with no
+        synchronization needed between the two call sites. A
+        plugin-registered ingress provider is free to allocate its
+        ports however it likes -- this value is meaningless for one and
+        is returned regardless (also regardless of whether the
+        environment even opts into ingress via `EnvironmentCfg.ingress`)."""
+        return str(allocate_ports(self.tag)[0])
+
+    @property
+    def ingress_https_port(self) -> str:
+        """See `ingress_http_port` -- the HTTPS counterpart, resolvable
+        as `#{env.ingress_https_port}`."""
+        return str(allocate_ports(self.tag)[1])
 
     def get_yaml(self, resolved: bool = False) -> str:
         """
