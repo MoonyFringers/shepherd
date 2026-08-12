@@ -29,6 +29,7 @@ from config import (
 )
 from docker import DockerComposeEnv, DockerComposeSvc
 from factory import ShpdEnvironmentFactory, ShpdServiceFactory
+from ingress import allocate_ports
 from util import Constants
 
 
@@ -248,6 +249,53 @@ def _load_config_with_yaml(
 
 
 @pytest.mark.cfg
+def test_environment_ingress_ports_resolve_and_match_allocate_ports(
+    mocker: MockerFixture,
+):
+    """`#{env.ingress_http_port}`/`#{env.ingress_https_port}` let a
+    template embed the real, reachable ingress URL (including port --
+    shepherd's traefik provider never publishes the conventional
+    80/443, see `ingress.provider.allocate_ports`) in any
+    `${VAR}`/`#{ref}`-resolvable field, without any plugin Python code.
+    Deterministic and available without a `start()` having run in this
+    process -- `EnvironmentCfg.ingress_http_port`/`ingress_https_port`
+    are computed properties, not stored state."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs:
+  - template: t
+    factory: docker
+    tag: e1
+    status:
+      active: true
+    services:
+      - tag: svc
+        factory: docker
+        template: t
+        status:
+          active: true
+        containers:
+          - tag: c
+            image: nginx:latest
+            environment:
+              - "URL=https://svc-#{env.tag}.example.test:#{env.ingress_https_port}"
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    env = config.envs[0]
+    assert env.services
+    environment = env.services[0].containers[0].environment
+    assert environment
+
+    http_port, https_port = allocate_ports("e1")
+    assert env.ingress_http_port == str(http_port)
+    assert env.ingress_https_port == str(https_port)
+    assert environment[0] == (f"URL=https://svc-e1.example.test:{https_port}")
+
+
 def test_plugin_config_resolves_template_placeholder(mocker: MockerFixture):
     """A plugin's own `config` values resolve ${VAR} placeholders in that
     plugin's service_templates, without a same-named shell/user_values
