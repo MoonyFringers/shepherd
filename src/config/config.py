@@ -846,14 +846,21 @@ class EnvironmentCfg(Resolvable):
 
     @property
     def ingress_http_port(self) -> str:
-        """The host port shepherd's own ingress proxy publishes HTTP on
-        for this environment, resolvable as `#{env.ingress_http_port}`.
-        A pure function of `tag` (`ingress.provider.allocate_ports`) --
-        not a stored/transient value, so it's available to templating
-        without a `start()` having run in this process first (e.g. a
-        fresh `env status` in a new CLI invocation), and always matches
-        whatever `Environment._apply_ingress_plan` actually allocates,
-        with no synchronization needed between the two call sites."""
+        """The host port shepherd's own *core* (traefik) ingress
+        provider publishes HTTP on for this environment, resolvable as
+        `#{env.ingress_http_port}`. A pure function of `tag`
+        (`ingress.provider.allocate_ports`) -- not a stored/transient
+        value, so it's available to templating without a `start()`
+        having run in this process first (e.g. a fresh `env status` in
+        a new CLI invocation), and always matches whatever
+        `Environment._apply_ingress_plan` allocates when the core
+        provider is selected (`_resolve_ingress_provider`'s
+        `CORE_INGRESS_PROVIDER_TYPE_IDS` branch), with no
+        synchronization needed between the two call sites. A
+        plugin-registered ingress provider is free to allocate its
+        ports however it likes -- this value is meaningless for one and
+        is returned regardless (also regardless of whether the
+        environment even opts into ingress via `EnvironmentCfg.ingress`)."""
         return str(allocate_ports(self.tag)[0])
 
     @property

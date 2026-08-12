@@ -281,6 +281,7 @@ envs:
             image: nginx:latest
             environment:
               - "URL=https://svc-#{env.tag}.example.test:#{env.ingress_https_port}"
+              - "HTTP_URL=http://svc-#{env.tag}.example.test:#{env.ingress_http_port}"
 """
     config = _load_config_with_yaml(mocker, config_yaml)
     config.set_resolved()
@@ -294,6 +295,9 @@ envs:
     assert env.ingress_http_port == str(http_port)
     assert env.ingress_https_port == str(https_port)
     assert environment[0] == (f"URL=https://svc-e1.example.test:{https_port}")
+    assert environment[1] == (
+        f"HTTP_URL=http://svc-e1.example.test:{http_port}"
+    )
 
 
 def test_plugin_config_resolves_template_placeholder(mocker: MockerFixture):
