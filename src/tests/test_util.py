@@ -45,6 +45,7 @@ def add_container_field_defaults(node: object) -> None:
         "labels": [],
         "ingress": None,
         "ingress_port": None,
+        "endpoints": None,
         "command": [],
         "network_mode": None,
         "user": None,

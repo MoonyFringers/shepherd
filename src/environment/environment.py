@@ -1358,7 +1358,7 @@ class EnvironmentMng:
                 progress_label="Checking",
             )
             return
-        grouped, _, _, has_containers = self._collect_env_status(
+        grouped, _, _, has_containers, endpoints = self._collect_env_status(
             env,
             include_gates=False,
         )
@@ -1372,6 +1372,7 @@ class EnvironmentMng:
             self._build_env_status_tree(
                 envCfg.tag,
                 grouped,
+                endpoints=endpoints,
             )
         )
 
@@ -1452,6 +1453,7 @@ class EnvironmentMng:
         flashing_containers: Optional[set[str]] = None,
         flashing_probes: Optional[set[tuple[str, str]]] = None,
         flashing_summary_keys: Optional[set[str]] = None,
+        endpoints: Optional[dict[str, list[tuple[str, str]]]] = None,
     ):
         return build_env_status_tree(
             env_tag,
@@ -1466,6 +1468,7 @@ class EnvironmentMng:
             flashing_containers=flashing_containers,
             flashing_probes=flashing_probes,
             flashing_summary_keys=flashing_summary_keys,
+            endpoints=endpoints,
         )
 
     def _build_command_log_panel(
@@ -1494,7 +1497,13 @@ class EnvironmentMng:
         env: Environment,
         gate_status: Optional[dict[str, Optional[bool]]] = None,
         include_gates: bool = True,
-    ) -> tuple[dict[str, list[list[str]]], bool, bool, bool]:
+    ) -> tuple[
+        dict[str, list[list[str]]],
+        bool,
+        bool,
+        bool,
+        dict[str, list[tuple[str, str]]],
+    ]:
         return collect_env_status(
             env,
             details_enabled=True,

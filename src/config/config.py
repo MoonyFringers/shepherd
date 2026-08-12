@@ -527,6 +527,23 @@ class HealthcheckCfg(Resolvable):
 
 
 @dataclass
+class EndpointCfg(Resolvable):
+    """
+    A declarative, human-facing endpoint a container exposes once
+    running -- a label and a `${VAR}`/`#{ref}`-resolvable URL, rendered
+    by `environment/render.py`'s `build_env_status_tree` under that
+    service in both `env status` and `env up`'s completion display
+    (they share one render pipeline). Purely declarative: covers a
+    templated URL string, not a dynamically-detected one (e.g. a
+    runtime-assigned port) -- add a plugin-side hook later if that's
+    ever needed.
+    """
+
+    label: str
+    url: str
+
+
+@dataclass
 class ContainerCfg(Resolvable):
     tag: str
     image: Optional[str] = None
@@ -562,6 +579,9 @@ class ContainerCfg(Resolvable):
     # see `TraefikIngressProvider._plan_container`, which emits an explicit
     # `loadbalancer.server.port` label whenever this is set.
     ingress_port: Optional[int] = None
+    # Human-facing endpoints (label + resolvable URL), shown once this
+    # container is running -- see `EndpointCfg`.
+    endpoints: Optional[list[EndpointCfg]] = None
     # Ingress-provider-computed labels (routing rules, TLS flags, ...),
     # distinct from user-declared `labels`. Transient like `run_hostname`/
     # `run_container_name`: computed fresh by `Environment._apply_ingress_plan`
@@ -1109,6 +1129,13 @@ def _parse_healthcheck(item: Any) -> HealthcheckCfg:
     )
 
 
+def _parse_endpoint(item: Any) -> EndpointCfg:
+    return EndpointCfg(
+        label=item["label"],
+        url=item["url"],
+    )
+
+
 def _parse_container(item: Any) -> ContainerCfg:
     inits = (
         [_parse_init(init) for init in item.get("inits", [])]
@@ -1147,6 +1174,11 @@ def _parse_container(item: Any) -> ContainerCfg:
             else item.get("ingress")
         ),
         ingress_port=item.get("ingress_port"),
+        endpoints=(
+            [_parse_endpoint(e) for e in item["endpoints"]]
+            if item.get("endpoints")
+            else None
+        ),
     )
 
 

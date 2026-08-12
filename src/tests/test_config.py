@@ -249,6 +249,44 @@ def _load_config_with_yaml(
 
 
 @pytest.mark.cfg
+def test_container_endpoints_parse_and_resolve(mocker: MockerFixture):
+    """`ContainerCfg.endpoints` (label + ${VAR}/#{ref}-resolvable url)
+    parses and resolves like any other container field -- rendered by
+    `environment/render.py`'s `build_env_status_tree` under that
+    service, in both `env status` and `env up`'s completion display."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        endpoints:
+          - label: http
+            url: "https://app-#{env.tag}.${domain}"
+"""
+    config = _load_config_with_yaml(
+        mocker,
+        config_yaml,
+        values=_MINIMAL_VALUES + "domain=example.test\n",
+    )
+    config.set_resolved()
+
+    assert config.service_templates
+    endpoints = config.service_templates[0].containers[0].endpoints
+    assert endpoints and len(endpoints) == 1
+    assert endpoints[0].label == "http"
+    # #{env.tag} only resolves once this container is nested under a
+    # real EnvironmentCfg (the ref map is env-scoped) -- unresolved
+    # here is correct; ${domain} still resolves via user_values.
+    assert endpoints[0].url == "https://app-#{env.tag}.example.test"
+
+
+@pytest.mark.cfg
 def test_environment_ingress_ports_resolve_and_match_allocate_ports(
     mocker: MockerFixture,
 ):
