@@ -836,3 +836,47 @@ def test_build_svc_dockerfile_does_not_exist(
     result = runner.invoke(cli, ["svc", "build", "test-4"])
     assert result.exit_code == 1
     mock_subproc.assert_not_called()
+
+
+@pytest.mark.docker
+def test_build_container_passes_build_args(
+    tmp_path: Path,
+    mocker: MockerFixture,
+):
+    """`BuildCfg.args` ("KEY=VALUE" entries) are passed through to
+    `docker build` as `--build-arg`."""
+    from config import ContainerCfg
+    from config.config import BuildCfg
+    from docker.docker_compose_util import build_container
+
+    dockerfile = tmp_path / "Dockerfile"
+    dockerfile.write_text("FROM scratch\n")
+
+    mock_subproc = mocker.patch(
+        "docker.docker_compose_util.subprocess.run",
+        return_value=subprocess.CompletedProcess(
+            args=["docker", "build"],
+            returncode=0,
+            stdout="",
+            stderr="",
+        ),
+    )
+
+    container = ContainerCfg(
+        tag="c",
+        image="test-image:latest",
+        build=BuildCfg(
+            context_path=str(tmp_path),
+            dockerfile_path=str(dockerfile),
+            args=["UID=1000", "GID=1000"],
+        ),
+    )
+
+    build_container(container, verbose=False)
+
+    mock_subproc.assert_called_once()
+    cmd = mock_subproc.call_args.args[0]
+    assert "--build-arg" in cmd
+    uid_index = cmd.index("--build-arg")
+    assert cmd[uid_index + 1] == "UID=1000"
+    assert "GID=1000" in cmd

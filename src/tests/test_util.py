@@ -61,13 +61,24 @@ def add_container_field_defaults(node: object) -> None:
                     if isinstance(container, dict):
                         for field_name, default in defaults.items():
                             container.setdefault(field_name, default)
+                        _add_build_field_defaults(container)
             if key == "container" and isinstance(value, dict):
                 for field_name, default in defaults.items():
                     value.setdefault(field_name, default)
+                _add_build_field_defaults(value)
             add_container_field_defaults(value)
     elif isinstance(node, list):
         for item in node:
             add_container_field_defaults(item)
+
+
+def _add_build_field_defaults(container: dict[str, object]) -> None:
+    """Default for `ContainerCfg.build.args`, mirroring
+    `add_container_field_defaults`'s own rationale but for a field nested
+    one level deeper, inside `build:`."""
+    build = container.get("build")
+    if isinstance(build, dict):
+        build.setdefault("args", None)
 
 
 def test_print_error_and_die_uses_minimal_error_prefix(
