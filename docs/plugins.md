@@ -93,6 +93,41 @@ placeholder resolution — including in that plugin's own
 `eu-west-1` anywhere in the config tree, no separately-exported shell
 variable required.
 
+Two more resolvable forms are always available, no `config:` declaration
+needed:
+
+- `${<plugin-id>_dir}` — auto-injected for every installed plugin,
+  namespaced by its `id` so it can never collide with another plugin's
+  (unlike a hand-declared `config:` key would). Resolves to that
+  plugin's own managed install directory — use it to anchor a
+  `build.context_path`/`dockerfile_path` under assets shipped inside the
+  plugin itself, instead of requiring a hand-supplied absolute host
+  path:
+
+  ```yaml
+  containers:
+    - tag: app
+      build:
+        context_path: "${my-plugin_dir}/docker"
+        dockerfile_path: "${my-plugin_dir}/docker/Dockerfile"
+        args:
+          - "UID=#{host.uid}"
+          - "GID=#{host.gid}"
+  ```
+
+- `#{host.uid}` / `#{host.gid}` — the invoking host process's real
+  uid/gid (Linux/macOS/WSL; left unresolved on platforms without
+  `os.getuid`/`os.getgid`). Typically used in `build.args` so an image's
+  own user matches the host user that owns a bind-mounted volume; any
+  field using `${VAR}`/`#{ref}` resolution can reference it. To pin a
+  fixed value instead of resolving it from the host, write the literal
+  (e.g. `"UID=1000"`) rather than the ref token — no separate
+  static-override mechanism exists or is needed.
+
+`ContainerCfg.build` (`BuildCfg`) itself also accepts `args` — a list of
+`"KEY=VALUE"` strings passed to `docker build` as `--build-arg`, resolved
+like any other string field.
+
 An individual environment instance (an entry under `envs:`, the thing
 created by `env add <template> <tag>`) can also carry its own `config`
 block, keyed exactly like a plugin's:

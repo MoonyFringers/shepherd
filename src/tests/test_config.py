@@ -373,6 +373,105 @@ service_templates:
 
 
 @pytest.mark.cfg
+def test_build_args_parse_and_resolve(mocker: MockerFixture):
+    """`ContainerCfg.build.args` ("KEY=VALUE" `docker build --build-arg`
+    entries) parses and resolves like `environment`/`labels` -- a value
+    can be a static literal or a dynamic ref (e.g. `#{host.uid}`)."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        build:
+          context_path: .
+          dockerfile_path: Dockerfile
+          args:
+            - "UID=#{host.uid}"
+            - "GID=1000"
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.service_templates
+    build = config.service_templates[0].containers[0].build
+    assert build and build.args
+    assert build.args[0] == f"UID={os.getuid()}"
+    assert build.args[1] == "GID=1000"
+
+
+@pytest.mark.cfg
+def test_host_uid_gid_refs_resolve_anywhere(mocker: MockerFixture):
+    """`#{host.uid}`/`#{host.gid}` resolve to the invoking process's real
+    uid/gid in any `${VAR}`/`#{ref}`-resolvable field, not just
+    `build.args` -- it's a pure computed pseudo-root, not scoped to one
+    field type."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        environment:
+          - "OWNER=#{host.uid}:#{host.gid}"
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.service_templates
+    environment = config.service_templates[0].containers[0].environment
+    assert environment == [f"OWNER={os.getuid()}:{os.getgid()}"]
+
+
+@pytest.mark.cfg
+def test_plugin_dir_var_is_auto_injected_per_plugin(mocker: MockerFixture):
+    """`${<plugin-id>_dir}` is auto-injected (never user-declared) for
+    every installed plugin, namespaced by id so it can't collide across
+    plugins the way a bare `${plugin_dir}` would -- lets a plugin anchor
+    `build.dockerfile_path`/`context_path` under its own install
+    directory without a hand-supplied absolute host path."""
+
+    config_yaml = """
+templates_path: ${shpd_path}/templates
+envs_path: ${shpd_path}/envs
+envs: []
+plugins:
+  - id: acme-plugin
+    enabled: true
+service_templates:
+  - tag: svc
+    factory: docker
+    containers:
+      - tag: c
+        image: nginx:latest
+        build:
+          context_path: ${acme-plugin_dir}/docker
+          dockerfile_path: ${acme-plugin_dir}/docker/Dockerfile
+"""
+    config = _load_config_with_yaml(mocker, config_yaml)
+    config.set_resolved()
+
+    assert config.service_templates
+    build = config.service_templates[0].containers[0].build
+    assert build
+    assert build.context_path == "/tmp/shpd/plugins/acme-plugin/docker"
+    assert (
+        build.dockerfile_path
+        == "/tmp/shpd/plugins/acme-plugin/docker/Dockerfile"
+    )
+
+
+@pytest.mark.cfg
 def test_envs_path_is_exposed_as_template_var(mocker: MockerFixture):
     """`${envs_path}` resolves to shepherd's own per-environment root, so a
     service_template can anchor persistent host state under

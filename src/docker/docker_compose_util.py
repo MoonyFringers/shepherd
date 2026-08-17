@@ -222,6 +222,7 @@ def build_docker_image(
     context_path: Path,
     tag: str,
     *,
+    build_args: Optional[list[str]] = None,
     verbose: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """
@@ -232,6 +233,8 @@ def build_docker_image(
         dockerfile_path (Path): Path to the Dockerfile.
         context_path (Path): Path to the Docker build context (directory).
         tag (str): The resulting image tag, e.g. "myapp:latest".
+        build_args (Optional[list[str]]): "KEY=VALUE" entries passed as
+            `docker build --build-arg`.
 
     Returns:
         subprocess.CompletedProcess[str]: The result of the docker build
@@ -253,6 +256,10 @@ def build_docker_image(
         tag,
         "-f",
         str(dockerfile_path),
+    ]
+    for arg in build_args or []:
+        cmd += ["--build-arg", arg]
+    cmd += [
         "--progress=auto",
         str(context_path),
     ]
@@ -415,5 +422,6 @@ def build_container(container: ContainerCfg, *, verbose: bool = False) -> None:
                 Path(build.dockerfile_path),
                 Path(build.context_path),
                 container.image or "",
+                build_args=build.args,
                 verbose=verbose,
             )

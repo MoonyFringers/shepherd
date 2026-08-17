@@ -304,6 +304,20 @@ class Resolvable:
             expr = match.group(1)  # e.g. "env.tag"
             parts = expr.split(".", 1)
             root = parts[0]
+            if root == "host":
+                # Pure computed pseudo-root (invoking host's real uid/gid),
+                # not backed by a Resolvable config object -- needed so a
+                # container's `build.args` can match a bind-mounted
+                # volume's host owner without a hand-supplied value. A
+                # template author wanting a fixed value instead just
+                # writes the literal (e.g. "UID=1000") rather than this
+                # ref -- no separate static-override mechanism needed.
+                attr = parts[1] if len(parts) > 1 else ""
+                if attr == "uid" and hasattr(os, "getuid"):
+                    return str(os.getuid())
+                if attr == "gid" and hasattr(os, "getgid"):
+                    return str(os.getgid())
+                return match.group(0)  # unsupported platform/attr
             if root not in refMap:
                 return match.group(0)  # return untouched
             target = refMap[root]
@@ -493,6 +507,12 @@ class BuildCfg(Resolvable):
 
     context_path: Optional[str] = None
     dockerfile_path: Optional[str] = None
+    # `docker build --build-arg` entries, "KEY=VALUE" -- same shape as
+    # `ContainerCfg.environment`/`labels`. Resolved through the usual
+    # `${VAR}`/`#{ref}` machinery, so a value can be a static literal or a
+    # dynamic ref (e.g. `#{host.uid}`) -- no separate static/dynamic
+    # mechanism needed.
+    args: Optional[list[str]] = None
 
 
 @dataclass
@@ -1095,6 +1115,7 @@ def _parse_build(item: Any) -> BuildCfg:
     return BuildCfg(
         context_path=item.get("context_path"),
         dockerfile_path=item.get("dockerfile_path"),
+        args=item.get("args"),
     )
 
 
@@ -1810,6 +1831,15 @@ class ConfigMng:
         for plugin_cfg in config.plugins or []:
             for key, value in (plugin_cfg.config or {}).items():
                 resolver[str(key)] = str(value)
+            # Auto-injected, namespaced by plugin id (never user-declared,
+            # so it can't collide across plugins the way a bare
+            # `${plugin_dir}` would) -- lets a plugin's own templates
+            # anchor `build.dockerfile_path`/`context_path` etc. under its
+            # own install directory without a hand-supplied absolute host
+            # path. Same class of gap `${envs_path}` closed (#297).
+            resolver[f"{plugin_cfg.id}_dir"] = self.get_plugin_dir(
+                plugin_cfg.id
+            )
         return resolver
 
     def load_config(self) -> Config:
